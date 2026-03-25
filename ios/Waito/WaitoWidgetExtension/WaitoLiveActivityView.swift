@@ -28,15 +28,13 @@ struct WaitoLiveActivity: Widget {
                     ExpandedTruckPathView(state: context.state)
                 }
             } compactLeading: {
-                Image(systemName: "box.truck.fill")
-                    .foregroundStyle(.white)
+                MiniTruckView(config: context.state.truckConfig, size: 24)
             } compactTrailing: {
                 Text(context.state.status.displayName)
                     .font(.caption2)
                     .foregroundStyle(.white)
             } minimal: {
-                Image(systemName: "box.truck.fill")
-                    .foregroundStyle(.white)
+                MiniTruckView(config: context.state.truckConfig, size: 18)
             }
         }
     }
@@ -89,9 +87,7 @@ struct ExpandedTruckPathView: View {
 
     private var truckIcon: some View {
         let pose = calculator.pose(at: state.status.progress)
-        return Image(systemName: "box.truck.fill")
-            .font(.system(size: 12))
-            .foregroundStyle(.white)
+        return MiniTruckView(config: state.truckConfig, size: 14)
             .rotationEffect(.radians(pose.rotationAngle))
             .position(x: pose.position.x, y: pose.position.y)
     }
@@ -105,9 +101,7 @@ struct LockScreenLiveActivityView: View {
     var body: some View {
         HStack(spacing: 12) {
             // 트럭 아이콘
-            Image(systemName: "box.truck.fill")
-                .font(.title2)
-                .foregroundStyle(.white)
+            MiniTruckView(config: state.truckConfig, size: 36)
 
             VStack(alignment: .leading, spacing: 4) {
                 // 택배사 + 상태
