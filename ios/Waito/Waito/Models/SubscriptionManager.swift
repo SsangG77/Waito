@@ -37,6 +37,12 @@ final class SubscriptionManager {
         isSubscribed || !isPremium(color: color)
     }
 
+    // MARK: - Live Activity 제한
+
+    var liveActivityLimit: Int {
+        isSubscribed ? 2 : 1
+    }
+
     // MARK: - 디버그용 토글 (나중에 StoreKit으로 교체)
 
     func toggleSubscription() {

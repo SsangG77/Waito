@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AddTrackingView: View {
     @Environment(TrackingService.self) private var service
+    @Environment(SubscriptionManager.self) private var subscription
     @Environment(\.dismiss) private var dismiss
 
     @State private var selectedCarrierId = ""
@@ -60,7 +61,8 @@ struct AddTrackingView: View {
             let success = await service.addTracking(
                 carrierId: selectedCarrierId,
                 trackingNumber: trackingNumber.trimmingCharacters(in: .whitespaces),
-                itemName: name.isEmpty ? nil : name
+                itemName: name.isEmpty ? nil : name,
+                limit: subscription.liveActivityLimit
             )
             isSubmitting = false
             if success {
@@ -73,4 +75,5 @@ struct AddTrackingView: View {
 #Preview {
     AddTrackingView()
         .environment(TrackingService())
+        .environment(SubscriptionManager())
 }

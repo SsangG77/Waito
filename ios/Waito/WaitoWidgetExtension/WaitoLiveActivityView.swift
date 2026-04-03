@@ -13,12 +13,14 @@ struct WaitoLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.leading) {
-                    Label(context.state.carrierName, systemImage: "box.truck.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.white)
+                    if let primary = context.state.primary {
+                        Label(primary.carrierName, systemImage: "box.truck.fill")
+                            .font(.caption2)
+                            .foregroundStyle(.white)
+                    }
                 }
                 DynamicIslandExpandedRegion(.trailing) {
-                    if let eta = context.state.estimatedDelivery {
+                    if let eta = context.state.primary?.estimatedDelivery {
                         Text(eta)
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.7))
@@ -30,9 +32,11 @@ struct WaitoLiveActivity: Widget {
             } compactLeading: {
                 MiniTruckView(config: context.state.truckConfig, size: 24)
             } compactTrailing: {
-                Text(context.state.status.displayName)
-                    .font(.caption2)
-                    .foregroundStyle(.white)
+                if let primary = context.state.primary {
+                    Text(primary.status.displayName)
+                        .font(.caption2)
+                        .foregroundStyle(.white)
+                }
             } minimal: {
                 MiniTruckView(config: context.state.truckConfig, size: 18)
             }
@@ -50,46 +54,92 @@ struct ExpandedTruckPathView: View {
     private let calculator = TruckPathCalculator()
 
     var body: some View {
-        VStack(spacing: 8) {
-            ZStack {
-                // Layer 1-a: 전체 외곽선 (미완료 구간 — 회색)
-                IslandOutlineShape(cornerRadius: cornerRadius)
-                    .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
+        VStack(spacing: 6) {
+            if let primary = state.primary {
+                ZStack {
+                    // Layer 1-a: 전체 외곽선 (미완료 구간 — 회색)
+                    IslandOutlineShape(cornerRadius: cornerRadius)
+                        .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
 
-                // Layer 1-b: 진행 외곽선 (완료 구간 — 흰색)
-                IslandOutlineShape(cornerRadius: cornerRadius)
-                    .trim(from: 0, to: state.status.progress)
-                    .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    // Layer 1-b: 진행 외곽선 (완료 구간 — 흰색)
+                    IslandOutlineShape(cornerRadius: cornerRadius)
+                        .trim(from: 0, to: primary.status.progress)
+                        .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
 
-                // Layer 2: 트럭 아이콘
-                truckIcon
-            }
-            .frame(width: pathSize.width, height: pathSize.height)
-            .padding(10) // 트럭 아이콘 오버플로우 여유
+                    // Layer 2: 트럭 아이콘
+                    truckIcon(for: primary)
+                }
+                .frame(width: pathSize.width, height: pathSize.height)
+                .padding(10)
 
-            // Layer 3: 상태 텍스트
-            HStack(spacing: 4) {
-                Text(state.status.displayName)
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
+                // 상태 텍스트 (주 택배)
+                HStack(spacing: 4) {
+                    Text(primary.itemName)
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
 
-                if let eta = state.estimatedDelivery {
                     Text("·")
                         .foregroundStyle(.white.opacity(0.5))
-                    Text(eta)
+
+                    Text(primary.status.displayName)
                         .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(.white.opacity(0.8))
+
+                    if let eta = primary.estimatedDelivery {
+                        Text("·")
+                            .foregroundStyle(.white.opacity(0.5))
+                        Text(eta)
+                            .font(.caption2)
+                            .foregroundStyle(.white.opacity(0.7))
+                    }
                 }
+
+                // Dynamic Island에서는 첫 번째 택배만 표시
             }
         }
     }
 
-    private var truckIcon: some View {
-        let pose = calculator.pose(at: state.status.progress)
+    private func truckIcon(for item: TrackingItemState) -> some View {
+        let pose = calculator.pose(at: item.status.progress)
         return MiniTruckView(config: state.truckConfig, size: 14)
             .rotationEffect(.radians(pose.rotationAngle))
             .position(x: pose.position.x, y: pose.position.y)
+    }
+}
+
+// MARK: - 두 번째 택배 행 (Dynamic Island 하단)
+
+struct SecondaryTrackingRow: View {
+    let item: TrackingItemState
+
+    var body: some View {
+        HStack(spacing: 6) {
+            // 미니 프로그레스
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.white.opacity(0.15))
+                    RoundedRectangle(cornerRadius: 1.5)
+                        .fill(Color.white.opacity(0.6))
+                        .frame(width: geo.size.width * item.status.progress)
+                }
+            }
+            .frame(width: 30, height: 3)
+
+            Text(item.itemName)
+                .font(.system(size: 10))
+                .foregroundStyle(.white.opacity(0.6))
+                .lineLimit(1)
+
+            Spacer()
+
+            Text(item.status.displayName)
+                .font(.system(size: 10))
+                .foregroundStyle(.white.opacity(0.5))
+        }
+        .padding(.horizontal, 10)
     }
 }
 
@@ -99,33 +149,64 @@ struct LockScreenLiveActivityView: View {
     let state: DeliveryAttributes.ContentState
 
     var body: some View {
+        VStack(spacing: 0) {
+            if let primary = state.primary {
+                LockScreenTrackingRow(item: primary, truckConfig: state.truckConfig, showTruck: true)
+            }
+
+            if let secondary = state.secondary {
+                Divider()
+                    .background(Color.white.opacity(0.15))
+                    .padding(.horizontal, 16)
+
+                LockScreenTrackingRow(item: secondary, truckConfig: state.truckConfig, showTruck: false)
+            }
+        }
+    }
+}
+
+// MARK: - 잠금화면 택배 행
+
+struct LockScreenTrackingRow: View {
+    let item: TrackingItemState
+    let truckConfig: TruckConfig
+    let showTruck: Bool
+
+    var body: some View {
         HStack(spacing: 12) {
-            // 트럭 아이콘
-            MiniTruckView(config: state.truckConfig, size: 36)
+            if showTruck {
+                MiniTruckView(config: truckConfig, size: 36)
+            } else {
+                Image(systemName: "shippingbox.fill")
+                    .font(.title3)
+                    .foregroundStyle(.white.opacity(0.6))
+                    .frame(width: 36, height: 36)
+            }
 
             VStack(alignment: .leading, spacing: 4) {
                 // 택배사 + 상태
                 HStack {
-                    Text(state.carrierName)
+                    Text(item.carrierName)
                         .font(.caption)
                         .foregroundStyle(.white.opacity(0.7))
                     Spacer()
-                    Text(state.status.displayName)
+                    Text(item.status.displayName)
                         .font(.caption)
                         .fontWeight(.semibold)
                         .foregroundStyle(.white)
                 }
 
                 // 진행 바
-                ProgressBarView(progress: state.status.progress)
+                ProgressBarView(progress: item.status.progress)
 
                 // 아이템명 + 도착 예정
                 HStack {
-                    Text(state.itemName)
+                    Text(item.itemName)
                         .font(.caption2)
                         .foregroundStyle(.white.opacity(0.5))
+                        .lineLimit(1)
                     Spacer()
-                    if let eta = state.estimatedDelivery {
+                    if let eta = item.estimatedDelivery {
                         Text(eta)
                             .font(.caption2)
                             .foregroundStyle(.white.opacity(0.7))
@@ -133,7 +214,8 @@ struct LockScreenLiveActivityView: View {
                 }
             }
         }
-        .padding(16)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 
@@ -145,11 +227,8 @@ struct ProgressBarView: View {
     var body: some View {
         GeometryReader { geometry in
             ZStack(alignment: .leading) {
-                // 배경 트랙
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Color.white.opacity(0.2))
-
-                // 진행 트랙
                 RoundedRectangle(cornerRadius: 2)
                     .fill(Color.white)
                     .frame(width: geometry.size.width * progress)
@@ -161,8 +240,6 @@ struct ProgressBarView: View {
 
 // MARK: - Dynamic Island 외곽선 Shape
 
-/// Dynamic Island 테두리를 하단 중앙에서 시작해 시계방향으로 그리는 커스텀 Shape
-/// `.trim(from:to:)` 사용 시 t값 시스템과 일치하도록 설계
 struct IslandOutlineShape: Shape {
     let cornerRadius: CGFloat
 
@@ -170,58 +247,19 @@ struct IslandOutlineShape: Shape {
         var path = Path()
         let r = min(cornerRadius, min(rect.width, rect.height) / 2)
 
-        // 시작: 하단 중앙
         path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
-
-        // ← 하단 직선 (중앙 → 좌측)
         path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-
-        // ↰ 좌하 코너 (90° → 180°)
-        path.addArc(
-            center: CGPoint(x: rect.minX + r, y: rect.maxY - r),
-            radius: r,
-            startAngle: .degrees(90),
-            endAngle: .degrees(180),
-            clockwise: false
-        )
-
-        // ↑ 좌측 직선
+        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r,
+                     startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
         path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
-
-        // ↰ 좌상 코너 (180° → 270°)
-        path.addArc(
-            center: CGPoint(x: rect.minX + r, y: rect.minY + r),
-            radius: r,
-            startAngle: .degrees(180),
-            endAngle: .degrees(270),
-            clockwise: false
-        )
-
-        // → 상단 직선
+        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.minY + r), radius: r,
+                     startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
         path.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY))
-
-        // ↰ 우상 코너 (270° → 360°)
-        path.addArc(
-            center: CGPoint(x: rect.maxX - r, y: rect.minY + r),
-            radius: r,
-            startAngle: .degrees(270),
-            endAngle: .degrees(360),
-            clockwise: false
-        )
-
-        // ↓ 우측 직선
+        path.addArc(center: CGPoint(x: rect.maxX - r, y: rect.minY + r), radius: r,
+                     startAngle: .degrees(270), endAngle: .degrees(360), clockwise: false)
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
-
-        // ↰ 우하 코너 (0° → 90°)
-        path.addArc(
-            center: CGPoint(x: rect.maxX - r, y: rect.maxY - r),
-            radius: r,
-            startAngle: .degrees(0),
-            endAngle: .degrees(90),
-            clockwise: false
-        )
-
-        // ← 하단 직선 (우측 → 중앙, 귀환)
+        path.addArc(center: CGPoint(x: rect.maxX - r, y: rect.maxY - r), radius: r,
+                     startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
         path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
 
         return path

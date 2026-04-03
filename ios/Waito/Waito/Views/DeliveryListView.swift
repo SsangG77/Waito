@@ -4,10 +4,12 @@ import SwiftUI
 
 struct DeliveryListView: View {
     @Environment(TrackingService.self) private var service
+    @Environment(SubscriptionManager.self) private var subscription
 
     @State private var showAddSheet = false
     @State private var selectedTrackingId: Int?
     @State private var showError = false
+    @State private var showSubscriptionAlert = false
 
     var body: some View {
         Group {
@@ -23,7 +25,13 @@ struct DeliveryListView: View {
                         Button {
                             selectedTrackingId = tracking.id
                         } label: {
-                            TrackingRowView(tracking: tracking)
+                            TrackingRowView(
+                                tracking: tracking,
+                                isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
+                                onToggleLiveActivity: {
+                                    toggleLiveActivity(for: tracking)
+                                }
+                            )
                         }
                         .buttonStyle(.plain)
                     }
@@ -61,6 +69,26 @@ struct DeliveryListView: View {
         } message: {
             Text(service.error ?? "")
         }
+        .alert("Waito Plus", isPresented: $showSubscriptionAlert) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("무료 사용자는 Live Activity를 1개까지 등록할 수 있어요.\nWaito Plus 구독 시 2개까지 가능합니다.")
+        }
+    }
+
+    private func toggleLiveActivity(for tracking: TrackingListItem) {
+        Task {
+            if service.isInLiveActivity(trackingNumber: tracking.trackingNumber) {
+                await service.removeFromLiveActivity(trackingNumber: tracking.trackingNumber)
+            } else {
+                let limit = subscription.liveActivityLimit
+                if service.liveTrackingNumbers.count >= limit {
+                    showSubscriptionAlert = true
+                } else {
+                    await service.addToLiveActivity(trackingNumber: tracking.trackingNumber)
+                }
+            }
+        }
     }
 
     private func deleteTracking(at offsets: IndexSet) {
@@ -77,6 +105,8 @@ struct DeliveryListView: View {
 
 struct TrackingRowView: View {
     let tracking: TrackingListItem
+    let isLiveActive: Bool
+    let onToggleLiveActivity: () -> Void
 
     var body: some View {
         HStack(spacing: 12) {
@@ -94,6 +124,19 @@ struct TrackingRowView: View {
             }
 
             Spacer()
+
+            // Live Activity 토글 버튼
+            if !tracking.currentStatus.isCompleted {
+                Button {
+                    onToggleLiveActivity()
+                } label: {
+                    Image(systemName: isLiveActive ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
+                        .font(.body)
+                        .foregroundStyle(isLiveActive ? .blue : .secondary)
+                        .frame(width: 32, height: 32)
+                }
+                .buttonStyle(.plain)
+            }
 
             VStack(alignment: .trailing, spacing: 6) {
                 // 상태 배지
@@ -307,4 +350,5 @@ struct TrackingDetailView: View {
         DeliveryListView()
     }
     .environment(TrackingService())
+    .environment(SubscriptionManager())
 }
