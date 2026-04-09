@@ -70,12 +70,29 @@ enum TruckColor: String, Codable, CaseIterable, Hashable {
 
 // MARK: - 트럭 전체 설정
 
+// MARK: - 트럭 달리기 모드
+
+enum TruckRunMode: String, Codable, CaseIterable {
+    case on   // 트럭이 진행률과 무관하게 계속 달림 (꾸미기 모드)
+    case off  // 트럭이 진행률 끝에 멈춤 (상태 표시 모드)
+
+    var displayName: String {
+        switch self {
+        case .on:  return "달리기"
+        case .off: return "상태 표시"
+        }
+    }
+}
+
+// MARK: - 트럭 전체 설정
+
 struct TruckConfig: Codable, Equatable, Hashable {
     var shape: TruckShape = .standard
     var style: TruckStyle = .flat
     var headColor: TruckColor = .blue
     var cargoColor: TruckColor = .white
     var boxColor: TruckColor = .orange
+    var runMode: TruckRunMode = .off
 
     static let `default` = TruckConfig()
 }

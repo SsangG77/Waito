@@ -45,6 +45,16 @@ struct WaitoLiveActivity: Widget {
 }
 
 // MARK: - Dynamic Island Expanded View (착시 효과 핵심)
+//
+// 레이어 구조 (안쪽 → 바깥쪽):
+//
+//   1. Dynamic Island 하드웨어 (검정)
+//   2. 진행률 선 — Island 바로 바깥 테두리
+//      ━━━ 흰색 = 완료 구간
+//      ─── 회색 = 미완료 구간
+//   3. 트럭 — 진행률 선의 더 바깥
+//      ON:  트럭이 진행률 무관하게 계속 달림 (꾸미기)
+//      OFF: 트럭이 진행률 끝에 멈춤 (상태 표시)
 
 struct ExpandedTruckPathView: View {
     let state: DeliveryAttributes.ContentState
@@ -53,24 +63,34 @@ struct ExpandedTruckPathView: View {
     private let cornerRadius: CGFloat = 18.335
     private let calculator = TruckPathCalculator()
 
+    /// 진행률 선의 바깥 오프셋 (Island → 선)
+    private let progressLineOffset: CGFloat = 4
+    /// 트럭의 바깥 오프셋 (Island → 트럭 중심)
+    private let truckOffset: CGFloat = 12
+
+    /// ON 모드에서 트럭 애니메이션 위치 (0~1 반복)
+    @State private var truckAnimationT: CGFloat = 0
+
     var body: some View {
         VStack(spacing: 6) {
             if let primary = state.primary {
                 ZStack {
-                    // Layer 1-a: 전체 외곽선 (미완료 구간 — 회색)
-                    IslandOutlineShape(cornerRadius: cornerRadius)
-                        .stroke(Color.white.opacity(0.2), lineWidth: 1.5)
+                    // Layer 1-a: 전체 외곽선 — 미완료 구간 (회색, 바깥 오프셋)
+                    IslandOutlineShape(cornerRadius: cornerRadius + progressLineOffset)
+                        .stroke(Color.white.opacity(0.15), lineWidth: 1.5)
 
-                    // Layer 1-b: 진행 외곽선 (완료 구간 — 흰색)
-                    IslandOutlineShape(cornerRadius: cornerRadius)
+                    // Layer 1-b: 진행 외곽선 — 완료 구간 (흰색, 바깥 오프셋)
+                    IslandOutlineShape(cornerRadius: cornerRadius + progressLineOffset)
                         .trim(from: 0, to: primary.status.progress)
-                        .stroke(Color.white, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                        .stroke(Color.white.opacity(0.9), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
 
-                    // Layer 2: 트럭 아이콘
+                    // Layer 2: 트럭 아이콘 (진행률 선의 더 바깥)
                     truckIcon(for: primary)
                 }
-                .frame(width: pathSize.width, height: pathSize.height)
-                .padding(10)
+                .frame(width: pathSize.width + truckOffset * 2,
+                       height: pathSize.height + truckOffset * 2)
+                .padding(.horizontal, 2)
+                .padding(.top, 6)
 
                 // 상태 텍스트 (주 택배)
                 HStack(spacing: 4) {
@@ -95,17 +115,46 @@ struct ExpandedTruckPathView: View {
                             .foregroundStyle(.white.opacity(0.7))
                     }
                 }
-
-                // Dynamic Island에서는 첫 번째 택배만 표시
             }
+        }
+        .onAppear {
+            startTruckAnimation()
         }
     }
 
+    // MARK: - 트럭 렌더링
+
     private func truckIcon(for item: TrackingItemState) -> some View {
-        let pose = calculator.pose(at: item.status.progress)
+        let isRunning = state.truckConfig.runMode == .on
+
+        // ON: 애니메이션 t값으로 자유롭게 달림
+        // OFF: 진행률 끝에 멈춤
+        let t = isRunning ? truckAnimationT : item.status.progress
+
+        // 트럭은 진행률 선보다 더 바깥에 위치
+        let pose = calculator.pose(at: t, offset: truckOffset)
+
         return MiniTruckView(config: state.truckConfig, size: 14)
             .rotationEffect(.radians(pose.rotationAngle))
-            .position(x: pose.position.x, y: pose.position.y)
+            .position(
+                x: pose.position.x + truckOffset, // ZStack 오프셋 보정
+                y: pose.position.y + truckOffset
+            )
+            .animation(isRunning ? nil : .spring(duration: 0.8), value: item.status.progress)
+    }
+
+    // MARK: - ON 모드 트럭 애니메이션
+
+    private func startTruckAnimation() {
+        guard state.truckConfig.runMode == .on else { return }
+
+        // 트럭이 테두리를 따라 계속 왔다갔다
+        withAnimation(
+            .easeInOut(duration: 4.0)
+            .repeatForever(autoreverses: true)
+        ) {
+            truckAnimationT = 1.0
+        }
     }
 }
 

@@ -72,7 +72,8 @@ struct TruckPathCalculator {
     }
 
     /// t값(0.0~1.0)에 대응하는 트럭 위치와 회전각을 반환
-    func pose(at t: CGFloat) -> TruckPose {
+    /// - Parameter offset: 경로 바깥으로의 오프셋 (양수 = 바깥, 음수 = 안쪽)
+    func pose(at t: CGFloat, offset: CGFloat = 0) -> TruckPose {
         let t = min(max(t, 0), 1)
         let distance = t * perimeter
 
@@ -84,7 +85,21 @@ struct TruckPathCalculator {
             let segLength = segment.length
             if accumulated + segLength >= distance || segment === segments.last {
                 let local = (distance - accumulated) / segLength
-                return segment.pose(at: min(max(local, 0), 1))
+                var pose = segment.pose(at: min(max(local, 0), 1))
+
+                // 오프셋 적용: 경로의 법선 방향(바깥쪽)으로 이동
+                if offset != 0 {
+                    let angle = pose.rotationAngle - .pi / 2 // 법선 = 진행방향에서 90° (바깥)
+                    pose = TruckPose(
+                        position: CGPoint(
+                            x: pose.position.x + cos(angle) * offset,
+                            y: pose.position.y + sin(angle) * offset
+                        ),
+                        rotationAngle: pose.rotationAngle
+                    )
+                }
+
+                return pose
             }
             accumulated += segLength
         }
