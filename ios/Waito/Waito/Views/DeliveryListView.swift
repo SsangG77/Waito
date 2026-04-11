@@ -7,72 +7,56 @@ struct DeliveryListView: View {
     @Environment(SubscriptionManager.self) private var subscription
 
     @State private var showAddSheet = false
-    @State private var selectedTrackingId: Int?
     @State private var showError = false
     @State private var showSubscriptionAlert = false
 
     var body: some View {
-        Group {
-            if service.trackings.isEmpty && !service.isLoading {
-                ContentUnavailableView(
-                    "등록된 택배가 없어요",
-                    systemImage: "box.truck",
-                    description: Text("+ 버튼을 눌러 운송장을 등록해보세요")
-                )
-            } else {
-                List {
-                    ForEach(service.trackings) { tracking in
-                        Button {
-                            selectedTrackingId = tracking.id
-                        } label: {
-                            TrackingRowView(
-                                tracking: tracking,
-                                isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
-                                onToggleLiveActivity: {
-                                    toggleLiveActivity(for: tracking)
-                                }
-                            )
-                        }
-                        .buttonStyle(.plain)
+        listContent
+            .toolbar {
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button { showAddSheet = true } label: {
+                        Image(systemName: "plus")
                     }
-                    .onDelete(perform: deleteTracking)
-                }
-                .listStyle(.plain)
-            }
-        }
-        .navigationTitle("내 택배")
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    showAddSheet = true
-                } label: {
-                    Image(systemName: "plus")
                 }
             }
-        }
-        .refreshable {
-            await service.loadTrackings()
-        }
-        .sheet(isPresented: $showAddSheet) {
-            AddTrackingView()
-        }
-        .navigationDestination(item: $selectedTrackingId) { trackingId in
-            TrackingDetailView(trackingId: trackingId)
-        }
-        .onChange(of: service.error) { _, newValue in
-            showError = newValue != nil
-        }
-        .alert("오류", isPresented: $showError) {
-            Button("확인", role: .cancel) {
-                service.clearError()
+            .sheet(isPresented: $showAddSheet) { AddTrackingView() }
+            .onChange(of: service.error) { _, newValue in showError = newValue != nil }
+            .alert("오류", isPresented: $showError) {
+                Button("확인", role: .cancel) { service.clearError() }
+            } message: {
+                Text(service.error ?? "")
             }
-        } message: {
-            Text(service.error ?? "")
-        }
-        .alert("Waito Plus", isPresented: $showSubscriptionAlert) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text("무료 사용자는 Live Activity를 1개까지 등록할 수 있어요.\nWaito Plus 구독 시 2개까지 가능합니다.")
+            .alert("Waito Plus", isPresented: $showSubscriptionAlert) {
+                Button("확인", role: .cancel) {}
+            } message: {
+                Text("무료 사용자는 Live Activity를 1개까지 등록할 수 있어요.\nWaito Plus 구독 시 2개까지 가능합니다.")
+            }
+    }
+
+    @ViewBuilder
+    private var listContent: some View {
+        if service.trackings.isEmpty && !service.isLoading {
+            ContentUnavailableView(
+                "등록된 택배가 없어요",
+                systemImage: "box.truck",
+                description: Text("+ 버튼을 눌러 운송장을 등록해보세요")
+            )
+        } else {
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(service.trackings) { tracking in
+                        TrackingRowView(
+                            tracking: tracking,
+                            isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
+                            onToggleLiveActivity: { toggleLiveActivity(for: tracking) }
+                        )
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 4)
+            }
+            .background(Color.bg)
+            .refreshable { await service.loadTrackings() }
         }
     }
 
@@ -98,78 +82,6 @@ struct DeliveryListView: View {
                 await service.deleteTracking(id: tracking.id)
             }
         }
-    }
-}
-
-// MARK: - 택배 행
-
-struct TrackingRowView: View {
-    let tracking: TrackingListItem
-    let isLiveActive: Bool
-    let onToggleLiveActivity: () -> Void
-
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(tracking.itemName)
-                    .font(.body)
-                    .fontWeight(.medium)
-
-                HStack(spacing: 4) {
-                    Text(tracking.carrierName)
-                    Text(tracking.trackingNumber)
-                }
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            // Live Activity 토글 버튼
-            if !tracking.currentStatus.isCompleted {
-                Button {
-                    onToggleLiveActivity()
-                } label: {
-                    Image(systemName: isLiveActive ? "antenna.radiowaves.left.and.right" : "antenna.radiowaves.left.and.right.slash")
-                        .font(.body)
-                        .foregroundStyle(isLiveActive ? .blue : .secondary)
-                        .frame(width: 32, height: 32)
-                }
-                .buttonStyle(.plain)
-            }
-
-            VStack(alignment: .trailing, spacing: 6) {
-                // 상태 배지
-                Text(tracking.currentStatus.displayName)
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 3)
-                    .background(statusColor(tracking.currentStatus))
-                    .clipShape(Capsule())
-
-                // 미니 프로그레스
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 1.5)
-                            .fill(Color(.systemGray5))
-
-                        RoundedRectangle(cornerRadius: 1.5)
-                            .fill(statusColor(tracking.currentStatus))
-                            .frame(width: geo.size.width * tracking.currentStatus.progress)
-                    }
-                }
-                .frame(width: 60, height: 3)
-            }
-        }
-        .padding(.vertical, 4)
-    }
-
-    private func statusColor(_ status: DeliveryStatus) -> Color {
-        if status.isCompleted { return .green }
-        if status.isActive { return .blue }
-        return .orange
     }
 }
 
@@ -346,9 +258,59 @@ struct TrackingDetailView: View {
 }
 
 #Preview {
+    let service = TrackingService(preview: [
+        TrackingListItem(
+            id: 1,
+            carrierId: "cj",
+            trackingNumber: "123456789012",
+            itemName: "맥북 프로 14인치",
+            currentStatus: .delivering,
+            currentTValue: 0.8,
+            carrierName: "CJ대한통운",
+            estimatedDelivery: "오늘",
+            createdAt: "2026-04-10T09:00:00Z",
+            deliveredAt: nil
+        ),
+        TrackingListItem(
+            id: 2,
+            carrierId: "hanjin",
+            trackingNumber: "987654321098",
+            itemName: "에어팟 프로",
+            currentStatus: .inTransitOut,
+            currentTValue: 0.5,
+            carrierName: "한진택배",
+            estimatedDelivery: "내일",
+            createdAt: "2026-04-09T15:30:00Z",
+            deliveredAt: nil
+        ),
+        TrackingListItem(
+            id: 3,
+            carrierId: "lotte",
+            trackingNumber: "555444333222",
+            itemName: "Nike 에어맥스",
+            currentStatus: .delivered,
+            currentTValue: 0.95,
+            carrierName: "롯데택배",
+            estimatedDelivery: nil,
+            createdAt: "2026-04-07T11:00:00Z",
+            deliveredAt: "2026-04-11T14:22:00Z"
+        ),
+        TrackingListItem(
+            id: 4,
+            carrierId: "post",
+            trackingNumber: "111222333444",
+            itemName: "무선 키보드",
+            currentStatus: .registered,
+            currentTValue: 0.05,
+            carrierName: "우체국택배",
+            estimatedDelivery: "3일 후",
+            createdAt: "2026-04-12T08:00:00Z",
+            deliveredAt: nil
+        ),
+    ])
     NavigationStack {
         DeliveryListView()
     }
-    .environment(TrackingService())
+    .environment(service)
     .environment(SubscriptionManager())
 }

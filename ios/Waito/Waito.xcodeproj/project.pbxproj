@@ -40,6 +40,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		91F720F42F80FA660074F7E0 /* Exceptions for "Waito" folder in "Waito" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = EDC699842F6941DF002FF663 /* Waito */;
+		};
 		EDC69A042F694200002FF663 /* Exceptions for "Waito" folder in "WaitoWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
@@ -59,6 +66,7 @@
 		EDC699872F6941DF002FF663 /* Waito */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			exceptions = (
+				91F720F42F80FA660074F7E0 /* Exceptions for "Waito" folder in "Waito" target */,
 				EDC69A042F694200002FF663 /* Exceptions for "Waito" folder in "WaitoWidgetExtension" target */,
 			);
 			path = Waito;
@@ -368,6 +376,7 @@
 				DEVELOPMENT_TEAM = M3KH86595Z;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Waito/Info.plist;
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -401,6 +410,7 @@
 				DEVELOPMENT_TEAM = M3KH86595Z;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = Waito/Info.plist;
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;

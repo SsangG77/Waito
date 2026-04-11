@@ -29,6 +29,12 @@ final class TrackingService {
         liveTrackingNumbers = UserDefaults.standard.stringArray(forKey: liveTrackingsKey) ?? []
     }
 
+    /// 프리뷰 전용
+    init(preview trackings: [TrackingListItem]) {
+        self.trackings = trackings
+        self.liveTrackingNumbers = []
+    }
+
     // MARK: - Device Token
 
     var deviceToken: String? {
