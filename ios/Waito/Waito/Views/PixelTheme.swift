@@ -142,3 +142,131 @@ struct PixelButton: View {
         .buttonStyle(.plain)
     }
 }
+
+// MARK: - PixelAlert
+
+struct PixelAlert: View {
+    let title: String
+    let message: String
+    let buttonTitle: String
+    let onConfirm: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 0) {
+                // 타이틀
+                Text(title.uppercased())
+                    .font(pixelFont(11))
+                    .foregroundStyle(Color.pixelOrange)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 18)
+                    .padding(.bottom, 12)
+
+                Rectangle()
+                    .fill(Color.pixelBorder)
+                    .frame(height: 1)
+                    .padding(.horizontal, 18)
+
+                // 메시지
+                Text(message)
+                    .font(pixelFont(8))
+                    .foregroundStyle(Color.pixelText)
+                    .lineSpacing(5)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+
+                Rectangle()
+                    .fill(Color.pixelBorder)
+                    .frame(height: 1)
+                    .padding(.horizontal, 18)
+
+                // 확인 버튼
+                Button {
+                    onConfirm()
+                } label: {
+                    Text("> \(buttonTitle.uppercased())_")
+                        .font(pixelFont(9))
+                        .foregroundStyle(Color.pixelOrange)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, 14)
+                }
+                .buttonStyle(.plain)
+            }
+            .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 8)
+            .padding(.horizontal, 40)
+        }
+    }
+}
+
+extension View {
+    func pixelAlert(
+        title: String,
+        message: String,
+        buttonTitle: String = "확인",
+        isPresented: Binding<Bool>,
+        onConfirm: @escaping () -> Void = {}
+    ) -> some View {
+        ZStack {
+            self
+            if isPresented.wrappedValue {
+                PixelAlert(title: title, message: message, buttonTitle: buttonTitle) {
+                    onConfirm()
+                    isPresented.wrappedValue = false
+                }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented.wrappedValue)
+                .zIndex(999)
+            }
+        }
+    }
+}
+
+// MARK: - Previews
+
+//#Preview("PixelBox") {
+//    VStack(spacing: 20) {
+//        Text("ITEM NAME")
+//            .font(pixelFont(12))
+//            .foregroundStyle(Color.pixelText)
+//            .padding(16)
+//            .pixelBox()
+//
+//        Text("ACTIVE")
+//            .font(pixelFont(10))
+//            .foregroundStyle(Color.pixelOrange)
+//            .padding(12)
+//            .pixelBox(border: Color.pixelOrange, bg: Color.pixelSurface)
+//
+//        Text("COMPLETED")
+//            .font(pixelFont(10))
+//            .foregroundStyle(Color(hex: "#22C55E"))
+//            .padding(12)
+//            .pixelBox(border: Color(hex: "#22C55E"), bg: Color.pixelSurface)
+//    }
+//    .padding(24)
+//    .background(Color.bg)
+//}
+//
+//#Preview("PixelTextField & PixelButton") {
+//    VStack(spacing: 20) {
+//        PixelTextField(label: "TRACKING NO.", text: .constant("123456789"))
+//        PixelTextField(label: "ITEM NAME", text: .constant(""))
+//        PixelButton(title: "ADD") {}
+//    }
+//    .padding(24)
+//    .background(Color.bg)
+//}
+
+#Preview("PixelAlert") {
+    Color.bg
+        .ignoresSafeArea()
+        .pixelAlert(
+            title: "오류",
+            message: "서버에 연결할 수 없어요.\n잠시 후 다시 시도해주세요.",
+            isPresented: .constant(true)
+        )
+}
+

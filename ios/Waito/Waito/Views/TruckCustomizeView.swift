@@ -44,11 +44,11 @@ struct TruckCustomizeView: View {
         }
         .navigationTitle("내 트럭")
         .background(Color(.systemGroupedBackground))
-        .alert("Waito Plus", isPresented: $showSubscriptionAlert) {
-            Button("확인", role: .cancel) {}
-        } message: {
-            Text("이 옵션은 Waito Plus 구독이 필요해요.\n월 ₩2,900 / 연 ₩19,900")
-        }
+        .pixelAlert(
+            title: "Waito Plus",
+            message: "이 옵션은 Waito Plus 구독이 필요해요.\n월 ₩2,900 / 연 ₩19,900",
+            isPresented: $showSubscriptionAlert
+        )
     }
 
     // MARK: - 미리보기

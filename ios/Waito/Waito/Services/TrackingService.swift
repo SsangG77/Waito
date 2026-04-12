@@ -25,14 +25,73 @@ final class TrackingService {
     // MARK: - Init
 
     init() {
-        // 저장된 Live Activity 택배 목록 복원
         liveTrackingNumbers = UserDefaults.standard.stringArray(forKey: liveTrackingsKey) ?? []
+        trackings = [
+            TrackingListItem(
+                id: 1, carrierId: "cj", trackingNumber: "123456789012",
+                itemName: "맥북 프로 14인치", currentStatus: .delivering,
+                currentTValue: 0.8, carrierName: "CJ대한통운",
+                estimatedDelivery: "오늘", createdAt: "2026-04-10T09:00:00Z", deliveredAt: nil
+            ),
+            TrackingListItem(
+                id: 2, carrierId: "hanjin", trackingNumber: "987654321098",
+                itemName: "에어팟 프로", currentStatus: .inTransitOut,
+                currentTValue: 0.5, carrierName: "한진택배",
+                estimatedDelivery: "내일", createdAt: "2026-04-09T15:30:00Z", deliveredAt: nil
+            ),
+            TrackingListItem(
+                id: 3, carrierId: "lotte", trackingNumber: "555444333222",
+                itemName: "Nike 에어맥스", currentStatus: .delivered,
+                currentTValue: 0.95, carrierName: "롯데택배",
+                estimatedDelivery: nil, createdAt: "2026-04-07T11:00:00Z",
+                deliveredAt: "2026-04-11T14:22:00Z"
+            ),
+            TrackingListItem(
+                id: 4, carrierId: "post", trackingNumber: "111222333444",
+                itemName: "무선 키보드", currentStatus: .registered,
+                currentTValue: 0.05, carrierName: "우체국택배",
+                estimatedDelivery: "3일 후", createdAt: "2026-04-12T08:00:00Z", deliveredAt: nil
+            ),
+        ]
     }
 
     /// 프리뷰 전용
     init(preview trackings: [TrackingListItem]) {
         self.trackings = trackings
         self.liveTrackingNumbers = []
+    }
+
+    // MARK: - 더미 데이터 (서버 없을 때 fallback)
+
+    func loadDummyDataIfNeeded() {
+        guard trackings.isEmpty else { return }
+        trackings = [
+            TrackingListItem(
+                id: 1, carrierId: "cj", trackingNumber: "123456789012",
+                itemName: "맥북 프로 14인치", currentStatus: .delivering,
+                currentTValue: 0.8, carrierName: "CJ대한통운",
+                estimatedDelivery: "오늘", createdAt: "2026-04-10T09:00:00Z", deliveredAt: nil
+            ),
+            TrackingListItem(
+                id: 2, carrierId: "hanjin", trackingNumber: "987654321098",
+                itemName: "에어팟 프로", currentStatus: .inTransitOut,
+                currentTValue: 0.5, carrierName: "한진택배",
+                estimatedDelivery: "내일", createdAt: "2026-04-09T15:30:00Z", deliveredAt: nil
+            ),
+            TrackingListItem(
+                id: 3, carrierId: "lotte", trackingNumber: "555444333222",
+                itemName: "Nike 에어맥스", currentStatus: .delivered,
+                currentTValue: 0.95, carrierName: "롯데택배",
+                estimatedDelivery: nil, createdAt: "2026-04-07T11:00:00Z",
+                deliveredAt: "2026-04-11T14:22:00Z"
+            ),
+            TrackingListItem(
+                id: 4, carrierId: "post", trackingNumber: "111222333444",
+                itemName: "무선 키보드", currentStatus: .registered,
+                currentTValue: 0.05, carrierName: "우체국택배",
+                estimatedDelivery: "3일 후", createdAt: "2026-04-12T08:00:00Z", deliveredAt: nil
+            ),
+        ]
     }
 
     // MARK: - Device Token
@@ -238,4 +297,35 @@ final class TrackingService {
             await activity.end(nil, dismissalPolicy: .immediate)
         }
     }
+
+    // MARK: - Debug
+
+    #if DEBUG
+    func startDemoLiveActivity() async {
+        let demoItem = TrackingItemState(
+            trackingNumber: "DEMO-0000",
+            status: .delivering,
+            carrierName: "Waito Demo",
+            itemName: "데모 택배",
+            estimatedDelivery: "오늘"
+        )
+        var config = TruckConfigStore.shared.config
+        config.runMode = .on
+        let state = DeliveryAttributes.ContentState(items: [demoItem], truckConfig: config)
+        let attributes = DeliveryAttributes(deviceId: "demo")
+        do {
+            _ = try Activity.request(
+                attributes: attributes,
+                content: .init(state: state, staleDate: nil),
+                pushType: nil
+            )
+        } catch {
+            self.error = "Live Activity 오류: \(error)"
+        }
+    }
+
+    func stopDemoLiveActivity() async {
+        await endLiveActivity()
+    }
+    #endif
 }

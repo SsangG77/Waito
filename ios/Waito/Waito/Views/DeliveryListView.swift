@@ -6,58 +6,187 @@ struct DeliveryListView: View {
     @Environment(TrackingService.self) private var service
     @Environment(SubscriptionManager.self) private var subscription
 
-    @State private var showAddSheet = false
+    @State private var showAddForm = false
     @State private var showError = false
     @State private var showSubscriptionAlert = false
 
+    // 입력 폼 상태
+    @State private var newTrackingNumber = ""
+    @State private var newCarrierId = ""
+    @State private var newItemName = ""
+    @State private var newMemo = ""
+    @State private var isSubmitting = false
+
     var body: some View {
         listContent
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button { showAddSheet = true } label: {
-                        Image(systemName: "plus")
-                    }
-                }
-            }
-            .sheet(isPresented: $showAddSheet) { AddTrackingView() }
             .onChange(of: service.error) { _, newValue in showError = newValue != nil }
-            .alert("오류", isPresented: $showError) {
-                Button("확인", role: .cancel) { service.clearError() }
-            } message: {
-                Text(service.error ?? "")
-            }
-            .alert("Waito Plus", isPresented: $showSubscriptionAlert) {
-                Button("확인", role: .cancel) {}
-            } message: {
-                Text("무료 사용자는 Live Activity를 1개까지 등록할 수 있어요.\nWaito Plus 구독 시 2개까지 가능합니다.")
+            .pixelAlert(
+                title: "오류",
+                message: service.error ?? "",
+                isPresented: $showError
+            ) { service.clearError() }
+            .pixelAlert(
+                title: "Waito Plus",
+                message: "무료 사용자는 Live Activity를 1개까지 등록할 수 있어요.\nWaito Plus 구독 시 2개까지 가능합니다.",
+                isPresented: $showSubscriptionAlert
+            )
+            .task {
+                if service.carriers.isEmpty {
+                    await service.loadCarriers()
+                }
             }
     }
 
-    @ViewBuilder
     private var listContent: some View {
-        if service.trackings.isEmpty && !service.isLoading {
-            ContentUnavailableView(
-                "등록된 택배가 없어요",
-                systemImage: "box.truck",
-                description: Text("+ 버튼을 눌러 운송장을 등록해보세요")
-            )
-        } else {
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(service.trackings) { tracking in
-                        TrackingRowView(
-                            tracking: tracking,
-                            isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
-                            onToggleLiveActivity: { toggleLiveActivity(for: tracking) }
-                        )
-                    }
+        ScrollView {
+            LazyVStack(spacing: 8) {
+                actionButtons
+
+                if showAddForm {
+                    inlineAddForm
+                        .transition(.opacity)
                 }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 4)
+
+                ForEach(service.trackings) { tracking in
+                    TrackingRowView(
+                        tracking: tracking,
+                        isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
+                        onToggleLiveActivity: { toggleLiveActivity(for: tracking) }
+                    )
+                }
             }
-            .background(Color.bg)
-            .refreshable { await service.loadTrackings() }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 4)
         }
+        .background(Color.bg)
+        .refreshable { await service.loadTrackings() }
+    }
+
+    // MARK: - 버튼 영역
+
+    private var actionButtons: some View {
+        HStack(spacing: 8) {
+            NavigationLink(destination: SettingsView()) {
+                Image(systemName: "gearshape.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.pixelMuted)
+                    .frame(width: 46, height: 46)
+                    .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+            }
+            .buttonStyle(.plain)
+
+            addButton
+        }
+    }
+
+    private var addButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                showAddForm.toggle()
+                if !showAddForm { resetForm() }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(showAddForm ? "v" : ">")
+                Text(showAddForm ? "CLOSE_" : "ADD_")
+            }
+            .font(pixelFont(11))
+            .foregroundStyle(showAddForm ? Color.pixelMuted : Color.pixelText)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 14)
+            .pixelBox(
+                border: showAddForm ? Color.pixelBorder : Color.pixelOrange.opacity(0.7),
+                bg: showAddForm ? Color.pixelSurface : Color.pixelOrange.opacity(0.1)
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - 인라인 입력 폼
+
+    private var inlineAddForm: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            PixelTextField(label: "TRACKING NO.", text: $newTrackingNumber)
+            carrierPicker
+            PixelTextField(label: "ITEM NAME", text: $newItemName)
+            PixelTextField(label: "MEMO", text: $newMemo)
+
+            PixelButton(title: isSubmitting ? "ADDING..." : "ADD") {
+                submit()
+            }
+            .disabled(!isFormValid || isSubmitting)
+            .opacity((!isFormValid || isSubmitting) ? 0.5 : 1.0)
+        }
+        .padding(14)
+        .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+    }
+
+    private var carrierPicker: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("CARRIER")
+                .font(pixelFont(9))
+                .foregroundStyle(Color.pixelOrange)
+
+            Menu {
+                ForEach(service.carriers) { carrier in
+                    Button(carrier.name) { newCarrierId = carrier.id }
+                }
+                if service.carriers.isEmpty {
+                    Button("로딩 중...") {}
+                        .disabled(true)
+                }
+            } label: {
+                HStack {
+                    Text(selectedCarrierName)
+                        .font(pixelFont(10))
+                        .foregroundStyle(newCarrierId.isEmpty ? Color.pixelMuted : Color.pixelText)
+                    Spacer()
+                    Text("▼")
+                        .font(pixelFont(8))
+                        .foregroundStyle(Color.pixelMuted)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 14)
+                .pixelBox()
+            }
+        }
+    }
+
+    private var selectedCarrierName: String {
+        service.carriers.first(where: { $0.id == newCarrierId })?.name ?? "선택해주세요"
+    }
+
+    private var isFormValid: Bool {
+        !newCarrierId.isEmpty && !newTrackingNumber.trimmingCharacters(in: .whitespaces).isEmpty
+    }
+
+    // MARK: - Actions
+
+    private func submit() {
+        isSubmitting = true
+        Task {
+            let name = newItemName.trimmingCharacters(in: .whitespaces)
+            let success = await service.addTracking(
+                carrierId: newCarrierId,
+                trackingNumber: newTrackingNumber.trimmingCharacters(in: .whitespaces),
+                itemName: name.isEmpty ? nil : name,
+                limit: subscription.liveActivityLimit
+            )
+            isSubmitting = false
+            if success {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    showAddForm = false
+                }
+                resetForm()
+            }
+        }
+    }
+
+    private func resetForm() {
+        newTrackingNumber = ""
+        newCarrierId = ""
+        newItemName = ""
+        newMemo = ""
     }
 
     private func toggleLiveActivity(for tracking: TrackingListItem) {
@@ -74,188 +203,8 @@ struct DeliveryListView: View {
             }
         }
     }
-
-    private func deleteTracking(at offsets: IndexSet) {
-        for index in offsets {
-            let tracking = service.trackings[index]
-            Task {
-                await service.deleteTracking(id: tracking.id)
-            }
-        }
-    }
 }
 
-// MARK: - 택배 상세
-
-struct TrackingDetailView: View {
-    @Environment(TrackingService.self) private var service
-
-    let trackingId: Int
-    @State private var detail: TrackingDetail?
-    @State private var isLoading = true
-
-    var body: some View {
-        Group {
-            if isLoading {
-                ProgressView()
-            } else if let detail {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 20) {
-                        // 배송 정보
-                        infoSection(detail)
-
-                        // 배송 이력 타임라인
-                        eventsSection(detail.events)
-                    }
-                    .padding()
-                }
-            } else {
-                ContentUnavailableView("정보를 불러올 수 없어요", systemImage: "exclamationmark.triangle")
-            }
-        }
-        .navigationTitle(detail?.itemName ?? "상세")
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .topBarTrailing) {
-                Button {
-                    Task { await refresh() }
-                } label: {
-                    Image(systemName: "arrow.clockwise")
-                }
-            }
-        }
-        .task {
-            await refresh()
-        }
-    }
-
-    private func refresh() async {
-        isLoading = detail == nil
-        detail = await service.getTrackingDetail(id: trackingId)
-        isLoading = false
-    }
-
-    // MARK: - 배송 정보 섹션
-
-    private func infoSection(_ detail: TrackingDetail) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("배송 정보")
-                .font(.headline)
-
-            GroupBox {
-                VStack(spacing: 10) {
-                    infoRow("택배사", detail.carrierName)
-                    infoRow("운송장", detail.trackingNumber)
-                    infoRow("상태", detail.currentStatus.displayName)
-                    if let eta = detail.estimatedDelivery {
-                        infoRow("도착 예정", eta)
-                    }
-                }
-            }
-
-            // 프로그레스 바
-            VStack(spacing: 4) {
-                GeometryReader { geo in
-                    ZStack(alignment: .leading) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color(.systemGray5))
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(Color.blue)
-                            .frame(width: geo.size.width * detail.currentStatus.progress)
-                    }
-                }
-                .frame(height: 6)
-
-                HStack {
-                    Text("접수")
-                    Spacer()
-                    Text("배송완료")
-                }
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private func infoRow(_ label: String, _ value: String) -> some View {
-        HStack {
-            Text(label)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-            Spacer()
-            Text(value)
-                .font(.subheadline)
-        }
-    }
-
-    // MARK: - 배송 이력 타임라인
-
-    private func eventsSection(_ events: [TrackingEvent]) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("배송 이력")
-                .font(.headline)
-
-            if events.isEmpty {
-                Text("아직 이력이 없어요")
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .padding(.vertical, 8)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
-                        HStack(alignment: .top, spacing: 12) {
-                            // 타임라인 도트
-                            VStack(spacing: 0) {
-                                Circle()
-                                    .fill(index == 0 ? Color.blue : Color(.systemGray4))
-                                    .frame(width: 10, height: 10)
-
-                                if index < events.count - 1 {
-                                    Rectangle()
-                                        .fill(Color(.systemGray4))
-                                        .frame(width: 1.5)
-                                        .frame(minHeight: 30)
-                                }
-                            }
-
-                            // 이벤트 내용
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(event.description)
-                                    .font(.subheadline)
-                                    .fontWeight(index == 0 ? .semibold : .regular)
-
-                                HStack(spacing: 4) {
-                                    Text(formatEventTime(event.eventTime))
-                                    if let location = event.location {
-                                        Text("·")
-                                        Text(location)
-                                    }
-                                }
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-                            }
-
-                            Spacer()
-                        }
-                        .padding(.bottom, index < events.count - 1 ? 8 : 0)
-                    }
-                }
-            }
-        }
-    }
-
-    private func formatEventTime(_ isoString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = formatter.date(from: isoString) ?? ISO8601DateFormatter().date(from: isoString) else {
-            return isoString
-        }
-        let display = DateFormatter()
-        display.locale = Locale(identifier: "ko_KR")
-        display.dateFormat = "M/d HH:mm"
-        return display.string(from: date)
-    }
-}
 
 #Preview {
     let service = TrackingService(preview: [

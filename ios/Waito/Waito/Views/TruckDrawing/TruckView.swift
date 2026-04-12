@@ -7,49 +7,26 @@ struct TruckView: View {
     let size: CGFloat
 
     var body: some View {
-        let parts = truckParts
-
+        let parts = shapeParts()
         ZStack {
-            // 짐칸
-            TruckStyleModifier.apply(
-                style: config.style,
-                path: parts.cargo,
-                color: config.cargoColor.color,
-                size: size
-            )
-
-            // 택배 상자
-            TruckStyleModifier.apply(
-                style: config.style,
-                path: parts.box,
-                color: config.boxColor.color,
-                size: size
-            )
-
-            // 헤드 (운전석)
-            TruckStyleModifier.apply(
-                style: config.style,
-                path: parts.head,
-                color: config.headColor.color,
-                size: size
-            )
-
-            // 바퀴 — 항상 검정
-            parts.wheels.fill(Color(white: 0.1))
+            TruckStyleModifier.apply(style: config.style, path: parts.cargo, color: config.cargoColor.color, size: size)
+            TruckStyleModifier.apply(style: config.style, path: parts.box,   color: config.boxColor.color,   size: size)
+            TruckStyleModifier.apply(style: config.style, path: parts.head,  color: config.headColor.color,  size: size)
+            parts.wheels.fill(Color.black.opacity(0.85))
         }
         .frame(width: size, height: size)
     }
 
-    private var truckParts: TruckParts {
+    private func shapeParts() -> TruckParts {
         switch config.shape {
-        case .standard: StandardTruckShape.parts(in: size)
-        case .minivan:  MinivanTruckShape.parts(in: size)
-        case .heavy:    HeavyTruckShape.parts(in: size)
+        case .standard: return StandardTruckShape.parts(in: size)
+        case .minivan:  return MinivanTruckShape.parts(in: size)
+        case .heavy:    return HeavyTruckShape.parts(in: size)
         }
     }
 }
 
-// MARK: - Live Activity용 미니 트럭 (SF Symbol 대체)
+// MARK: - Live Activity용 미니 트럭
 
 struct MiniTruckView: View {
     let config: TruckConfig
@@ -64,14 +41,8 @@ struct MiniTruckView: View {
 #Preview {
     VStack(spacing: 20) {
         TruckView(config: .default, size: 80)
-        TruckView(
-            config: TruckConfig(shape: .minivan, style: .pixel, headColor: .red, cargoColor: .white, boxColor: .yellow),
-            size: 80
-        )
-        TruckView(
-            config: TruckConfig(shape: .heavy, style: .threeD, headColor: .green, cargoColor: .gray, boxColor: .purple),
-            size: 80
-        )
+        TruckView(config: TruckConfig(shape: .minivan, style: .pixel, headColor: .orange, cargoColor: .blue, boxColor: .yellow), size: 100)
+        TruckView(config: TruckConfig(shape: .heavy, style: .threeD, headColor: .red, cargoColor: .gray, boxColor: .white), size: 120)
     }
     .padding()
     .background(.black)

@@ -46,6 +46,7 @@ struct TrackingRowView: View {
                 ForEach(0..<steps - 1) { i in
                     let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i) + dotSize + gap
                     let filled = tracking.currentStatus.isCompleted || CGFloat(i + 1) / CGFloat(steps) <= tracking.currentStatus.progress
+                    
                     Rectangle()
                         .fill(filled ? activeColor : Color.pixelBorder)
                         .frame(width: lineWidth, height: 1)
@@ -54,6 +55,7 @@ struct TrackingRowView: View {
                 ForEach(0..<steps) { i in
                     let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i)
                     let filled = tracking.currentStatus.isCompleted || CGFloat(i) / CGFloat(steps) < tracking.currentStatus.progress
+                    
                     Rectangle()
                         .fill(filled ? activeColor : Color.pixelBorder)
                         .frame(width: dotSize, height: dotSize)
@@ -73,26 +75,27 @@ struct TrackingRowView: View {
                 let isCurrent = stage == tracking.currentStatus
                 let isPast = stage.order < tracking.currentStatus.order
 
-                HStack(alignment: .center, spacing: 10) {
-                    VStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .center, spacing: 10) {
                         Rectangle()
                             .fill((isPast || isCurrent) ? pixelStatusColor(tracking.currentStatus) : Color.pixelBorder)
-                            .frame(width: 5, height: 5)
-                        if index < DeliveryStatus.allCases.count - 1 {
-                            Rectangle()
-                                .fill(isPast ? pixelStatusColor(tracking.currentStatus) : Color.pixelBorder)
-                                .frame(width: 1, height: 16)
-                        }
-                    }
-                    .frame(width: 5)
+                            .frame(width: 7, height: 7)
 
-                    Text(stage.displayName)
-                        .font(pixelFont(isCurrent ? 8 : 7))
-                        .foregroundStyle(
-                            isCurrent ? pixelStatusColor(tracking.currentStatus)
-                            : isPast   ? Color.pixelText.opacity(0.6)
-                            :            Color.pixelMuted.opacity(0.4)
-                        )
+                        Text(stage.displayName)
+                            .font(pixelFont(isCurrent ? 12 : 9))
+                            .foregroundStyle(
+                                isCurrent ? pixelStatusColor(tracking.currentStatus)
+                                : isPast   ? Color.pixelText.opacity(0.6)
+                                :            Color.pixelMuted.opacity(0.4)
+                            )
+                    }
+
+                    if index < DeliveryStatus.allCases.count - 1 {
+                        Rectangle()
+                            .fill(isPast ? pixelStatusColor(tracking.currentStatus) : Color.pixelBorder)
+                            .frame(width: 1, height: 19)
+                            .padding(.leading, 3)
+                    }
                 }
             }
         }
@@ -110,10 +113,10 @@ struct TrackingRowView: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(isExpanded ? "CLOSE" : "DETAIL")
-                        .font(pixelFont(6))
+                        .font(pixelFont(10))
                         .foregroundStyle(Color.pixelMuted)
                     PixelChevron(isExpanded: isExpanded)
-                        .frame(width: 10, height: 6)
+                        .frame(width: 10, height: 7)
                         .foregroundStyle(Color.pixelMuted)
                 }
                 .padding(.horizontal, 14)
@@ -181,9 +184,11 @@ struct TrackingRowView: View {
     }
 
     private func pixelStatusColor(_ status: DeliveryStatus) -> Color {
-        if status.isCompleted { return Color(hex: "#22C55E") }
-        if status.isActive    { return Color.pixelOrange }
-        return Color.pixelMuted
+        switch status {
+        case .delivered:  return Color(hex: "#22C55E")
+        case .registered: return Color.pixelMuted
+        default:          return Color.pixelOrange
+        }
     }
 
     private func formatDate(_ isoString: String) -> String {
