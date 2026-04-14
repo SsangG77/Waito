@@ -29,7 +29,7 @@ actor APIClient {
 
     // TODO: 배포 시 실제 서버 URL로 변경
     #if DEBUG
-    private let baseURL = "http://localhost:3000"
+    private let baseURL = "http://192.168.219.45:3000"
     #else
     private let baseURL = "https://api.waito.app"
     #endif

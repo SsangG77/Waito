@@ -32,11 +32,7 @@ struct WaitoLiveActivity: Widget {
             } compactLeading: {
                 MiniTruckView(config: context.state.truckConfig, size: 24)
             } compactTrailing: {
-                if let primary = context.state.primary {
-                    Text(primary.status.displayName)
-                        .font(.caption2)
-                        .foregroundStyle(.white)
-                }
+                EmptyView()
             } minimal: {
                 MiniTruckView(config: context.state.truckConfig, size: 18)
             }
@@ -68,8 +64,8 @@ struct ExpandedTruckPathView: View {
     /// 트럭의 바깥 오프셋 (Island → 트럭 중심)
     private let truckOffset: CGFloat = 12
 
-    /// ON 모드에서 트럭 애니메이션 위치 (0~1 반복)
-    @State private var truckAnimationT: CGFloat = 0
+    /// ON 모드 왕복 주기 (초): 4초 전진 + 4초 후진
+    private let animationPeriod: Double = 8.0
 
     var body: some View {
         VStack(spacing: 6) {
@@ -84,8 +80,17 @@ struct ExpandedTruckPathView: View {
                         .trim(from: 0, to: primary.status.progress)
                         .stroke(Color.white.opacity(0.9), style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
 
-                    // Layer 2: 트럭 아이콘 (진행률 선의 더 바깥)
-                    truckIcon(for: primary)
+                    // Layer 2: 트럭 아이콘
+                    // ON 모드: TimelineView로 시간 기반 연속 애니메이션
+                    // OFF 모드: 배송 단계 t값 위치에 고정
+                    if state.truckConfig.runMode == .on {
+                        TimelineView(.animation) { context in
+                            truckIcon(t: animatedT(for: context.date), config: state.truckConfig)
+                        }
+                    } else {
+                        truckIcon(t: primary.status.progress, config: state.truckConfig)
+                            .animation(.spring(duration: 0.8), value: primary.status.progress)
+                    }
                 }
                 .frame(width: pathSize.width + truckOffset * 2,
                        height: pathSize.height + truckOffset * 2)
@@ -117,44 +122,29 @@ struct ExpandedTruckPathView: View {
                 }
             }
         }
-        .onAppear {
-            startTruckAnimation()
-        }
+    }
+
+    // MARK: - 시간 기반 T값 계산 (0→1→0 easeInOut 반복)
+
+    private func animatedT(for date: Date) -> CGFloat {
+        let elapsed = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: animationPeriod)
+        let phase = elapsed / animationPeriod // 0.0~1.0 선형
+        // 전반부 0→0.5: t 0→1, 후반부 0.5→1: t 1→0 (오토리버스)
+        let pingPong = phase <= 0.5 ? phase * 2 : (1.0 - phase) * 2
+        // smoothstep으로 easeInOut 적용
+        return CGFloat(pingPong * pingPong * (3.0 - 2.0 * pingPong))
     }
 
     // MARK: - 트럭 렌더링
 
-    private func truckIcon(for item: TrackingItemState) -> some View {
-        let isRunning = state.truckConfig.runMode == .on
-
-        // ON: 애니메이션 t값으로 자유롭게 달림
-        // OFF: 진행률 끝에 멈춤
-        let t = isRunning ? truckAnimationT : item.status.progress
-
-        // 트럭은 진행률 선보다 더 바깥에 위치
+    private func truckIcon(t: CGFloat, config: TruckConfig) -> some View {
         let pose = calculator.pose(at: t, offset: truckOffset)
-
-        return MiniTruckView(config: state.truckConfig, size: 14)
+        return MiniTruckView(config: config, size: 14)
             .rotationEffect(.radians(pose.rotationAngle))
             .position(
-                x: pose.position.x + truckOffset, // ZStack 오프셋 보정
+                x: pose.position.x + truckOffset,
                 y: pose.position.y + truckOffset
             )
-            .animation(isRunning ? nil : .spring(duration: 0.8), value: item.status.progress)
-    }
-
-    // MARK: - ON 모드 트럭 애니메이션
-
-    private func startTruckAnimation() {
-        guard state.truckConfig.runMode == .on else { return }
-
-        // 트럭이 테두리를 따라 계속 왔다갔다
-        withAnimation(
-            .easeInOut(duration: 4.0)
-            .repeatForever(autoreverses: true)
-        ) {
-            truckAnimationT = 1.0
-        }
     }
 }
 

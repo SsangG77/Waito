@@ -250,6 +250,7 @@ Key routing rules:
 - Bugs, errors, "why is this broken", 500 errors → invoke investigate
 - Ship, deploy, push, create PR → invoke ship
 - QA, test the site, find bugs → invoke qa
+- Browser testing, screenshot, page interaction, headless browser, navigate URL → invoke gstack
 - Code review, check my diff → invoke review
 - Update docs after shipping → invoke document-release
 - Weekly retro → invoke retro
