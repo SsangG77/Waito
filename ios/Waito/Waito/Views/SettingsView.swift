@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct SettingsView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(SubscriptionManager.self) private var subscription
 
     #if DEBUG
@@ -10,31 +11,35 @@ struct SettingsView: View {
     #endif
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 8) {
-                NavigationLink(destination: TruckCustomizeView()) {
-                    settingsRow(icon: "truck.box.fill", title: "내 트럭", subtitle: "트럭 모양 및 색상 커스텀")
+        VStack(spacing: 0) {
+            PixelNavBar(title: "SETTINGS", onBack: { dismiss() })
+
+            ScrollView {
+                VStack(spacing: 8) {
+                    NavigationLink(destination: TruckCustomizeView()) {
+                        settingsRow(icon: "truck.box.fill", title: "내 트럭", subtitle: "트럭 모양 및 색상 커스텀")
+                    }
+                    .buttonStyle(.plain)
+
+                    settingsRow(
+                        icon: "crown.fill",
+                        title: "Waito Plus",
+                        subtitle: subscription.isSubscribed ? "구독 중" : "₩2,900/월 · ₩19,900/년"
+                    )
+
+                    settingsRow(icon: "info.circle", title: "버전", subtitle: "1.0.0")
+
+                    #if DEBUG
+                    debugDemoRow
+                    #endif
                 }
-                .buttonStyle(.plain)
-
-                settingsRow(
-                    icon: "crown.fill",
-                    title: "Waito Plus",
-                    subtitle: subscription.isSubscribed ? "구독 중" : "₩2,900/월 · ₩19,900/년"
-                )
-
-                settingsRow(icon: "info.circle", title: "버전", subtitle: "1.0.0")
-
-                #if DEBUG
-                debugDemoRow
-                #endif
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 8)
         }
         .background(Color.bg)
-        .navigationTitle("SETTINGS")
-        .navigationBarTitleDisplayMode(.inline)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
         #if DEBUG
         .onChange(of: service.error) { _, newValue in
             showDemoError = newValue != nil

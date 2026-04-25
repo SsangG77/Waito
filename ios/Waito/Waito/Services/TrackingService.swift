@@ -251,6 +251,17 @@ final class TrackingService {
         )
     }
 
+    /// 트럭 설정 변경 시 실행 중인 모든 Live Activity에 즉시 반영
+    func pushTruckConfig() async {
+        var newConfig = TruckConfigStore.shared.config
+        for activity in Activity<DeliveryAttributes>.activities {
+            var newState = activity.content.state
+            newConfig.runMode = newState.truckConfig.runMode  // on/off 모드 유지
+            newState.truckConfig = newConfig
+            await activity.update(.init(state: newState, staleDate: nil))
+        }
+    }
+
     private func updateLiveActivity() async {
         guard !liveTrackingNumbers.isEmpty else { return }
         let state = buildContentState()

@@ -30,11 +30,12 @@ struct WaitoLiveActivity: Widget {
                     ExpandedTruckPathView(state: context.state)
                 }
             } compactLeading: {
-                MiniTruckView(config: context.state.truckConfig, size: 24)
+                BouncingTruckView(config: context.state.truckConfig, size: 24)
             } compactTrailing: {
                 EmptyView()
             } minimal: {
-                MiniTruckView(config: context.state.truckConfig, size: 18)
+                let cfg = context.state.truckConfig
+                CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 18)
             }
         }
     }
@@ -139,7 +140,7 @@ struct ExpandedTruckPathView: View {
 
     private func truckIcon(t: CGFloat, config: TruckConfig) -> some View {
         let pose = calculator.pose(at: t, offset: truckOffset)
-        return MiniTruckView(config: config, size: 14)
+        return CatalogTruckView(cab: config.cab, truckBody: config.body, wheels: config.wheelType, size: 14)
             .rotationEffect(.radians(pose.rotationAngle))
             .position(
                 x: pose.position.x + truckOffset,
@@ -182,6 +183,27 @@ struct SecondaryTrackingRow: View {
     }
 }
 
+// MARK: - Compact Leading 바운싱 트럭
+
+struct BouncingTruckView: View {
+    let config: TruckConfig
+    let size: CGFloat
+
+    private let period: Double = 1.0  // 1초 1사이클
+
+    var body: some View {
+        TimelineView(.animation) { context in
+            let t = context.date.timeIntervalSinceReferenceDate
+                        .truncatingRemainder(dividingBy: period) / period
+            // abs(sin) → 바닥에서 튀어오르는 자연스러운 곡선
+            let offsetY = -abs(sin(t * .pi)) * 4
+
+            CatalogTruckView(cab: config.cab, truckBody: config.body, wheels: config.wheelType, size: size)
+                .offset(y: offsetY)
+        }
+    }
+}
+
 // MARK: - Lock Screen / Banner View
 
 struct LockScreenLiveActivityView: View {
@@ -214,7 +236,7 @@ struct LockScreenTrackingRow: View {
     var body: some View {
         HStack(spacing: 12) {
             if showTruck {
-                MiniTruckView(config: truckConfig, size: 36)
+                CatalogTruckView(cab: truckConfig.cab, truckBody: truckConfig.body, wheels: truckConfig.wheelType, size: 36)
             } else {
                 Image(systemName: "shippingbox.fill")
                     .font(.title3)

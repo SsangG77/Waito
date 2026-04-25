@@ -50,10 +50,13 @@
 		EDC69A042F694200002FF663 /* Exceptions for "Waito" folder in "WaitoWidgetExtension" target */ = {
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
+				Assets.xcassets,
 				LiveActivity/DeliveryAttributes.swift,
 				Models/DeliveryStatus.swift,
+				Models/PixelTruckCatalog.swift,
 				Models/TruckConfig.swift,
 				Models/TruckPathCalculator.swift,
+				Views/TruckDrawing/CatalogTruckView.swift,
 				Views/TruckDrawing/TruckShapes.swift,
 				Views/TruckDrawing/TruckStyleModifier.swift,
 				Views/TruckDrawing/TruckView.swift,

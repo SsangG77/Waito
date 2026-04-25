@@ -65,18 +65,71 @@ struct DeliveryListView: View {
     // MARK: - 버튼 영역
 
     private var actionButtons: some View {
-        HStack(spacing: 8) {
-            NavigationLink(destination: SettingsView()) {
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 14))
-                    .foregroundStyle(Color.pixelMuted)
-                    .frame(width: 46, height: 46)
-                    .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+        VStack(spacing: 6) {
+            // Option A: [⚙️] [ADD ──────>] [🚚]
+            HStack(spacing: 8) {
+                settingsButton
+                addButton
+                truckButton(wide: false)
             }
-            .buttonStyle(.plain)
 
-            addButton
+//            // Option B: [⚙️] [+] [🚚 ──────────>]
+//            HStack(spacing: 8) {
+//                settingsButton
+//                compactAddButton
+//                truckButton(wide: true)
+//            }
         }
+    }
+
+    private var settingsButton: some View {
+        NavigationLink(destination: SettingsView()) {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 14))
+                .foregroundStyle(Color.pixelMuted)
+                .frame(width: 46, height: 46)
+                .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var compactAddButton: some View {
+        Button {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                showAddForm.toggle()
+                if !showAddForm { resetForm() }
+            }
+        } label: {
+            Text(showAddForm ? "v" : "+")
+                .font(pixelFont(14))
+                .foregroundStyle(showAddForm ? Color.pixelMuted : Color.pixelText)
+                .frame(width: 46, height: 46)
+                .pixelBox(
+                    border: showAddForm ? Color.pixelBorder : Color.pixelOrange.opacity(0.7),
+                    bg: showAddForm ? Color.pixelSurface : Color.pixelOrange.opacity(0.1),
+                    lineWidth: 1.5, notch: 4
+                )
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func truckButton(wide: Bool) -> some View {
+        NavigationLink(destination: TruckCustomizeView()) {
+            HStack(spacing: 6) {
+                Text("🚚")
+                    .font(.system(size: 16))
+                if wide {
+                    Text("MY TRUCK_")
+                        .font(pixelFont(10))
+                        .foregroundStyle(Color.pixelText)
+                }
+            }
+            .frame(maxWidth: wide ? .infinity : nil)
+            .frame(width: wide ? nil : 46, height: 46)
+            .padding(.horizontal, wide ? 0 : 0)
+            .pixelBox(border: Color.pixelOrange.opacity(0.5), bg: Color.pixelOrange.opacity(0.08), lineWidth: 1.5, notch: 4)
+        }
+        .buttonStyle(.plain)
     }
 
     private var addButton: some View {

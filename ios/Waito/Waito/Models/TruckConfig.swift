@@ -94,5 +94,10 @@ struct TruckConfig: Codable, Equatable, Hashable {
     var boxColor: TruckColor = .orange
     var runMode: TruckRunMode = .off
 
+    // catalog 조합 필드
+    var cab: TruckCab = .blue
+    var body: TruckBody = .express
+    var wheelType: TruckWheelType = .standard
+
     static let `default` = TruckConfig()
 }

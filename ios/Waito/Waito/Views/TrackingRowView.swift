@@ -165,6 +165,12 @@ struct TrackingRowView: View {
 
             detailBtn
         }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                isExpanded.toggle()
+            }
+        }
         .clipped()
         .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
         .listRowBackground(Color.bg)

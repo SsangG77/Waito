@@ -1,49 +1,54 @@
 import SwiftUI
 
 struct TruckCustomizeView: View {
+    @Environment(\.dismiss) private var dismiss
     @Environment(SubscriptionManager.self) private var subscription
+    @Environment(TrackingService.self) private var service
     @Bindable private var store = TruckConfigStore.shared
 
     @State private var showSubscriptionAlert = false
+    @State private var isDemoActive = false
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 28) {
-                // MARK: - 미리보기
-                previewSection
+        VStack(spacing: 0) {
+            PixelNavBar(title: "MY TRUCK", onBack: { dismiss() })
 
-                // MARK: - 트럭 모양
-                optionSection(title: "트럭 모양") {
-                    HStack(spacing: 12) {
-                        ForEach(TruckShape.allCases, id: \.self) { shape in
-                            shapeOption(shape)
-                        }
-                    }
+            ScrollView {
+                VStack(spacing: 20) {
+                    previewSection
+                    dynamicIslandDemoButton
+                    catalogSection(title: "CAB", items: TruckCab.allCases, selected: store.config.cab) { cab in
+                        CatalogTruckView(cab: cab, truckBody:store.config.body, wheels: store.config.wheelType, size: 56)
+                    } onSelect: { cab in
+                        store.config.cab = cab
+                    } requiresPlus: { $0.requiresPlus }
+
+                    catalogSection(title: "BODY", items: TruckBody.allCases, selected: store.config.body) { body in
+                        CatalogTruckView(cab: store.config.cab, truckBody:body, wheels: store.config.wheelType, size: 56)
+                    } onSelect: { body in
+                        store.config.body = body
+                    } requiresPlus: { $0.requiresPlus }
+
+                    catalogSection(title: "WHEELS", items: TruckWheelType.allCases, selected: store.config.wheelType) { wheels in
+                        CatalogTruckView(cab: store.config.cab, truckBody:store.config.body, wheels: wheels, size: 56)
+                    } onSelect: { wheels in
+                        store.config.wheelType = wheels
+                    } requiresPlus: { $0.requiresPlus }
+
+                    #if DEBUG
+                    debugSubscriptionSection
+                    #endif
                 }
-
-                // MARK: - 그림체
-                optionSection(title: "그림체") {
-                    HStack(spacing: 12) {
-                        ForEach(TruckStyle.allCases, id: \.self) { style in
-                            styleOption(style)
-                        }
-                    }
-                }
-
-                // MARK: - 색상 커스텀
-                colorSection(title: "헤드 색상", selection: $store.config.headColor)
-                colorSection(title: "짐칸 색상", selection: $store.config.cargoColor)
-                colorSection(title: "상자 색상", selection: $store.config.boxColor)
-
-                // MARK: - 구독 상태 (디버그)
-                #if DEBUG
-                debugSubscriptionSection
-                #endif
+                .padding(.horizontal, 16)
+                .padding(.vertical, 12)
             }
-            .padding()
         }
-        .navigationTitle("내 트럭")
-        .background(Color(.systemGroupedBackground))
+        .background(Color.bg)
+        .navigationBarBackButtonHidden(true)
+        .toolbar(.hidden, for: .navigationBar)
+        .onChange(of: store.config) {
+            Task { await service.pushTruckConfig() }
+        }
         .pixelAlert(
             title: "Waito Plus",
             message: "이 옵션은 Waito Plus 구독이 필요해요.\n월 ₩2,900 / 연 ₩19,900",
@@ -51,183 +56,130 @@ struct TruckCustomizeView: View {
         )
     }
 
+    // MARK: - Dynamic Island 데모 버튼
+
+    private var dynamicIslandDemoButton: some View {
+        Button {
+            Task {
+                if isDemoActive {
+                    await service.stopDemoLiveActivity()
+                    isDemoActive = false
+                } else {
+                    await service.startDemoLiveActivity()
+                    isDemoActive = true
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: isDemoActive ? "dot.radiowaves.left.and.right" : "dot.radiowaves.left.and.right.slash")
+                    .font(.system(size: 13))
+                    .foregroundStyle(isDemoActive ? Color.pixelOrange : Color.pixelMuted)
+                Text(isDemoActive ? "DYNAMIC ISLAND ON_" : "PREVIEW ON ISLAND_")
+                    .font(pixelFont(11))
+                    .foregroundStyle(isDemoActive ? Color.pixelOrange : Color.pixelText)
+                Spacer()
+                Text(isDemoActive ? "[ON]" : "[OFF]")
+                    .font(pixelFont(9))
+                    .foregroundStyle(isDemoActive ? Color.pixelOrange : Color.pixelMuted)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .pixelBox(
+                border: isDemoActive ? Color.pixelOrange.opacity(0.5) : Color.pixelBorder,
+                bg: isDemoActive ? Color.pixelOrange.opacity(0.06) : Color.pixelSurface,
+                lineWidth: 1.5, notch: 4
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
     // MARK: - 미리보기
 
     private var previewSection: some View {
-        VStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 20)
-                    .fill(Color.black)
-                    .frame(height: 160)
-
-                TruckView(config: store.config, size: 100)
-            }
-
-            Text("미리보기")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        ZStack {
+            Color.black
+                .clipShape(NotchedRectangle(notch: 8))
+            CatalogTruckView(
+                cab: store.config.cab,
+                truckBody: store.config.body,
+                wheels: store.config.wheelType,
+                size: 140
+            )
         }
+        .frame(height: 160)
+        .overlay(
+            PixelBorderShape(cornerGap: 8)
+                .stroke(Color.pixelBorder, lineWidth: 1.5)
+        )
     }
 
-    // MARK: - 옵션 섹션
+    // MARK: - 카탈로그 섹션 (제네릭)
 
-    private func optionSection<Content: View>(title: String, @ViewBuilder content: () -> Content) -> some View {
+    private func catalogSection<T: Hashable, V: View>(
+        title: String,
+        items: [T],
+        selected: T,
+        thumbnail: @escaping (T) -> V,
+        onSelect: @escaping (T) -> Void,
+        requiresPlus: @escaping (T) -> Bool
+    ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.headline)
+                .font(pixelFont(10))
+                .foregroundStyle(Color.pixelOrange)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                content()
-            }
-        }
-    }
-
-    // MARK: - 트럭 모양 옵션
-
-    private func shapeOption(_ shape: TruckShape) -> some View {
-        let isSelected = store.config.shape == shape
-        let locked = !subscription.canUse(shape: shape)
-
-        return Button {
-            if locked {
-                showSubscriptionAlert = true
-            } else {
-                store.config.shape = shape
-            }
-        } label: {
-            VStack(spacing: 6) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black)
-                        .frame(width: 80, height: 80)
-
-                    TruckView(
-                        config: TruckConfig(shape: shape, style: .flat, headColor: .blue, cargoColor: .white, boxColor: .orange),
-                        size: 50
-                    )
-
-                    if locked {
-                        lockOverlay
+                HStack(spacing: 8) {
+                    ForEach(items, id: \.self) { item in
+                        catalogCell(
+                            item: item,
+                            isSelected: item == selected,
+                            locked: requiresPlus(item) && !subscription.isSubscribed,
+                            thumbnail: { thumbnail(item) },
+                            onTap: {
+                                if requiresPlus(item) && !subscription.isSubscribed {
+                                    showSubscriptionAlert = true
+                                } else {
+                                    onSelect(item)
+                                }
+                            }
+                        )
                     }
                 }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
-                )
-
-                Text(shape.displayName)
-                    .font(.caption2)
-                    .foregroundStyle(isSelected ? .primary : .secondary)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - 그림체 옵션
-
-    private func styleOption(_ style: TruckStyle) -> some View {
-        let isSelected = store.config.style == style
-        let locked = !subscription.canUse(style: style)
-
-        return Button {
-            if locked {
-                showSubscriptionAlert = true
-            } else {
-                store.config.style = style
-            }
-        } label: {
-            VStack(spacing: 6) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12)
-                        .fill(Color.black)
-                        .frame(width: 80, height: 80)
-
-                    TruckView(
-                        config: TruckConfig(shape: .standard, style: style, headColor: .blue, cargoColor: .white, boxColor: .orange),
-                        size: 50
-                    )
-
-                    if locked {
-                        lockOverlay
-                    }
-                }
-                .overlay(
-                    RoundedRectangle(cornerRadius: 12)
-                        .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2)
-                )
-
-                Text(style.displayName)
-                    .font(.caption2)
-                    .foregroundStyle(isSelected ? .primary : .secondary)
-            }
-        }
-        .buttonStyle(.plain)
-    }
-
-    // MARK: - 색상 섹션
-
-    private func colorSection(title: String, selection: Binding<TruckColor>) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.headline)
-
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 10), count: 5), spacing: 10) {
-                ForEach(TruckColor.allCases, id: \.self) { truckColor in
-                    colorChip(truckColor, isSelected: selection.wrappedValue == truckColor) {
-                        if !subscription.canUse(color: truckColor) {
-                            showSubscriptionAlert = true
-                        } else {
-                            selection.wrappedValue = truckColor
-                        }
-                    }
-                }
+                .padding(.vertical, 4)
             }
         }
     }
 
-    private func colorChip(_ truckColor: TruckColor, isSelected: Bool, action: @escaping () -> Void) -> some View {
-        let locked = !subscription.canUse(color: truckColor)
-
-        return Button(action: action) {
+    private func catalogCell<T, V: View>(
+        item: T,
+        isSelected: Bool,
+        locked: Bool,
+        thumbnail: () -> V,
+        onTap: @escaping () -> Void
+    ) -> some View {
+        Button(action: onTap) {
             ZStack {
-                Circle()
-                    .fill(truckColor.color)
-                    .frame(width: 44, height: 44)
-                    .overlay(
-                        Circle()
-                            .stroke(isSelected ? Color.blue : Color.clear, lineWidth: 2.5)
-                            .padding(-3)
-                    )
+                Color.black
+
+                thumbnail()
 
                 if locked {
+                    Color.black.opacity(0.5)
                     Image(systemName: "lock.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.white)
-                        .shadow(radius: 2)
-                }
-
-                if isSelected {
-                    Image(systemName: "checkmark")
-                        .font(.caption2.bold())
-                        .foregroundStyle(.white)
-                        .shadow(radius: 2)
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.pixelMuted)
                 }
             }
+            .frame(width: 72, height: 54)
+            .pixelBox(
+                border: isSelected ? Color.pixelOrange : Color.pixelBorder,
+                bg: Color.pixelSurface,
+                lineWidth: isSelected ? 2 : 1.5,
+                notch: 3
+            )
         }
         .buttonStyle(.plain)
-    }
-
-    // MARK: - 잠금 오버레이
-
-    private var lockOverlay: some View {
-        ZStack {
-            Color.black.opacity(0.4)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
-
-            Image(systemName: "lock.fill")
-                .font(.title3)
-                .foregroundStyle(.white)
-        }
     }
 
     // MARK: - 디버그 구독 토글
@@ -235,7 +187,9 @@ struct TruckCustomizeView: View {
     #if DEBUG
     private var debugSubscriptionSection: some View {
         VStack(spacing: 8) {
-            Divider()
+            Rectangle()
+                .fill(Color.pixelBorder)
+                .frame(height: 1)
             Button {
                 subscription.toggleSubscription()
             } label: {
@@ -243,8 +197,8 @@ struct TruckCustomizeView: View {
                     Image(systemName: subscription.isSubscribed ? "checkmark.circle.fill" : "circle")
                     Text(subscription.isSubscribed ? "구독 중 (디버그)" : "구독 안 함 (디버그)")
                 }
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                .font(pixelFont(9))
+                .foregroundStyle(Color.pixelMuted)
             }
         }
     }
@@ -256,4 +210,5 @@ struct TruckCustomizeView: View {
         TruckCustomizeView()
     }
     .environment(SubscriptionManager())
+    .environment(TrackingService())
 }
