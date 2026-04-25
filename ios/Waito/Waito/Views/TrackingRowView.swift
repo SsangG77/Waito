@@ -22,16 +22,7 @@ struct TrackingRowView: View {
     }
     
     var liveActivityBtn: some View {
-        Button { onToggleLiveActivity() } label: {
-            Image(systemName: isLiveActive
-                  ? "antenna.radiowaves.left.and.right"
-                  : "antenna.radiowaves.left.and.right.slash")
-                .font(.system(size: 11))
-                .foregroundStyle(isLiveActive ? Color.pixelOrange : Color.pixelMuted)
-                .frame(width: 26, height: 26)
-                .overlay(Rectangle().stroke(Color.pixelBorder, lineWidth: 1))
-        }
-        .buttonStyle(.plain)
+        PixelToggle(isOn: isLiveActive, onToggle: onToggleLiveActivity)
     }
     
     var horizontalProgress: some View {

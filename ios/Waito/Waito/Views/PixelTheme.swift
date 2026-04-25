@@ -143,6 +143,41 @@ struct PixelButton: View {
     }
 }
 
+// MARK: - PixelToggle
+
+struct PixelToggle: View {
+    let isOn: Bool
+    let onToggle: () -> Void
+
+    private let trackW: CGFloat = 40
+    private let trackH: CGFloat = 20
+    private let thumbW: CGFloat = 14
+    private let thumbH: CGFloat = 12
+
+    var body: some View {
+        Button(action: onToggle) {
+            ZStack(alignment: isOn ? .trailing : .leading) {
+                // 트랙
+                Rectangle()
+                    .fill(isOn ? Color.pixelOrange.opacity(0.12) : Color.pixelSurface)
+                    .overlay(
+                        Rectangle()
+                            .stroke(isOn ? Color.pixelOrange : Color.pixelBorder, lineWidth: 1.5)
+                    )
+                    .frame(width: trackW, height: trackH)
+
+                // 썸
+                Rectangle()
+                    .fill(isOn ? Color.pixelOrange : Color.pixelMuted.opacity(0.6))
+                    .frame(width: thumbW, height: thumbH)
+                    .padding(.horizontal, 2)
+            }
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.12), value: isOn)
+    }
+}
+
 // MARK: - PixelAlert
 
 struct PixelAlert: View {
@@ -270,3 +305,20 @@ extension View {
         )
 }
 
+#Preview("pixel toggle") {
+    
+    ZStack {
+        Color.bg
+            .ignoresSafeArea()
+        
+        VStack {
+            PixelToggle(isOn: true, onToggle: {})
+            PixelToggle(isOn: false, onToggle: {})
+
+        }
+    }
+    
+        
+    
+    
+}

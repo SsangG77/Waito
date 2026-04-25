@@ -2,6 +2,23 @@ import SwiftUI
 import WidgetKit
 import ActivityKit
 
+// MARK: - Widget 전용 색상 (메인 앱 에셋 카탈로그와 동일한 값)
+
+private extension Color {
+    static let wPixelOrange = Color(red: 0xE8/255, green: 0xA8/255, blue: 0x38/255)
+    static let wPixelBorder = Color(red: 0x1E/255, green: 0x48/255, blue: 0x73/255)
+    static let wPixelMuted  = Color(red: 0x73/255, green: 0x94/255, blue: 0xB8/255)
+    static let wPixelGreen  = Color(red: 0x22/255, green: 0xC5/255, blue: 0x5E/255)
+}
+
+private func wPixelStatusColor(_ status: DeliveryStatus) -> Color {
+    switch status {
+    case .delivered:  return .wPixelGreen
+    case .registered: return .wPixelMuted
+    default:          return .wPixelOrange
+    }
+}
+
 // MARK: - Live Activity Configuration
 
 struct WaitoLiveActivity: Widget {
@@ -32,8 +49,11 @@ struct WaitoLiveActivity: Widget {
             } compactLeading: {
                 BouncingTruckView(config: context.state.truckConfig, size: 24)
             } compactTrailing: {
-                EmptyView()
-            } minimal: {
+                if let primary = context.state.primary {
+                    DeliveryProgressRingView(progress: primary.status.progress, size: 20)
+                        .padding(.horizontal, 3)
+                }
+            } minimal: { // 다이나믹 아일랜드에 두개가 띄워져야 할 때 오른쪽에 작게 나오는거
                 let cfg = context.state.truckConfig
                 CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 18)
             }
@@ -183,24 +203,41 @@ struct SecondaryTrackingRow: View {
     }
 }
 
+// MARK: - Compact Trailing 배송 진행 링
+
+struct DeliveryProgressRingView: View {
+    let progress: CGFloat
+    let size: CGFloat
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.2), lineWidth: 2.5)
+            Circle()
+                .trim(from: 0, to: progress)
+                .stroke(Color.white, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                .rotationEffect(.degrees(-90))
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 // MARK: - Compact Leading 바운싱 트럭
 
 struct BouncingTruckView: View {
     let config: TruckConfig
     let size: CGFloat
 
-    private let period: Double = 1.0  // 1초 1사이클
+    @State private var isUp = false
 
     var body: some View {
-        TimelineView(.animation) { context in
-            let t = context.date.timeIntervalSinceReferenceDate
-                        .truncatingRemainder(dividingBy: period) / period
-            // abs(sin) → 바닥에서 튀어오르는 자연스러운 곡선
-            let offsetY = -abs(sin(t * .pi)) * 4
-
-            CatalogTruckView(cab: config.cab, truckBody: config.body, wheels: config.wheelType, size: size)
-                .offset(y: offsetY)
-        }
+        CatalogTruckView(cab: config.cab, truckBody: config.body, wheels: config.wheelType, size: size)
+            .offset(y: isUp ? -4 : 0)
+            .animation(
+                .easeInOut(duration: 0.45).repeatForever(autoreverses: true),
+                value: isUp
+            )
+            .onAppear { isUp = true }
     }
 }
 
@@ -220,7 +257,7 @@ struct LockScreenLiveActivityView: View {
                     .background(Color.white.opacity(0.15))
                     .padding(.horizontal, 16)
 
-                LockScreenTrackingRow(item: secondary, truckConfig: state.truckConfig, showTruck: false)
+                LockScreenTrackingRow(item: secondary, truckConfig: state.truckConfig, showTruck: true)
             }
         }
     }
@@ -245,21 +282,7 @@ struct LockScreenTrackingRow: View {
             }
 
             VStack(alignment: .leading, spacing: 4) {
-                // 택배사 + 상태
-                HStack {
-                    Text(item.carrierName)
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.7))
-                    Spacer()
-                    Text(item.status.displayName)
-                        .font(.caption)
-                        .fontWeight(.semibold)
-                        .foregroundStyle(.white)
-                }
-
-                // 진행 바
-                ProgressBarView(progress: item.status.progress)
-
+                
                 // 아이템명 + 도착 예정
                 HStack {
                     Text(item.itemName)
@@ -273,6 +296,23 @@ struct LockScreenTrackingRow: View {
                             .foregroundStyle(.white.opacity(0.7))
                     }
                 }
+                
+//                // 택배사 + 상태
+//                HStack {
+//                    Text(item.carrierName)
+//                        .font(.caption)
+//                        .foregroundStyle(.white.opacity(0.7))
+//                    Spacer()
+//                    Text(item.status.displayName)
+//                        .font(.caption)
+//                        .fontWeight(.semibold)
+//                        .foregroundStyle(.white)
+//                }
+
+                // 진행 바
+                ProgressBarView(status: item.status)
+
+              
             }
         }
         .padding(.horizontal, 16)
@@ -280,22 +320,41 @@ struct LockScreenTrackingRow: View {
     }
 }
 
-// MARK: - Progress Bar (Lock Screen용)
+// MARK: - Progress Bar (Lock Screen용) — 픽셀 점+선
 
 struct ProgressBarView: View {
-    let progress: CGFloat
+    let status: DeliveryStatus
+
+    private let steps = 7
+    private let dotSize: CGFloat = 4
+    private let gap: CGFloat = 3
 
     var body: some View {
-        GeometryReader { geometry in
+        GeometryReader { geo in
+            let lineWidth = max(0, (geo.size.width - (dotSize + gap * 2) * CGFloat(steps) + gap * 2) / CGFloat(steps - 1))
+
             ZStack(alignment: .leading) {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.white.opacity(0.2))
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(Color.white)
-                    .frame(width: geometry.size.width * progress)
+                // 선
+                ForEach(0..<steps - 1, id: \.self) { i in
+                    let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i) + dotSize + gap
+                    let filled = status.isCompleted || CGFloat(i + 1) / CGFloat(steps) <= status.progress
+                    Rectangle()
+                        .fill(filled ? wPixelStatusColor(status) : Color.wPixelBorder)
+                        .frame(width: lineWidth, height: 1)
+                        .offset(x: x, y: dotSize / 2 - 0.5)
+                }
+                // 점
+                ForEach(0..<steps, id: \.self) { i in
+                    let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i)
+                    let filled = status.isCompleted || CGFloat(i) / CGFloat(steps) < status.progress
+                    Rectangle()
+                        .fill(filled ? wPixelStatusColor(status) : Color.wPixelBorder)
+                        .frame(width: dotSize, height: dotSize)
+                        .offset(x: x)
+                }
             }
         }
-        .frame(height: 4)
+        .frame(height: dotSize)
     }
 }
 
