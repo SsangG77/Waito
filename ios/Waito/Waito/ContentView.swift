@@ -87,6 +87,7 @@ struct DynamicIslandTruckOverlay: View {
                 currentTValue: 0.8, carrierName: "CJ대한통운",
                 estimatedDelivery: "오늘", createdAt: "2026-04-10T09:00:00Z", deliveredAt: nil
             ),
+            
             TrackingListItem(
                 id: 2, carrierId: "hanjin", trackingNumber: "987654321098",
                 itemName: "에어팟 프로", currentStatus: .inTransitOut,
