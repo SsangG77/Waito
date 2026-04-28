@@ -109,3 +109,37 @@ struct ExpandedTruckPathView: View {
             )
     }
 }
+
+// MARK: - Previews
+
+private extension DeliveryAttributes.ContentState {
+    static func previewState(status: DeliveryStatus, itemName: String = "맥북 프로 14인치") -> Self {
+        .init(items: [
+            TrackingItemState(
+                trackingNumber: "123456789012",
+                status: status,
+                carrierName: "CJ대한통운",
+                itemName: itemName,
+                estimatedDelivery: "오늘 도착 예정"
+            )
+        ], truckConfig: .default)
+    }
+}
+
+#Preview("C1 — 아일랜드 서킷 | 접수") {
+    ExpandedTruckPathView(state: .previewState(status: .registered))
+        .background(Color.black)
+        .previewLayout(.sizeThatFits)
+}
+
+#Preview("C1 — 아일랜드 서킷 | 배송출발") {
+    ExpandedTruckPathView(state: .previewState(status: .outForDelivery))
+        .background(Color.black)
+        .previewLayout(.sizeThatFits)
+}
+
+#Preview("C1 — 아일랜드 서킷 | 배송완료") {
+    ExpandedTruckPathView(state: .previewState(status: .delivered))
+        .background(Color.black)
+        .previewLayout(.sizeThatFits)
+}

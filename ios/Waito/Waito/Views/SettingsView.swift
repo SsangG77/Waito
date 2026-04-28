@@ -16,11 +16,6 @@ struct SettingsView: View {
 
             ScrollView {
                 VStack(spacing: 8) {
-                    NavigationLink(destination: TruckCustomizeView()) {
-                        settingsRow(icon: "truck.box.fill", title: "내 트럭", subtitle: "트럭 모양 및 색상 커스텀")
-                    }
-                    .buttonStyle(.plain)
-
                     settingsRow(
                         icon: "crown.fill",
                         title: "Waito Plus",

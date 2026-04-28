@@ -9,10 +9,7 @@ struct WaitoLiveActivity: Widget {
                 .activityBackgroundTint(.black)
         } dynamicIsland: { context in
             DynamicIsland {
-                DynamicIslandExpandedRegion(.bottom, priority: 1) {
-                    ExpandedBorderTruckView(state: context.state)
-                        .padding(.top, -28)
-                }
+                DynamicIslandExpandedRegion(.bottom) { EmptyView() }
             } compactLeading: {
                 BouncingTruckView(config: context.state.truckConfig, size: 24)
             } compactTrailing: {
@@ -24,8 +21,6 @@ struct WaitoLiveActivity: Widget {
                 let cfg = context.state.truckConfig
                 CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 18)
             }
-            .contentMargins(.top, -28, for: .expanded)
-            .contentMargins([.leading, .trailing, .bottom], 0, for: .expanded)
         }
     }
 }
@@ -48,23 +43,6 @@ private extension DeliveryAttributes.ContentState {
 
 private let _previewAttr = DeliveryAttributes(deviceId: "preview")
 
-#Preview("Expanded — 배송중", as: .dynamicIsland(.expanded), using: _previewAttr) {
-    WaitoLiveActivity()
-} contentStates: {
-    DeliveryAttributes.ContentState.make(status: .delivering)
-}
-
-#Preview("Expanded — 배송완료", as: .dynamicIsland(.expanded), using: _previewAttr) {
-    WaitoLiveActivity()
-} contentStates: {
-    DeliveryAttributes.ContentState.make(status: .delivered)
-}
-
-#Preview("Expanded — 접수", as: .dynamicIsland(.expanded), using: _previewAttr) {
-    WaitoLiveActivity()
-} contentStates: {
-    DeliveryAttributes.ContentState.make(status: .registered)
-}
 
 #Preview("Lock Screen", as: .content, using: _previewAttr) {
     WaitoLiveActivity()
