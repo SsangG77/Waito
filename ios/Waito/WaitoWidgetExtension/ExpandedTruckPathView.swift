@@ -4,7 +4,7 @@ import ActivityKit
 
 // MARK: - Dynamic Island 외곽선 Shape
 
-/// 시계방향(iOS y-down 좌표계 기준)으로 하단 중앙에서 시작하는 라운드 사각형 path.
+/// 시계방향(iOS y-down 좌표계 기준)으로 좌상단에서 시작하는 라운드 사각형 path.
 /// `TruckPathCalculator`의 t=0 위치/방향과 일치하도록 트레이스 순서가 맞춰져 있음.
 struct IslandOutlineShape: Shape {
     let cornerRadius: CGFloat
@@ -13,20 +13,36 @@ struct IslandOutlineShape: Shape {
         var path = Path()
         let r = min(cornerRadius, min(rect.width, rect.height) / 2)
 
-        path.move(to: CGPoint(x: rect.midX, y: rect.maxY))
-        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
-        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r,
-                     startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
-        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.minY + r), radius: r,
-                     startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+        // t=0 시작점 = 좌상 코너 끝 = 상단 직선 시작
+        path.move(to: CGPoint(x: rect.minX + r, y: rect.minY))
+
+        // ① 상단 직선: 좌 → 우
         path.addLine(to: CGPoint(x: rect.maxX - r, y: rect.minY))
+
+        // ② 우상 코너 (270° → 360°)
         path.addArc(center: CGPoint(x: rect.maxX - r, y: rect.minY + r), radius: r,
                      startAngle: .degrees(270), endAngle: .degrees(360), clockwise: false)
+
+        // ③ 우측 직선: 상 → 하
         path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
+
+        // ④ 우하 코너 (0° → 90°)
         path.addArc(center: CGPoint(x: rect.maxX - r, y: rect.maxY - r), radius: r,
                      startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
-        path.addLine(to: CGPoint(x: rect.midX, y: rect.maxY))
+
+        // ⑤ 하단 직선: 우 → 좌
+        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
+
+        // ⑥ 좌하 코너 (90° → 180°)
+        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r,
+                     startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+
+        // ⑦ 좌측 직선: 하 → 상
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
+
+        // ⑧ 좌상 코너 (180° → 270°)
+        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.minY + r), radius: r,
+                     startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
 
         return path
     }
@@ -42,11 +58,12 @@ struct IslandOutlineShape: Shape {
 struct ExpandedTruckPathView: View {
     let state: DeliveryAttributes.ContentState
 
-    // 펼쳐진 DI 외곽 알약 안쪽에 트럭이 거의 붙어서 도는 느낌.
-    // strokeInset 작게 → 알약 외곽이 system이 그리는 expanded DI 외곽과 시각적으로 일치.
-    private let strokeInset:    CGFloat = 2
+    // 시스템이 그리는 Expanded BIG SHAPE의 안쪽 테두리에 트럭이 거의 붙어 돌도록.
+    // - 높이는 충분히 확보 (BIG SHAPE 자체를 크게 유지)
+    // - 외곽선은 BIG SHAPE의 둥근 코너 곡률 안쪽에 들어가도록 strokeInset + cornerRadius 매칭
+    private let strokeInset:    CGFloat = 0     // BIG SHAPE 둥근 코너 곡선 안으로 들어가는 여유
     private let truckInsetFromStroke: CGFloat = 10
-    private let pathCornerRadius: CGFloat = 36
+    private let pathCornerRadius: CGFloat = 32  // BIG SHAPE 코너(~40) 보다 약간 작게
     private let truckSize:      CGFloat = 18
     private let animationPeriod: Double = 8.0
 
@@ -55,7 +72,11 @@ struct ExpandedTruckPathView: View {
             GeometryReader { geo in
                 circuit(in: geo.size, primary: primary)
             }
-            .frame(minHeight: 130)
+            // BIG SHAPE 크게 유지 → 트럭이 도는 외곽이 펼쳐진 다이나믹 아일랜드와 비슷한 크기.
+            // .bottom 가용 영역을 최대한 차지하되, 시스템 라운드 클리핑 영역은
+            // strokeInset(상하 8pt)으로 회피.
+            .frame(minHeight: 100, maxHeight: 130)
+            .padding(.top, 5)
         }
     }
 
@@ -69,7 +90,7 @@ struct ExpandedTruckPathView: View {
         // 초기 레이아웃 패스에서 GeometryReader가 0×0을 반환하면
         // TruckPathCalculator에서 NaN 발생 → SwiftUI 레이아웃 무한 루프 위험.
         // 충분한 크기가 확보되기 전엔 빈 뷰 반환.
-        if pathSize.width < 40 || pathSize.height < 40 {
+        if pathSize.width < 30 || pathSize.height < 30 {
             Color.clear
         } else {
             let r = min(pathCornerRadius, min(pathSize.width, pathSize.height) / 2)
@@ -125,7 +146,7 @@ struct ExpandedTruckPathView: View {
                 .animation(.spring(duration: 0.8), value: primary.status.progress)
             }
         }
-        .frame(width: pathSize.width, height: pathSize.height)
+        .frame(width: pathSize.width + 6, height: pathSize.height + 5)
         .position(x: outerSize.width / 2, y: outerSize.height / 2)
     }
 
@@ -156,6 +177,9 @@ struct ExpandedTruckPathView: View {
             wheels: config.wheelType,
             size: truckSize
         )
+        // 트럭이 외곽선 안쪽에 있으므로 상하 반전 → 바퀴가 외곽선(바깥) 쪽을 향함.
+        // (rotationEffect보다 먼저 적용 → 회전된 후에도 바퀴는 항상 외곽선 쪽)
+        .scaleEffect(y: -1)
         .rotationEffect(.radians(pose.rotationAngle))
         .position(x: pose.position.x, y: pose.position.y)
     }

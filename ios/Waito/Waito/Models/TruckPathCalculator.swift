@@ -45,16 +45,15 @@ struct TruckPathCalculator {
 
     // MARK: - 경로 구간 비율
 
-    /// 각 구간이 전체 둘레에서 차지하는 비율 (시계방향, 하단 좌측 시작)
-    /// ① 하단 좌측 → 좌하 코너  (하단 직선 좌반)
-    /// ② 좌하 코너 곡선
-    /// ③ 좌측 직선
-    /// ④ 좌상 코너 곡선
-    /// ⑤ 상단 직선
-    /// ⑥ 우상 코너 곡선
-    /// ⑦ 우측 직선
-    /// ⑧ 우하 코너 곡선
-    /// ⑨ 하단 우측 → 하단 중앙 (하단 직선 우반)
+    /// 각 구간이 전체 둘레에서 차지하는 비율 (시계방향, 좌상단 시작)
+    /// ① 상단 직선 (좌 → 우)
+    /// ② 우상 코너 곡선
+    /// ③ 우측 직선 (상 → 하)
+    /// ④ 우하 코너 곡선
+    /// ⑤ 하단 직선 (우 → 좌)
+    /// ⑥ 좌하 코너 곡선
+    /// ⑦ 좌측 직선 (하 → 상)
+    /// ⑧ 좌상 코너 곡선
 
     private var straightH: CGFloat { metrics.width - 2 * metrics.cornerRadius }
     private var straightV: CGFloat { metrics.height - 2 * metrics.cornerRadius }
@@ -143,52 +142,45 @@ struct TruckPathCalculator {
         let centerBR = CGPoint(x: m.maxX - r, y: m.maxY - r)
 
         return [
-            // ① 하단 직선 좌반: 하단 중앙 → 좌하 코너 시작 (왼쪽으로)
-            PathSegment(length: straightH / 2, position: { localT in
-                let startX = m.midX
-                let endX = bottomLeft.x
-                return CGPoint(x: startX + (endX - startX) * localT, y: m.maxY)
-            }, angle: { _ in .pi }), // ← 방향 180°
-
-            // ② 좌하 코너 (180° → 270°)
-            cornerSegment(center: centerBL, startAngle: .pi / 2, endAngle: .pi, radius: r),
-
-            // ③ 좌측 직선: 하→상
-            PathSegment(length: straightV, position: { localT in
-                let startY = centerBL.y
-                let endY = centerTL.y
-                return CGPoint(x: m.minX, y: startY + (endY - startY) * localT)
-            }, angle: { _ in 3 * .pi / 2 }), // ↑ 방향 270°
-
-            // ④ 좌상 코너 (270° → 360°)
-            cornerSegment(center: centerTL, startAngle: .pi, endAngle: 3 * .pi / 2, radius: r),
-
-            // ⑤ 상단 직선: 좌→우
+            // ① 상단 직선: 좌 → 우 (t=0 시작점 = topLeft)
             PathSegment(length: straightH, position: { localT in
                 let startX = topLeft.x
                 let endX = topRight.x
                 return CGPoint(x: startX + (endX - startX) * localT, y: m.minY)
             }, angle: { _ in 0 }), // → 방향 0°
 
-            // ⑥ 우상 코너 (0° → 90°)
+            // ② 우상 코너 (270° → 360°)
             cornerSegment(center: centerTR, startAngle: 3 * .pi / 2, endAngle: 2 * .pi, radius: r),
 
-            // ⑦ 우측 직선: 상→하
+            // ③ 우측 직선: 상 → 하
             PathSegment(length: straightV, position: { localT in
                 let startY = centerTR.y
                 let endY = centerBR.y
                 return CGPoint(x: m.maxX, y: startY + (endY - startY) * localT)
             }, angle: { _ in .pi / 2 }), // ↓ 방향 90°
 
-            // ⑧ 우하 코너 (90° → 180°)
+            // ④ 우하 코너 (0° → 90°)
             cornerSegment(center: centerBR, startAngle: 0, endAngle: .pi / 2, radius: r),
 
-            // ⑨ 하단 직선 우반: 우하 코너 끝 → 하단 중앙 (왼쪽으로)
-            PathSegment(length: straightH / 2, position: { localT in
+            // ⑤ 하단 직선: 우 → 좌
+            PathSegment(length: straightH, position: { localT in
                 let startX = bottomRight.x
-                let endX = m.midX
+                let endX = bottomLeft.x
                 return CGPoint(x: startX + (endX - startX) * localT, y: m.maxY)
             }, angle: { _ in .pi }), // ← 방향 180°
+
+            // ⑥ 좌하 코너 (90° → 180°)
+            cornerSegment(center: centerBL, startAngle: .pi / 2, endAngle: .pi, radius: r),
+
+            // ⑦ 좌측 직선: 하 → 상
+            PathSegment(length: straightV, position: { localT in
+                let startY = centerBL.y
+                let endY = centerTL.y
+                return CGPoint(x: m.minX, y: startY + (endY - startY) * localT)
+            }, angle: { _ in 3 * .pi / 2 }), // ↑ 방향 270°
+
+            // ⑧ 좌상 코너 (180° → 270°)
+            cornerSegment(center: centerTL, startAngle: .pi, endAngle: 3 * .pi / 2, radius: r),
         ]
     }
 
