@@ -9,7 +9,9 @@ struct WaitoLiveActivity: Widget {
                 .activityBackgroundTint(.black)
         } dynamicIsland: { context in
             DynamicIsland {
-                DynamicIslandExpandedRegion(.bottom) { EmptyView() }
+                DynamicIslandExpandedRegion(.bottom) {
+                    ExpandedTruckPathView(state: context.state)
+                }
             } compactLeading: {
                 BouncingTruckView(config: context.state.truckConfig, size: 24)
             } compactTrailing: {

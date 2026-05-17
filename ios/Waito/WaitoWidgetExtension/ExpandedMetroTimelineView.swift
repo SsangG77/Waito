@@ -28,7 +28,7 @@ struct ExpandedMetroTimelineView: View {
                 Spacer()
                 Text(item.status.isCompleted ? "배송완료 ✓" : (item.estimatedDelivery ?? ""))
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.wPixelGreen)
+                    .foregroundStyle(Color.wPixelGreen)
             }
 
             trackSection(current: item.status, config: state.truckConfig)
@@ -43,7 +43,7 @@ struct ExpandedMetroTimelineView: View {
                 .frame(width: 15)
                 Text(item.status.displayName)
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.wPixelOrange)
+                    .foregroundStyle(Color.wPixelOrange)
                 Spacer()
                 Text("\(item.status.order + 1)/7 완료")
                     .font(.system(size: 9))

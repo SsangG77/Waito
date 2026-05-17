@@ -9,6 +9,7 @@ struct DeliveryListView: View {
     @State private var showAddForm = false
     @State private var showError = false
     @State private var showSubscriptionAlert = false
+    @State private var showPaywall = false
 
     // 입력 폼 상태
     @State private var newTrackingNumber = ""
@@ -29,7 +30,12 @@ struct DeliveryListView: View {
                 title: "Waito Plus",
                 message: "무료 사용자는 Live Activity를 1개까지 등록할 수 있어요.\nWaito Plus 구독 시 2개까지 가능합니다.",
                 isPresented: $showSubscriptionAlert
-            )
+            ) {
+                showPaywall = true
+            }
+            .sheet(isPresented: $showPaywall) {
+                PaywallView()
+            }
             .task {
                 if service.carriers.isEmpty {
                     await service.loadCarriers()

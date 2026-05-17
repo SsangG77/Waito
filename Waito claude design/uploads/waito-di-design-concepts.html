@@ -1,0 +1,1090 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Waito — Dynamic Island Expanded 디자인 컨셉</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Noto+Sans+KR:wght@400;600;700&family=DM+Mono:wght@400;500&family=Instrument+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #1e1e1e;
+    --text: #e8e8e8;
+    --muted: #666;
+    --orange: #E8A838;
+    --green: #22C55E;
+    --blue: #3b82f6;
+    --white: #ffffff;
+    --island-bg: #000000;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Instrument Sans', 'Noto Sans KR', sans-serif;
+    min-height: 100vh;
+    padding: 40px 20px 80px;
+  }
+
+  .page-header {
+    text-align: center;
+    margin-bottom: 60px;
+  }
+
+  .page-title {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 13px;
+    color: var(--orange);
+    letter-spacing: 2px;
+    margin-bottom: 12px;
+  }
+
+  .page-sub {
+    font-size: 15px;
+    color: var(--muted);
+    line-height: 1.6;
+  }
+
+  /* Stage selector */
+  .stage-selector {
+    display: flex;
+    justify-content: center;
+    gap: 6px;
+    margin-bottom: 60px;
+    flex-wrap: wrap;
+  }
+
+  .stage-btn {
+    padding: 6px 12px;
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    background: transparent;
+    color: var(--muted);
+    font-size: 11px;
+    font-family: 'Instrument Sans', sans-serif;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .stage-btn.active {
+    background: var(--orange);
+    border-color: var(--orange);
+    color: #000;
+    font-weight: 600;
+  }
+
+  .stage-btn:hover:not(.active) {
+    border-color: var(--orange);
+    color: var(--orange);
+  }
+
+  /* Concept grid */
+  .concepts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 32px;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+
+  .concept-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    overflow: hidden;
+  }
+
+  .concept-card.featured {
+    border-color: var(--orange);
+    box-shadow: 0 0 30px rgba(232, 168, 56, 0.08);
+  }
+
+  .concept-header {
+    padding: 20px 24px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .concept-num {
+    font-family: 'DM Mono', monospace;
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+
+  .concept-name {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 4px;
+  }
+
+  .concept-desc {
+    font-size: 12px;
+    color: var(--muted);
+    line-height: 1.5;
+  }
+
+  .concept-badge {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .badge-current { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .badge-new { background: rgba(232,168,56,0.15); color: var(--orange); }
+  .badge-bold { background: rgba(34,197,94,0.15); color: var(--green); }
+
+  /* Island simulation container */
+  .island-wrap {
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    background: #080808;
+  }
+
+  .island-label {
+    font-size: 10px;
+    color: var(--muted);
+    letter-spacing: 1px;
+    font-family: 'DM Mono', monospace;
+  }
+
+  /* ─────── CONCEPT 1: Island Circuit ─────── */
+  .island-circuit {
+    width: 288px;
+    height: 72px;
+    background: #000;
+    border-radius: 36px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+  }
+
+  .circuit-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 3px;
+    z-index: 2;
+  }
+
+  .circuit-item-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 6px;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 1px;
+  }
+
+  .circuit-status {
+    font-size: 9px;
+    color: rgba(255,255,255,0.5);
+    font-family: 'Instrument Sans', sans-serif;
+  }
+
+  /* SVG canvas for outline track */
+  .circuit-svg {
+    position: absolute;
+    top: -10px; left: -10px;
+    width: calc(100% + 20px);
+    height: calc(100% + 20px);
+    overflow: visible;
+  }
+
+  /* ─────── CONCEPT 2: Metro Timeline ─────── */
+  .island-metro {
+    width: 288px;
+    min-height: 72px;
+    background: #000;
+    border-radius: 22px;
+    position: relative;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .metro-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .metro-item-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 5px;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 0.5px;
+  }
+
+  .metro-eta {
+    font-size: 8px;
+    color: var(--green);
+    font-family: 'Instrument Sans', sans-serif;
+    font-weight: 600;
+  }
+
+  .metro-track {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    position: relative;
+    padding: 4px 0;
+  }
+
+  .metro-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    position: relative;
+    z-index: 1;
+  }
+
+  .metro-dot.done { background: #fff; }
+  .metro-dot.active {
+    background: var(--orange);
+    box-shadow: 0 0 6px var(--orange);
+    animation: pulse-dot 1.4s ease-in-out infinite;
+  }
+  .metro-dot.pending { background: transparent; border: 1px solid rgba(255,255,255,0.2); }
+
+  @keyframes pulse-dot {
+    0%, 100% { box-shadow: 0 0 4px var(--orange); transform: scale(1); }
+    50% { box-shadow: 0 0 10px var(--orange), 0 0 20px rgba(232,168,56,0.3); transform: scale(1.2); }
+  }
+
+  .metro-line {
+    flex: 1;
+    height: 1.5px;
+    position: relative;
+    z-index: 0;
+  }
+
+  .metro-line.done { background: rgba(255,255,255,0.7); }
+  .metro-line.pending { background: rgba(255,255,255,0.12); }
+
+  .metro-labels {
+    display: flex;
+    justify-content: space-between;
+    padding: 0 1px;
+  }
+
+  .metro-label-item {
+    font-size: 6px;
+    color: rgba(255,255,255,0.3);
+    text-align: center;
+    width: 8px;
+    overflow: visible;
+    white-space: nowrap;
+    transform: translateX(-50%);
+    font-family: 'Noto Sans KR', sans-serif;
+  }
+
+  .metro-label-item.active-label {
+    color: var(--orange);
+    font-weight: 600;
+  }
+
+  .metro-truck-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* ─────── CONCEPT 3: Pixel Road ─────── */
+  .island-road {
+    width: 288px;
+    min-height: 80px;
+    background: #000;
+    border-radius: 22px;
+    padding: 10px 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .road-surface {
+    width: 100%;
+    height: 36px;
+    background: #1a1a1a;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .road-dashes {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 0;
+    width: 200%;
+    animation: road-scroll 3s linear infinite;
+  }
+
+  @keyframes road-scroll {
+    0% { transform: translateY(-50%) translateX(0); }
+    100% { transform: translateY(-50%) translateX(-50%); }
+  }
+
+  .road-dash {
+    width: 16px; height: 2px;
+    background: #333;
+    margin-right: 12px;
+    flex-shrink: 0;
+  }
+
+  .road-landmarks {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    display: flex;
+    align-items: center;
+  }
+
+  .road-landmark {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+  }
+
+  .landmark-icon {
+    font-size: 14px;
+    filter: grayscale(0.8);
+  }
+
+  .landmark-icon.reached { filter: none; }
+
+  .road-truck {
+    position: absolute;
+    font-size: 16px;
+    transition: left 1s cubic-bezier(0.34, 1.56, 0.64, 1);
+    animation: truck-bounce 0.5s ease-in-out infinite alternate;
+  }
+
+  @keyframes truck-bounce {
+    from { transform: translateY(0); }
+    to { transform: translateY(-2px); }
+  }
+
+  .road-info {
+    padding: 6px 14px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .road-item-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 5px;
+    color: rgba(255,255,255,0.8);
+  }
+
+  .road-status {
+    font-size: 8px;
+    color: var(--orange);
+    font-family: 'Instrument Sans', sans-serif;
+    font-weight: 600;
+  }
+
+  /* ─────── CONCEPT 4: Pulse Bar ─────── */
+  .island-pulse {
+    width: 288px;
+    min-height: 72px;
+    background: #000;
+    border-radius: 22px;
+    padding: 12px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .pulse-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+  }
+
+  .pulse-item-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 5px;
+    color: rgba(255,255,255,0.9);
+  }
+
+  .pulse-pct {
+    font-family: 'DM Mono', monospace;
+    font-size: 11px;
+    color: var(--orange);
+    font-weight: 500;
+  }
+
+  .pulse-bar-wrap {
+    width: 100%;
+    height: 8px;
+    background: rgba(255,255,255,0.07);
+    border-radius: 4px;
+    position: relative;
+    overflow: visible;
+  }
+
+  .pulse-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    background: linear-gradient(90deg, rgba(232,168,56,0.4) 0%, var(--orange) 100%);
+    transition: width 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    overflow: visible;
+  }
+
+  .pulse-bar-fill::after {
+    content: '';
+    position: absolute;
+    right: -6px; top: 50%;
+    transform: translateY(-50%);
+    width: 12px; height: 12px;
+    border-radius: 50%;
+    background: var(--orange);
+    box-shadow: 0 0 8px var(--orange), 0 0 16px rgba(232,168,56,0.4);
+    animation: glow-pulse 1.2s ease-in-out infinite;
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% { box-shadow: 0 0 4px var(--orange); }
+    50% { box-shadow: 0 0 12px var(--orange), 0 0 24px rgba(232,168,56,0.5); }
+  }
+
+  .pulse-truck-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  .pulse-status-text {
+    font-size: 9px;
+    color: rgba(255,255,255,0.5);
+    font-family: 'Instrument Sans', sans-serif;
+  }
+
+  .pulse-eta {
+    margin-left: auto;
+    font-size: 9px;
+    color: var(--green);
+    font-family: 'Instrument Sans', sans-serif;
+    font-weight: 600;
+  }
+
+  /* ─────── CONCEPT 5: Orbital Stage ─────── */
+  .island-orbital {
+    width: 288px;
+    min-height: 88px;
+    background: #000;
+    border-radius: 22px;
+    padding: 10px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .orbital-wrap {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .orbital-ring-area {
+    position: relative;
+    width: 60px; height: 60px;
+    flex-shrink: 0;
+  }
+
+  .orbital-svg {
+    width: 60px; height: 60px;
+  }
+
+  .orbital-center-icon {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 16px;
+  }
+
+  .orbital-truck {
+    position: absolute;
+    font-size: 10px;
+    transform-origin: 30px 30px;
+    /* rotation applied via JS */
+  }
+
+  .orbital-right {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+
+  .orbital-item-name {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 5px;
+    color: rgba(255,255,255,0.9);
+    letter-spacing: 0.5px;
+  }
+
+  .orbital-stage-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+
+  .orbital-stage-item {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 8px;
+    color: rgba(255,255,255,0.25);
+    font-family: 'Instrument Sans', sans-serif;
+  }
+
+  .orbital-stage-item.done { color: rgba(255,255,255,0.6); }
+  .orbital-stage-item.active-stage { color: var(--orange); font-weight: 600; }
+
+  .orbital-stage-dot {
+    width: 4px; height: 4px;
+    border-radius: 50%;
+    background: currentColor;
+    flex-shrink: 0;
+  }
+
+  /* ─────── Comparison row ─────── */
+  .compare-section {
+    max-width: 1100px;
+    margin: 60px auto 0;
+    padding: 0 0 40px;
+  }
+
+  .compare-title {
+    font-size: 11px;
+    font-family: 'DM Mono', monospace;
+    color: var(--muted);
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+  }
+
+  .compare-table th {
+    text-align: left;
+    padding: 8px 12px;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    font-size: 11px;
+    letter-spacing: 0.5px;
+  }
+
+  .compare-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid #151515;
+    color: var(--text);
+    vertical-align: top;
+  }
+
+  .compare-table tr:last-child td { border-bottom: none; }
+
+  .tag {
+    display: inline-block;
+    padding: 2px 6px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 600;
+    margin-right: 3px;
+  }
+
+  .tag-pro { background: rgba(34,197,94,0.1); color: #4ade80; }
+  .tag-con { background: rgba(239,68,68,0.1); color: #f87171; }
+  .tag-neu { background: rgba(255,255,255,0.05); color: var(--muted); }
+
+  /* Pixel truck emoji replacements */
+  .truck-px {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 8px;
+    color: var(--orange);
+  }
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="page-title">WAITO — DYNAMIC ISLAND DESIGN CONCEPTS</div>
+  <p class="page-sub">Expanded Dynamic Island 배송 상태 표시 방식 5가지 아이디어<br>단계를 클릭해서 각 컨셉이 어떻게 변하는지 확인하세요</p>
+</div>
+
+<!-- Stage selector -->
+<div class="stage-selector">
+  <button class="stage-btn" data-stage="0" onclick="setStage(0)">접수</button>
+  <button class="stage-btn" data-stage="1" onclick="setStage(1)">집화완료</button>
+  <button class="stage-btn" data-stage="2" onclick="setStage(2)">간선상차</button>
+  <button class="stage-btn" data-stage="3" onclick="setStage(3)">간선하차</button>
+  <button class="stage-btn active" data-stage="4" onclick="setStage(4)">배송출발</button>
+  <button class="stage-btn" data-stage="5" onclick="setStage(5)">배송중</button>
+  <button class="stage-btn" data-stage="6" onclick="setStage(6)">배송완료</button>
+</div>
+
+<!-- Concepts grid -->
+<div class="concepts-grid">
+
+  <!-- ─── Concept 1: Island Circuit ─── -->
+  <div class="concept-card featured">
+    <div class="concept-header">
+      <div class="concept-num">01 / ISLAND CIRCUIT</div>
+      <div class="concept-name">아일랜드 서킷</div>
+      <div class="concept-desc">Dynamic Island 테두리를 달리는 픽셀 트럭. 완주한 구간은 밝게, 남은 구간은 어둡게 표시. 트럭이 하드웨어 위를 달리는 착시.</div>
+      <span class="concept-badge badge-current">현재 방향과 일치</span>
+    </div>
+    <div class="island-wrap">
+      <div class="island-label">EXPANDED DYNAMIC ISLAND</div>
+      <div class="island-circuit" id="c1">
+        <svg class="circuit-svg" viewBox="-10 -10 308 92" id="c1svg">
+          <!-- Track outline (gray) -->
+          <rect x="4" y="4" width="280" height="64" rx="32" ry="32"
+            fill="none" stroke="rgba(255,255,255,0.1)" stroke-width="2"/>
+          <!-- Progress arc (white) -->
+          <rect id="c1prog" x="4" y="4" width="280" height="64" rx="32" ry="32"
+            fill="none" stroke="rgba(255,255,255,0.9)" stroke-width="2.5"
+            stroke-linecap="round"
+            stroke-dasharray="688" stroke-dashoffset="0"/>
+          <!-- Truck position -->
+          <text id="c1truck" x="144" y="-3" text-anchor="middle" font-size="12" fill="rgba(255,255,255,0.95)">🚚</text>
+        </svg>
+        <div class="circuit-content">
+          <div class="circuit-item-name" id="c1name">맥북 프로 14인치</div>
+          <div class="circuit-status" id="c1status">배송출발</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);font-family:'Instrument Sans',sans-serif;text-align:center;line-height:1.5">
+        트럭이 테두리 위를 달리며<br>진행률 시각화
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Concept 2: Metro Timeline ─── -->
+  <div class="concept-card">
+    <div class="concept-header">
+      <div class="concept-num">02 / METRO TIMELINE</div>
+      <div class="concept-name">지하철 노선도</div>
+      <div class="concept-desc">7개 역(배송 단계)을 노선도처럼 표시. 현재 역은 주황색으로 깜박이고, 완료된 역은 흰 원. 진행률이 직관적으로 읽힘.</div>
+      <span class="concept-badge badge-new">새로운 방향</span>
+    </div>
+    <div class="island-wrap">
+      <div class="island-label">EXPANDED DYNAMIC ISLAND</div>
+      <div class="island-metro">
+        <div class="metro-header">
+          <div class="metro-item-name" id="c2name">맥북 프로 14인치</div>
+          <div class="metro-eta" id="c2eta">오늘 도착</div>
+        </div>
+        <div class="metro-track" id="c2track">
+          <!-- generated by JS -->
+        </div>
+        <div class="metro-labels" id="c2labels">
+          <!-- generated by JS -->
+        </div>
+        <div class="metro-truck-row">
+          <span style="font-size:11px">🚚</span>
+          <span style="font-size:8px;color:var(--orange);font-family:'Instrument Sans',sans-serif;font-weight:600" id="c2status">배송출발</span>
+          <span style="font-size:8px;color:var(--muted);font-family:'Instrument Sans',sans-serif;margin-left:auto">3/7 완료</span>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);font-family:'Instrument Sans',sans-serif;text-align:center;line-height:1.5">
+        일본 배송 추적 UI 스타일<br>단계 위치가 명확
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Concept 3: Pixel Road ─── -->
+  <div class="concept-card">
+    <div class="concept-header">
+      <div class="concept-num">03 / PIXEL ROAD</div>
+      <div class="concept-name">픽셀 로드</div>
+      <div class="concept-desc">도로 위를 달리는 횡스크롤 장면. 출발 창고→목적지 집까지 랜드마크가 펼쳐짐. 트럭이 실제로 달리는 느낌의 스토리텔링.</div>
+      <span class="concept-badge badge-new">게임 감성</span>
+    </div>
+    <div class="island-wrap">
+      <div class="island-label">EXPANDED DYNAMIC ISLAND</div>
+      <div class="island-road">
+        <div class="road-surface" id="c3road">
+          <div class="road-dashes" id="c3dashes"></div>
+          <div class="road-landmarks" id="c3landmarks"></div>
+          <div class="road-truck" id="c3truck" style="top:8px">🚚</div>
+        </div>
+        <div class="road-info">
+          <div class="road-item-name" id="c3name">맥북 프로 14인치</div>
+          <div class="road-status" id="c3status">배송출발</div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);font-family:'Instrument Sans',sans-serif;text-align:center;line-height:1.5">
+        배송 여정을 도로 위에<br>시각적으로 스토리텔링
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Concept 4: Pulse Bar ─── -->
+  <div class="concept-card">
+    <div class="concept-header">
+      <div class="concept-num">04 / PULSE BAR</div>
+      <div class="concept-name">펄스 프로그레스</div>
+      <div class="concept-desc">심플한 가로 프로그레스 바에 발광하는 앞단. 트럭 아이콘이 진행 끝에 앉아있음. 가독성 최우선, 앱다운 느낌.</div>
+      <span class="concept-badge badge-new">가독성 최강</span>
+    </div>
+    <div class="island-wrap">
+      <div class="island-label">EXPANDED DYNAMIC ISLAND</div>
+      <div class="island-pulse">
+        <div class="pulse-top">
+          <div class="pulse-item-name" id="c4name">맥북 프로 14인치</div>
+          <div class="pulse-pct" id="c4pct">65%</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;position:relative">
+          <span style="font-size:12px;flex-shrink:0">🚚</span>
+          <div class="pulse-bar-wrap" style="flex:1">
+            <div class="pulse-bar-fill" id="c4bar" style="width:65%"></div>
+          </div>
+          <span style="font-size:12px;flex-shrink:0;filter:grayscale(0.7);opacity:0.4">🏠</span>
+        </div>
+        <div class="pulse-truck-row">
+          <span class="pulse-status-text" id="c4status">배송출발 · CJ대한통운</span>
+          <span class="pulse-eta" id="c4eta">오늘 도착 예정</span>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);font-family:'Instrument Sans',sans-serif;text-align:center;line-height:1.5">
+        iOS 시스템 UI에 가장 가까운 스타일<br>부담 없이 읽힘
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── Concept 5: Orbital / Split ─── -->
+  <div class="concept-card">
+    <div class="concept-header">
+      <div class="concept-num">05 / ORBITAL RING + STAGE LIST</div>
+      <div class="concept-name">오비탈 링 + 단계 목록</div>
+      <div class="concept-desc">왼쪽에 원형 링(트럭이 궤도 위를 공전), 오른쪽에 배송 단계 목록. 진행률을 아날로그 시계처럼 직관적으로 표시.</div>
+      <span class="concept-badge badge-bold">정보 밀도 최강</span>
+    </div>
+    <div class="island-wrap">
+      <div class="island-label">EXPANDED DYNAMIC ISLAND</div>
+      <div class="island-orbital">
+        <div class="orbital-wrap">
+          <div class="orbital-ring-area">
+            <svg class="orbital-svg" viewBox="0 0 60 60">
+              <circle cx="30" cy="30" r="24" fill="none" stroke="rgba(255,255,255,0.08)" stroke-width="3"/>
+              <circle id="c5ring" cx="30" cy="30" r="24" fill="none" stroke="var(--orange)" stroke-width="3"
+                stroke-linecap="round"
+                stroke-dasharray="150.796" stroke-dashoffset="75"
+                transform="rotate(-90 30 30)"/>
+            </svg>
+            <div class="orbital-center-icon" id="c5center">📦</div>
+            <div class="orbital-truck" id="c5truck" style="position:absolute;top:4px;left:22px;font-size:9px">🚚</div>
+          </div>
+          <div class="orbital-right">
+            <div class="orbital-item-name" id="c5name">맥북 프로 14인치</div>
+            <div class="orbital-stage-list" id="c5stages">
+              <!-- generated by JS -->
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="font-size:10px;color:var(--muted);font-family:'Instrument Sans',sans-serif;text-align:center;line-height:1.5">
+        링 + 단계 리스트 조합<br>정보 밀도와 시각 모두 챙김
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- Comparison table -->
+<div class="compare-section">
+  <div class="compare-title">비교 분석</div>
+  <table class="compare-table">
+    <thead>
+      <tr>
+        <th>컨셉</th>
+        <th>강점</th>
+        <th>약점</th>
+        <th>추천 대상</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><strong>01 아일랜드 서킷</strong></td>
+        <td>
+          <span class="tag tag-pro">독창성</span> Dynamic Island를 가장 잘 활용<br>
+          <span class="tag tag-pro">착시</span> 하드웨어와 일체감
+        </td>
+        <td>
+          <span class="tag tag-con">직관성</span> 진행률 수치를 빠르게 읽기 어려움
+        </td>
+        <td>픽셀 트럭 팬, 게임 감성 선호</td>
+      </tr>
+      <tr>
+        <td><strong>02 지하철 노선도</strong></td>
+        <td>
+          <span class="tag tag-pro">명확성</span> 현재 단계가 즉시 파악<br>
+          <span class="tag tag-pro">친숙함</span> 택배 앱 UI와 일치
+        </td>
+        <td>
+          <span class="tag tag-con">공간</span> 단계명 텍스트가 작아짐<br>
+          <span class="tag tag-con">개성</span> 흔한 UI 패턴
+        </td>
+        <td>정보 우선, 실용적 사용자</td>
+      </tr>
+      <tr>
+        <td><strong>03 픽셀 로드</strong></td>
+        <td>
+          <span class="tag tag-pro">스토리</span> 배송 여정이 이야기처럼 보임<br>
+          <span class="tag tag-pro">재미</span> 앱이 살아있는 느낌
+        </td>
+        <td>
+          <span class="tag tag-con">복잡</span> 구현 난이도 높음<br>
+          <span class="tag tag-con">공간</span> 랜드마크 가독성 한계
+        </td>
+        <td>게임 감성, 스토리텔링 선호</td>
+      </tr>
+      <tr>
+        <td><strong>04 펄스 바</strong></td>
+        <td>
+          <span class="tag tag-pro">가독성</span> 0.3초만에 진행률 파악<br>
+          <span class="tag tag-pro">안정감</span> iOS 네이티브 느낌
+        </td>
+        <td>
+          <span class="tag tag-con">개성</span> 경쟁 앱과 차별화 부족
+        </td>
+        <td>보편적, 정보 우선 사용자</td>
+      </tr>
+      <tr>
+        <td><strong>05 오비탈 + 목록</strong></td>
+        <td>
+          <span class="tag tag-pro">밀도</span> 링 + 텍스트 정보 모두 제공<br>
+          <span class="tag tag-pro">독특</span> 다른 택배 앱에 없는 UI
+        </td>
+        <td>
+          <span class="tag tag-con">복잡</span> 첫 사용자에게 낯설 수 있음
+        </td>
+        <td>정보 밀도 + 개성 둘 다 원하는 경우</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+const STAGES = [
+  { name:'접수', short:'접수', progress:0.05 },
+  { name:'집화완료', short:'집화', progress:0.2 },
+  { name:'간선상차', short:'상차', progress:0.35 },
+  { name:'간선하차', short:'하차', progress:0.5 },
+  { name:'배송출발', short:'출발', progress:0.65 },
+  { name:'배송중', short:'배송중', progress:0.8 },
+  { name:'배송완료', short:'완료', progress:0.95 },
+];
+
+let currentStage = 4;
+
+function setStage(s) {
+  currentStage = s;
+  document.querySelectorAll('.stage-btn').forEach((b,i) => {
+    b.classList.toggle('active', i === s);
+  });
+  updateAll(s);
+}
+
+function updateAll(s) {
+  const st = STAGES[s];
+  const pct = Math.round(st.progress * 100);
+  const isDelivered = s === 6;
+  const eta = isDelivered ? '배송완료 ✓' : '오늘 도착 예정';
+
+  // C1: Island Circuit
+  const perimeter = 688; // approx perimeter of the rect
+  const dashOffset = perimeter * (1 - st.progress);
+  document.getElementById('c1prog').setAttribute('stroke-dashoffset', dashOffset);
+  document.getElementById('c1status').textContent = st.name;
+  // truck position on circuit
+  updateCircuitTruck(s, st.progress);
+
+  // C2: Metro Timeline
+  updateMetro(s);
+
+  // C3: Pixel Road
+  document.getElementById('c3status').textContent = st.name;
+  const roadPct = st.progress;
+  document.getElementById('c3truck').style.left = (roadPct * 220 + 10) + 'px';
+  updateRoadLandmarks(s);
+
+  // C4: Pulse Bar
+  document.getElementById('c4pct').textContent = pct + '%';
+  document.getElementById('c4bar').style.width = pct + '%';
+  document.getElementById('c4status').textContent = st.name + ' · CJ대한통운';
+  document.getElementById('c4eta').textContent = eta;
+  document.getElementById('c4eta').style.color = isDelivered ? 'var(--green)' : '#22C55E';
+
+  // C5: Orbital
+  updateOrbital(s, st.progress);
+}
+
+function updateCircuitTruck(s, progress) {
+  // Approximate position on rounded rect outline
+  // Total perimeter ~688px, path: bottom-center → left-down → left-up → top-left → top-right → right-up → right-down → bottom-center
+  const prog = progress;
+  const svg = document.getElementById('c1svg');
+  const truck = document.getElementById('c1truck');
+  // Simplified: map progress 0→1 to positions around the rect
+  // Rect: x=4,y=4,w=280,h=64,r=32
+  // Using the same starting point as the code: midX of bottom
+  const cx = 144, cy = 68, w = 280, h = 64, r = 32;
+  const { x, y, angle } = getCircuitPos(prog, 4, 4, w, h, r);
+  truck.setAttribute('x', x);
+  truck.setAttribute('y', y);
+  truck.setAttribute('transform', `rotate(${angle}, ${x}, ${y})`);
+}
+
+function getCircuitPos(t, ox, oy, w, h, r) {
+  // Simplified position calculation
+  // Let's just place the truck at approximate positions
+  const perimeter = 2*(w-2*r) + 2*(h-2*r) + 2*Math.PI*r;
+  const dist = t * perimeter;
+  
+  // Starting at bottom center, going counter-clockwise (left first)
+  const bw = (w - 2*r) / 2; // half bottom width
+  const sw = w - 2*r; // straight widths
+  const sh = h - 2*r; // straight heights
+  const arc = Math.PI * r / 2; // quarter circle arc length
+  
+  // Segments: bottom-right(bw) → bottom-right-arc(arc) → right-down(sh) → bottom-right-arc... 
+  // Simplified: just use linear interpolation around the perimeter
+  const angle_deg = t * 360 - 90;
+  // For simplicity, use an elliptical path
+  const ex = ox + w/2 + (w/2 + 8) * Math.cos(angle_deg * Math.PI/180 - Math.PI/2);
+  const ey = oy + h/2 + (h/2 + 8) * Math.sin(angle_deg * Math.PI/180 - Math.PI/2);
+  
+  return { x: ex, y: ey, angle: angle_deg };
+}
+
+function updateMetro(s) {
+  const track = document.getElementById('c2track');
+  const labels = document.getElementById('c2labels');
+  document.getElementById('c2status').textContent = STAGES[s].name;
+  document.getElementById('c2eta').textContent = s === 6 ? '✓ 완료' : '오늘 도착';
+  document.getElementById('c2eta').style.color = s === 6 ? 'var(--green)' : 'var(--green)';
+
+  let trackHTML = '';
+  let labelsHTML = '<div style="display:flex;align-items:flex-start;width:100%;gap:0">';
+  
+  for (let i = 0; i < 7; i++) {
+    const isDone = i < s;
+    const isActive = i === s;
+    const isPending = i > s;
+    
+    if (i > 0) {
+      const lineClass = i <= s ? 'metro-line done' : 'metro-line pending';
+      trackHTML += `<div class="${lineClass}" style="flex:1"></div>`;
+    }
+    
+    const dotClass = isDone ? 'metro-dot done' : isActive ? 'metro-dot active' : 'metro-dot pending';
+    trackHTML += `<div class="${dotClass}"></div>`;
+    
+    const lClass = isActive ? 'active-label' : '';
+    labelsHTML += `<div style="flex:${i===0||i===6?'0':'1'};display:flex;justify-content:${i===0?'flex-start':i===6?'flex-end':'center'};min-width:8px">
+      <div class="metro-label-item ${lClass}" style="font-family:'Noto Sans KR',sans-serif">${STAGES[i].short}</div>
+    </div>`;
+  }
+  labelsHTML += '</div>';
+  
+  track.innerHTML = trackHTML;
+  labels.innerHTML = labelsHTML;
+}
+
+function updateRoadLandmarks(s) {
+  const container = document.getElementById('c3landmarks');
+  const icons = ['🏭','📮','🔄','🏙️','🚛','🛵','🏠'];
+  const positions = [5, 40, 75, 115, 155, 195, 245];
+  
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const reached = i <= s;
+    const iconClass = reached ? 'landmark-icon reached' : 'landmark-icon';
+    html += `<div class="road-landmark" style="left:${positions[i]}px;top:2px">
+      <div class="${iconClass}" style="font-size:${i===6?16:12}px">${icons[i]}</div>
+    </div>`;
+  }
+  container.innerHTML = html;
+}
+
+function updateOrbital(s, progress) {
+  // Ring progress
+  const circumference = 150.796; // 2*PI*24
+  const offset = circumference * (1 - progress);
+  document.getElementById('c5ring').setAttribute('stroke-dashoffset', offset + (circumference * 0.01));
+  
+  // Truck position on ring (rotate around center)
+  const angle = progress * 360 - 90;
+  const rad = angle * Math.PI / 180;
+  const r = 24;
+  const cx = 30, cy = 30;
+  const tx = cx + r * Math.cos(rad) - 6;
+  const ty = cy + r * Math.sin(rad) - 6;
+  document.getElementById('c5truck').style.left = tx + 'px';
+  document.getElementById('c5truck').style.top = ty + 'px';
+  
+  // Center icon
+  document.getElementById('c5center').textContent = s === 6 ? '🎉' : s >= 4 ? '🚚' : '📦';
+  
+  // Stage list
+  const stagesDiv = document.getElementById('c5stages');
+  let html = '';
+  for (let i = 0; i < 7; i++) {
+    const cls = i < s ? 'done' : i === s ? 'active-stage' : '';
+    const check = i < s ? '✓ ' : '';
+    html += `<div class="orbital-stage-item ${cls}">
+      <div class="orbital-stage-dot"></div>
+      <span>${check}${STAGES[i].short}</span>
+    </div>`;
+  }
+  stagesDiv.innerHTML = html;
+}
+
+// Init road dashes
+function initRoad() {
+  const dashes = document.getElementById('c3dashes');
+  let html = '';
+  for (let i = 0; i < 30; i++) html += '<div class="road-dash"></div>';
+  dashes.innerHTML = html + html; // doubled for seamless loop
+}
+
+initRoad();
+updateMetro(4);
+updateRoadLandmarks(4);
+updateOrbital(4, STAGES[4].progress);
+updateCircuitTruck(4, STAGES[4].progress);
+
+// Initialize circuit truck
+const circuitPerimeter = 2*(280-64) + 2*(64-64) + Math.PI*64;
+const c1prog = document.getElementById('c1prog');
+c1prog.setAttribute('stroke-dasharray', '688');
+c1prog.setAttribute('stroke-dashoffset', 688 * (1 - STAGES[4].progress));
+</script>
+
+</body>
+</html>
