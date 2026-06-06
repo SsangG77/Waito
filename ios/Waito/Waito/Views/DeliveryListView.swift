@@ -44,28 +44,31 @@ struct DeliveryListView: View {
     }
 
     private var listContent: some View {
-        ScrollView {
-            LazyVStack(spacing: 8) {
-                actionButtons
+        VStack(spacing: 8) {
+            actionButtons
 
-                if showAddForm {
-                    inlineAddForm
-                        .transition(.opacity)
-                }
-
-                ForEach(service.trackings) { tracking in
-                    TrackingRowView(
-                        tracking: tracking,
-                        isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
-                        onToggleLiveActivity: { toggleLiveActivity(for: tracking) }
-                    )
-                }
+            if showAddForm {
+                inlineAddForm
+                    .transition(.opacity)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 4)
+
+            ScrollView {
+                LazyVStack(spacing: 8) {
+                    ForEach(service.trackings) { tracking in
+                        TrackingRowView(
+                            tracking: tracking,
+                            isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
+                            onToggleLiveActivity: { toggleLiveActivity(for: tracking) }
+                        )
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+            .refreshable { await service.loadTrackings() }
         }
+        .padding(.horizontal, 16)
+        .padding(.top, 4)
         .background(Color.bg)
-        .refreshable { await service.loadTrackings() }
     }
 
     // MARK: - 버튼 영역

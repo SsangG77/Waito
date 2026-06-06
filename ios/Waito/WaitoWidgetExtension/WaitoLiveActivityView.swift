@@ -10,7 +10,7 @@ struct WaitoLiveActivity: Widget {
         } dynamicIsland: { context in
             DynamicIsland {
                 DynamicIslandExpandedRegion(.bottom) {
-                    ExpandedTruckPathView(state: context.state)
+                    ExpandedMetroTimelineView(state: context.state)
                 }
             } compactLeading: {
                 BouncingTruckView(config: context.state.truckConfig, size: 24)

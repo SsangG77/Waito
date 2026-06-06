@@ -194,10 +194,10 @@ struct PixelAlert: View {
             VStack(alignment: .leading, spacing: 0) {
                 // 타이틀
                 Text(title.uppercased())
-                    .font(pixelFont(11))
+                    .font(pixelFont(15))
                     .foregroundStyle(Color.pixelOrange)
                     .padding(.horizontal, 18)
-                    .padding(.top, 18)
+                    .padding(.top, 13)
                     .padding(.bottom, 12)
 
                 Rectangle()
@@ -207,7 +207,7 @@ struct PixelAlert: View {
 
                 // 메시지
                 Text(message)
-                    .font(pixelFont(8))
+                    .font(pixelFont(11))
                     .foregroundStyle(Color.pixelText)
                     .lineSpacing(5)
                     .padding(.horizontal, 18)
@@ -223,10 +223,10 @@ struct PixelAlert: View {
                     onConfirm()
                 } label: {
                     Text("> \(buttonTitle.uppercased())_")
-                        .font(pixelFont(9))
+                        .font(pixelFont(12))
                         .foregroundStyle(Color.pixelOrange)
                         .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
+                        .padding(.vertical, 11)
                 }
                 .buttonStyle(.plain)
             }

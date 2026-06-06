@@ -40,11 +40,6 @@ struct DynamicIslandTruckOverlay: View {
     private let truckSize: CGFloat = 15
     private let animationPeriod: Double = 8.0
 
-    private let calculator = TruckPathCalculator(metrics: .init(
-        rect: CGRect(x: 0, y: 0, width: pillWidth, height: pillHeight),
-        cornerRadius: pillHeight / 2
-    ))
-
     var body: some View {
         GeometryReader { geo in
             let originX = (geo.size.width - Self.pillWidth) / 2
@@ -57,12 +52,12 @@ struct DynamicIslandTruckOverlay: View {
                 .position(x: geo.size.width / 2, y: originY + Self.pillHeight / 2)
 
             TimelineView(.animation) { context in
-                let pose = calculator.pose(at: animatedT(for: context.date), offset: truckOffset)
+                let pose = truckPose(at: context.date)
                 CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: truckSize)
-                    .rotationEffect(.radians(pose.rotationAngle))
+                    .scaleEffect(x: pose.isReversed ? -1 : 1, y: 1)
                     .position(
-                        x: originX + pose.position.x,
-                        y: originY + pose.position.y
+                        x: originX + pose.x,
+                        y: originY - truckOffset
                     )
             }
         }
@@ -70,11 +65,19 @@ struct DynamicIslandTruckOverlay: View {
         .allowsHitTesting(false)
     }
 
-    private func animatedT(for date: Date) -> CGFloat {
+    /// 상단 직선 위에서만 왕복. isReversed=true 면 왼쪽으로 진행 (트럭 좌우 반전)
+    private func truckPose(at date: Date) -> (x: CGFloat, isReversed: Bool) {
         let elapsed = date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: animationPeriod)
         let phase = elapsed / animationPeriod
+        let isReversed = phase > 0.5
         let pingPong = phase <= 0.5 ? phase * 2 : (1.0 - phase) * 2
-        return CGFloat(pingPong * pingPong * (3.0 - 2.0 * pingPong))
+        let smooth = pingPong * pingPong * (3.0 - 2.0 * pingPong)
+
+        let cornerRadius = Self.pillHeight / 2
+        let startX = cornerRadius + 3
+        let endX = Self.pillWidth - cornerRadius - 3
+        let x = startX + (endX - startX) * CGFloat(smooth)
+        return (x, isReversed)
     }
 }
 

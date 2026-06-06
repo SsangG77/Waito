@@ -59,7 +59,6 @@
 				Views/TruckDrawing/CatalogTruckView.swift,
 				Views/TruckDrawing/TruckShapes.swift,
 				Views/TruckDrawing/TruckStyleModifier.swift,
-				Views/TruckDrawing/TruckView.swift,
 			);
 			target = EDC69A072F694200002FF663 /* WaitoWidgetExtension */;
 		};
