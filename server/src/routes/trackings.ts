@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/database.js';
-import { trackPackage, registerWebhook } from '../services/trackerApi.js';
+import { trackPackage, registerWebhook, isTrackingNotFoundError } from '../services/trackerApi.js';
 import { resolveNewStatus } from '../services/statusMapper.js';
 import { pollTracking } from '../services/pollingService.js';
 import { DeliveryStatus, STATUS_T_VALUES, CARRIERS } from '../types/delivery.js';
@@ -10,7 +10,7 @@ const router = Router();
 
 // POST /api/trackings — 택배 추적 등록
 router.post('/', async (req: Request, res: Response) => {
-  const { deviceToken, carrierId, trackingNumber, itemName } = req.body;
+  const { deviceToken, carrierId, trackingNumber, itemName, force } = req.body;
 
   if (!deviceToken || !carrierId || !trackingNumber) {
     res.status(400).json({ error: 'deviceToken, carrierId, trackingNumber are required' });
@@ -41,23 +41,34 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  // 초기 조회
+  // 초기 조회 — 조회 불가(NOT_FOUND)이고 force 가 아니면 추가하지 않고 확인을 요청한다
   let initialStatus = DeliveryStatus.Registered;
+  let lastEventTime: string | null = null;   // 조회 성공 시에만 채워짐 → null 이면 "아직 데이터 없음"
   try {
     const result = await trackPackage(carrier.trackerId, trackingNumber);
+    if (result.track?.lastEvent) {
+      lastEventTime = result.track.lastEvent.time;
+    }
     if (result.track?.events?.edges) {
       for (const edge of result.track.events.edges) {
         initialStatus = resolveNewStatus(initialStatus, edge.node.status.code, edge.node.description);
       }
     }
   } catch (error) {
+    if (isTrackingNotFoundError(error) && !force) {
+      res.status(422).json({
+        error: 'TRACKING_NOT_FOUND',
+        message: '운송장을 조회할 수 없습니다. 번호가 올바른지 확인해주세요. (배송 준비중이거나 배송이 종료된 운송장일 수 있어요)',
+      });
+      return;
+    }
     console.warn(`[Tracking] Initial fetch failed, starting as registered:`, error);
   }
 
   // DB 삽입
   const insertResult = db.prepare(`
-    INSERT INTO trackings (device_id, carrier_id, tracking_number, item_name, current_status, current_t_value, carrier_name)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO trackings (device_id, carrier_id, tracking_number, item_name, current_status, current_t_value, carrier_name, last_event_time)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     device.id,
     carrierId,
@@ -66,6 +77,7 @@ router.post('/', async (req: Request, res: Response) => {
     initialStatus,
     STATUS_T_VALUES[initialStatus],
     carrier.name,
+    lastEventTime,
   );
 
   const trackingId = insertResult.lastInsertRowid as number;
@@ -77,8 +89,8 @@ router.post('/', async (req: Request, res: Response) => {
       trackingNumber,
       `${config.webhookBaseUrl}/webhooks/tracker`,
     );
-    db.prepare('UPDATE trackings SET webhook_id = ?, webhook_expires_at = ? WHERE id = ?')
-      .run(webhook.webhookId, webhook.expiresAt, trackingId);
+    db.prepare('UPDATE trackings SET webhook_expires_at = ? WHERE id = ?')
+      .run(webhook.expiresAt, trackingId);
   } catch (error) {
     console.warn(`[Tracking] Webhook registration failed, will rely on polling:`, error);
   }
@@ -112,7 +124,7 @@ router.get('/', (req: Request, res: Response) => {
 
   const trackings = db.prepare(`
     SELECT id, carrier_id, tracking_number, item_name, current_status, current_t_value,
-           carrier_name, estimated_delivery, created_at, delivered_at
+           carrier_name, estimated_delivery, created_at, updated_at, last_event_time, delivered_at
     FROM trackings WHERE device_id = ? ORDER BY created_at DESC
   `).all(device.id);
 

@@ -5,9 +5,7 @@ struct SettingsView: View {
     @Environment(SubscriptionManager.self) private var subscription
 
     #if DEBUG
-    @Environment(TrackingService.self) private var service
-    @State private var isDemoActive = false
-    @State private var showDemoError = false
+    @AppStorage("debug_show_dummy_data") private var showDummyData = false
     #endif
 
     var body: some View {
@@ -25,7 +23,7 @@ struct SettingsView: View {
                     settingsRow(icon: "info.circle", title: "버전", subtitle: "1.0.0")
 
                     #if DEBUG
-                    debugDemoRow
+                    dummyDataToggleRow
                     #endif
                 }
                 .padding(.horizontal, 16)
@@ -35,16 +33,6 @@ struct SettingsView: View {
         .background(Color.bg)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
-        #if DEBUG
-        .onChange(of: service.error) { _, newValue in
-            showDemoError = newValue != nil
-        }
-        .pixelAlert(
-            title: "오류",
-            message: service.error ?? "",
-            isPresented: $showDemoError
-        ) { service.clearError() }
-        #endif
     }
 
     // MARK: - 일반 행
@@ -76,45 +64,36 @@ struct SettingsView: View {
         .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
     }
 
-    // MARK: - 디버그 데모 토글
+    // MARK: - 디버그 테스트 데이터 토글
 
     #if DEBUG
-    private var debugDemoRow: some View {
+    private var dummyDataToggleRow: some View {
         Button {
-            isDemoActive.toggle()
-            Task {
-                if isDemoActive {
-                    await service.startDemoLiveActivity()
-                } else {
-                    await service.stopDemoLiveActivity()
-                }
-            }
+            showDummyData.toggle()
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: "dot.radiowaves.left.and.right")
+                Image(systemName: "ladybug.fill")
                     .font(.system(size: 14))
-                    .foregroundStyle(isDemoActive ? Color.pixelOrange : Color.pixelMuted)
+                    .foregroundStyle(showDummyData ? Color.pixelOrange : Color.pixelMuted)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text("DYNAMIC ISLAND DEMO")
+                    Text("TEST DATA")
                         .font(pixelFont(11))
                         .foregroundStyle(Color.pixelText)
-                    Text(isDemoActive ? "ON — 트럭이 달리는 중" : "OFF")
+                    Text(showDummyData ? "ON — 더미 택배 표시 중" : "OFF")
                         .font(pixelFont(9))
-                        .foregroundStyle(isDemoActive ? Color.pixelOrange : Color.pixelMuted)
+                        .foregroundStyle(showDummyData ? Color.pixelOrange : Color.pixelMuted)
                 }
 
                 Spacer()
 
-                Text(isDemoActive ? "[ON]" : "[OFF]")
-                    .font(pixelFont(9))
-                    .foregroundStyle(isDemoActive ? Color.pixelOrange : Color.pixelMuted)
+                PixelToggle(isOn: showDummyData) { showDummyData.toggle() }
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 14)
             .pixelBox(
-                border: isDemoActive ? Color.pixelOrange.opacity(0.5) : Color.pixelBorder,
+                border: showDummyData ? Color.pixelOrange.opacity(0.5) : Color.pixelBorder,
                 bg: Color.pixelSurface,
                 lineWidth: 1.5,
                 notch: 4

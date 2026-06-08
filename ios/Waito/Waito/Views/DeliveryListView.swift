@@ -1,5 +1,21 @@
 import SwiftUI
 
+// MARK: - 정렬 기준
+
+enum DeliverySortOrder: String, CaseIterable {
+    case arrival      // 도착 임박순
+    case updated      // 최근 업데이트순
+    case registered   // 등록순
+
+    var label: String {
+        switch self {
+        case .arrival:    return "도착임박순"
+        case .updated:    return "업데이트순"
+        case .registered: return "등록순"
+        }
+    }
+}
+
 // MARK: - 택배 목록
 
 struct DeliveryListView: View {
@@ -10,6 +26,17 @@ struct DeliveryListView: View {
     @State private var showError = false
     @State private var showSubscriptionAlert = false
     @State private var showPaywall = false
+    @State private var showNotFoundConfirm = false
+    @State private var notFoundMessage = ""
+    /// 삭제 버튼이 열린 행 (한 번에 하나만)
+    @State private var openRowId: Int?
+    /// 정렬 기준 (기본: 도착 임박순, 사용자 선택 영구 저장)
+    @AppStorage("delivery_sort_order") private var sortOrderRaw = DeliverySortOrder.arrival.rawValue
+    private var sortOrder: DeliverySortOrder { DeliverySortOrder(rawValue: sortOrderRaw) ?? .arrival }
+
+    #if DEBUG
+    @AppStorage("debug_show_dummy_data") private var showDummyData = false
+    #endif
 
     // 입력 폼 상태
     @State private var newTrackingNumber = ""
@@ -36,6 +63,15 @@ struct DeliveryListView: View {
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
             }
+            .pixelConfirm(
+                title: "운송장 확인",
+                message: notFoundMessage,
+                confirmTitle: "그래도 추가",
+                cancelTitle: "취소",
+                isPresented: $showNotFoundConfirm
+            ) {
+                submit(force: true)
+            }
             .task {
                 if service.carriers.isEmpty {
                     await service.loadCarriers()
@@ -43,9 +79,43 @@ struct DeliveryListView: View {
             }
     }
 
+    /// 목록에 표시할 택배. 디버그 테스트 토글이 켜지면 더미 데이터를 보여준다.
+    private var displayedTrackings: [TrackingListItem] {
+        #if DEBUG
+        if showDummyData { return sortTrackings(TrackingService.dummyTrackings) }
+        #endif
+        return sortTrackings(service.trackings)
+    }
+
+    private func sortTrackings(_ items: [TrackingListItem]) -> [TrackingListItem] {
+        switch sortOrder {
+        case .arrival:
+            // 미완료를 위로, 그 안에서 진행도 높은(곧 도착) 순. 완료는 아래로.
+            return items.sorted { a, b in
+                if a.currentStatus.isCompleted != b.currentStatus.isCompleted {
+                    return !a.currentStatus.isCompleted
+                }
+                if a.currentTValue != b.currentTValue {
+                    return a.currentTValue > b.currentTValue
+                }
+                return a.createdAt > b.createdAt
+            }
+        case .updated:
+            // 마지막 변경(updated_at)이 최신인 순. 없으면 등록일로 대체.
+            return items.sorted { ($0.updatedAt ?? $0.createdAt) > ($1.updatedAt ?? $1.createdAt) }
+        case .registered:
+            return items.sorted { $0.createdAt > $1.createdAt }
+        }
+    }
+
     private var listContent: some View {
         VStack(spacing: 8) {
             actionButtons
+
+            HStack {
+                Spacer()
+                sortBar
+            }
 
             if showAddForm {
                 inlineAddForm
@@ -54,11 +124,13 @@ struct DeliveryListView: View {
 
             ScrollView {
                 LazyVStack(spacing: 8) {
-                    ForEach(service.trackings) { tracking in
+                    ForEach(displayedTrackings) { tracking in
                         TrackingRowView(
                             tracking: tracking,
                             isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
-                            onToggleLiveActivity: { toggleLiveActivity(for: tracking) }
+                            onToggleLiveActivity: { toggleLiveActivity(for: tracking) },
+                            onDelete: { deleteTracking(tracking) },
+                            openRowId: $openRowId
                         )
                     }
                 }
@@ -91,6 +163,34 @@ struct DeliveryListView: View {
         }
     }
 
+    // MARK: - 정렬 선택 바
+
+    private var sortBar: some View {
+        HStack(spacing: 6) {
+            ForEach(DeliverySortOrder.allCases, id: \.self) { order in
+                let selected = sortOrder == order
+                Button {
+                    sortOrderRaw = order.rawValue
+                    openRowId = nil  // 정렬 바꾸면 열린 삭제 버튼 닫기
+                } label: {
+                    Text(order.label)
+                        .font(pixelFont(9))
+                        .foregroundStyle(selected ? Color.pixelOrange : Color.pixelMuted)
+                        .padding(.horizontal, 10)
+                        .padding(.vertical, 7)
+                        .pixelBox(
+                            border: selected ? Color.pixelOrange.opacity(0.6) : Color.pixelBorder,
+                            bg: selected ? Color.pixelOrange.opacity(0.1) : Color.pixelSurface,
+                            lineWidth: 1.5,
+                            notch: 3
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+            Spacer()
+        }
+    }
+
     private var settingsButton: some View {
         NavigationLink(destination: SettingsView()) {
             Image(systemName: "gearshape.fill")
@@ -104,6 +204,7 @@ struct DeliveryListView: View {
 
     private var compactAddButton: some View {
         Button {
+            openRowId = nil  // 열려 있던 삭제 버튼 닫기
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 showAddForm.toggle()
                 if !showAddForm { resetForm() }
@@ -123,10 +224,11 @@ struct DeliveryListView: View {
     }
 
     private func truckButton(wide: Bool) -> some View {
-        NavigationLink(destination: TruckCustomizeView()) {
+        // 사용자가 선택한 트럭을 표시 (TruckConfigStore 는 @Observable 이라 변경 시 자동 갱신)
+        let cfg = TruckConfigStore.shared.config
+        return NavigationLink(destination: TruckCustomizeView()) {
             HStack(spacing: 6) {
-                Text("🚚")
-                    .font(.system(size: 16))
+                CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 24)
                 if wide {
                     Text("MY TRUCK_")
                         .font(pixelFont(10))
@@ -135,7 +237,6 @@ struct DeliveryListView: View {
             }
             .frame(maxWidth: wide ? .infinity : nil)
             .frame(width: wide ? nil : 46, height: 46)
-            .padding(.horizontal, wide ? 0 : 0)
             .pixelBox(border: Color.pixelOrange.opacity(0.5), bg: Color.pixelOrange.opacity(0.08), lineWidth: 1.5, notch: 4)
         }
         .buttonStyle(.plain)
@@ -143,6 +244,7 @@ struct DeliveryListView: View {
 
     private var addButton: some View {
         Button {
+            openRowId = nil  // 열려 있던 삭제 버튼 닫기
             withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                 showAddForm.toggle()
                 if !showAddForm { resetForm() }
@@ -184,38 +286,11 @@ struct DeliveryListView: View {
     }
 
     private var carrierPicker: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("CARRIER")
-                .font(pixelFont(9))
-                .foregroundStyle(Color.pixelOrange)
-
-            Menu {
-                ForEach(service.carriers) { carrier in
-                    Button(carrier.name) { newCarrierId = carrier.id }
-                }
-                if service.carriers.isEmpty {
-                    Button("로딩 중...") {}
-                        .disabled(true)
-                }
-            } label: {
-                HStack {
-                    Text(selectedCarrierName)
-                        .font(pixelFont(10))
-                        .foregroundStyle(newCarrierId.isEmpty ? Color.pixelMuted : Color.pixelText)
-                    Spacer()
-                    Text("▼")
-                        .font(pixelFont(8))
-                        .foregroundStyle(Color.pixelMuted)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 14)
-                .pixelBox()
-            }
-        }
-    }
-
-    private var selectedCarrierName: String {
-        service.carriers.first(where: { $0.id == newCarrierId })?.name ?? "선택해주세요"
+        PixelDropdown(
+            label: "CARRIER",
+            options: service.carriers.map { PixelDropdownOption(id: $0.id, name: $0.name) },
+            selectedId: $newCarrierId
+        )
     }
 
     private var isFormValid: Bool {
@@ -224,22 +299,30 @@ struct DeliveryListView: View {
 
     // MARK: - Actions
 
-    private func submit() {
+    private func submit(force: Bool = false) {
         isSubmitting = true
         Task {
             let name = newItemName.trimmingCharacters(in: .whitespaces)
-            let success = await service.addTracking(
+            let result = await service.addTracking(
                 carrierId: newCarrierId,
                 trackingNumber: newTrackingNumber.trimmingCharacters(in: .whitespaces),
                 itemName: name.isEmpty ? nil : name,
-                limit: subscription.liveActivityLimit
+                limit: subscription.liveActivityLimit,
+                force: force
             )
             isSubmitting = false
-            if success {
+            switch result {
+            case .success:
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                     showAddForm = false
                 }
                 resetForm()
+            case .notFound(let message):
+                // 조회 불가 — 확인 다이얼로그를 띄우고, 확인 시 force 로 재시도
+                notFoundMessage = message
+                showNotFoundConfirm = true
+            case .failure:
+                break  // service.error 로 오류 알림이 표시됨
             }
         }
     }
@@ -249,6 +332,13 @@ struct DeliveryListView: View {
         newCarrierId = ""
         newItemName = ""
         newMemo = ""
+    }
+
+    private func deleteTracking(_ tracking: TrackingListItem) {
+        #if DEBUG
+        if showDummyData { return }  // 더미 표시 중에는 실제 삭제하지 않음
+        #endif
+        Task { await service.deleteTracking(id: tracking.id) }
     }
 
     private func toggleLiveActivity(for tracking: TrackingListItem) {

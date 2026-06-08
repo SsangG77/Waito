@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/database.js';
+import { trackPackage } from '../services/trackerApi.js';
 import { resolveNewStatus } from '../services/statusMapper.js';
 import { pushTrackingUpdate } from '../services/pushService.js';
 import { DeliveryStatus, STATUS_T_VALUES } from '../types/delivery.js';
@@ -19,24 +20,35 @@ router.post('/tracker', (req: Request, res: Response) => {
 });
 
 async function processWebhook(payload: any): Promise<void> {
-  const { trackingNumber, carrierId, events } = payload;
+  // 최신 콜백 payload 는 { carrierId, trackingNumber } 만 전달된다.
+  // 상태 정보가 없으므로 track API 로 최신 이벤트를 다시 조회한다.
+  const { trackingNumber, carrierId } = payload;
 
-  if (!trackingNumber || !events?.length) {
+  if (!trackingNumber || !carrierId) {
     console.warn('[Webhook] Invalid payload:', payload);
     return;
   }
 
+  let result;
+  try {
+    // payload.carrierId 는 tracker.delivery 식별자(예: kr.coupangls)이므로 그대로 사용
+    result = await trackPackage(carrierId, trackingNumber);
+  } catch (error) {
+    console.error(`[Webhook] track fetch failed for ${trackingNumber}:`, error);
+    return;
+  }
+
+  if (!result.track?.lastEvent) return;
+
   const db = getDb();
 
-  // carrier trackerId → waito carrierId 매핑
   const trackings = db.prepare(`
-    SELECT t.id, t.current_status, t.carrier_id
+    SELECT t.id, t.current_status
     FROM trackings t
     WHERE t.tracking_number = ? AND t.delivered_at IS NULL
   `).all(trackingNumber) as Array<{
     id: number;
     current_status: DeliveryStatus;
-    carrier_id: string;
   }>;
 
   if (trackings.length === 0) {
@@ -47,11 +59,9 @@ async function processWebhook(payload: any): Promise<void> {
   for (const tracking of trackings) {
     let newStatus = tracking.current_status;
 
-    for (const event of events) {
-      const statusCode = event.status?.code || event.statusCode;
-      const description = event.description || '';
-
-      newStatus = resolveNewStatus(newStatus, statusCode, description);
+    for (const edge of result.track.events.edges) {
+      const event = edge.node;
+      newStatus = resolveNewStatus(newStatus, event.status.code, event.description);
 
       // 이벤트 기록
       db.prepare(`
@@ -59,10 +69,10 @@ async function processWebhook(payload: any): Promise<void> {
         VALUES (?, ?, ?, ?, ?, ?)
       `).run(
         tracking.id,
-        statusCode,
+        event.status.code,
         newStatus,
-        description,
-        event.time || new Date().toISOString(),
+        event.description,
+        event.time,
         event.location || null,
       );
     }
@@ -71,12 +81,13 @@ async function processWebhook(payload: any): Promise<void> {
       db.prepare(`
         UPDATE trackings
         SET current_status = ?, current_t_value = ?, updated_at = datetime('now'),
-            last_event_time = datetime('now'),
+            last_event_time = ?,
             delivered_at = CASE WHEN ? = 'delivered' THEN datetime('now') ELSE delivered_at END
         WHERE id = ?
       `).run(
         newStatus,
         STATUS_T_VALUES[newStatus],
+        result.track.lastEvent.time,
         newStatus,
         tracking.id,
       );

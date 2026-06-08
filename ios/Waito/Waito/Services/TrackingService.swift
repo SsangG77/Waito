@@ -2,6 +2,15 @@ import Foundation
 import ActivityKit
 import Observation
 
+// MARK: - Add Tracking Result
+
+enum AddTrackingResult {
+    case success
+    /// 운송장 조회 불가 — 확인 다이얼로그 후 force 재시도 대상
+    case notFound(message: String)
+    case failure
+}
+
 // MARK: - Tracking Service
 
 @Observable
@@ -26,72 +35,12 @@ final class TrackingService {
 
     init() {
         liveTrackingNumbers = UserDefaults.standard.stringArray(forKey: liveTrackingsKey) ?? []
-        trackings = [
-            TrackingListItem(
-                id: 1, carrierId: "cj", trackingNumber: "123456789012",
-                itemName: "맥북 프로 14인치", currentStatus: .delivering,
-                currentTValue: 0.8, carrierName: "CJ대한통운",
-                estimatedDelivery: "오늘", createdAt: "2026-04-10T09:00:00Z", deliveredAt: nil
-            ),
-            TrackingListItem(
-                id: 2, carrierId: "hanjin", trackingNumber: "987654321098",
-                itemName: "에어팟 프로", currentStatus: .inTransitOut,
-                currentTValue: 0.5, carrierName: "한진택배",
-                estimatedDelivery: "내일", createdAt: "2026-04-09T15:30:00Z", deliveredAt: nil
-            ),
-            TrackingListItem(
-                id: 3, carrierId: "lotte", trackingNumber: "555444333222",
-                itemName: "Nike 에어맥스", currentStatus: .delivered,
-                currentTValue: 0.95, carrierName: "롯데택배",
-                estimatedDelivery: nil, createdAt: "2026-04-07T11:00:00Z",
-                deliveredAt: "2026-04-11T14:22:00Z"
-            ),
-            TrackingListItem(
-                id: 4, carrierId: "post", trackingNumber: "111222333444",
-                itemName: "무선 키보드", currentStatus: .registered,
-                currentTValue: 0.05, carrierName: "우체국택배",
-                estimatedDelivery: "3일 후", createdAt: "2026-04-12T08:00:00Z", deliveredAt: nil
-            ),
-        ]
     }
 
     /// 프리뷰 전용
     init(preview trackings: [TrackingListItem]) {
         self.trackings = trackings
         self.liveTrackingNumbers = []
-    }
-
-    // MARK: - 더미 데이터 (서버 없을 때 fallback)
-
-    func loadDummyDataIfNeeded() {
-        guard trackings.isEmpty else { return }
-        trackings = [
-            TrackingListItem(
-                id: 1, carrierId: "cj", trackingNumber: "123456789012",
-                itemName: "맥북 프로 14인치", currentStatus: .delivering,
-                currentTValue: 0.8, carrierName: "CJ대한통운",
-                estimatedDelivery: "오늘", createdAt: "2026-04-10T09:00:00Z", deliveredAt: nil
-            ),
-            TrackingListItem(
-                id: 2, carrierId: "hanjin", trackingNumber: "987654321098",
-                itemName: "에어팟 프로", currentStatus: .inTransitOut,
-                currentTValue: 0.5, carrierName: "한진택배",
-                estimatedDelivery: "내일", createdAt: "2026-04-09T15:30:00Z", deliveredAt: nil
-            ),
-            TrackingListItem(
-                id: 3, carrierId: "lotte", trackingNumber: "555444333222",
-                itemName: "Nike 에어맥스", currentStatus: .delivered,
-                currentTValue: 0.95, carrierName: "롯데택배",
-                estimatedDelivery: nil, createdAt: "2026-04-07T11:00:00Z",
-                deliveredAt: "2026-04-11T14:22:00Z"
-            ),
-            TrackingListItem(
-                id: 4, carrierId: "post", trackingNumber: "111222333444",
-                itemName: "무선 키보드", currentStatus: .registered,
-                currentTValue: 0.05, carrierName: "우체국택배",
-                estimatedDelivery: "3일 후", createdAt: "2026-04-12T08:00:00Z", deliveredAt: nil
-            ),
-        ]
     }
 
     // MARK: - Device Token
@@ -141,14 +90,21 @@ final class TrackingService {
         }
     }
 
-    func addTracking(carrierId: String, trackingNumber: String, itemName: String?, limit: Int = 1) async -> Bool {
-        guard let token = deviceToken else { return false }
+    func addTracking(
+        carrierId: String,
+        trackingNumber: String,
+        itemName: String?,
+        limit: Int = 1,
+        force: Bool = false
+    ) async -> AddTrackingResult {
+        guard let token = deviceToken else { return .failure }
         do {
             let result = try await api.createTracking(
                 deviceToken: token,
                 carrierId: carrierId,
                 trackingNumber: trackingNumber,
-                itemName: itemName
+                itemName: itemName,
+                force: force
             )
             await loadTrackings()
 
@@ -158,10 +114,13 @@ final class TrackingService {
             }
 
             self.error = nil
-            return true
+            return .success
+        } catch APIError.trackingNotFound(let message) {
+            // 조회 불가 — 호출부에서 확인 다이얼로그를 띄운다 (에러로 표시하지 않음)
+            return .notFound(message: message)
         } catch {
             self.error = error.localizedDescription
-            return false
+            return .failure
         }
     }
 
@@ -312,6 +271,38 @@ final class TrackingService {
     // MARK: - Debug
 
     #if DEBUG
+    /// 설정의 테스트 토글이 켜졌을 때 목록에 표시할 더미 택배 데이터
+    static let dummyTrackings: [TrackingListItem] = [
+        TrackingListItem(
+            id: 1, carrierId: "cj", trackingNumber: "123456789012",
+            itemName: "맥북 프로 14인치", currentStatus: .delivering,
+            currentTValue: 0.8, carrierName: "CJ대한통운",
+            estimatedDelivery: "오늘", createdAt: "2026-04-10T09:00:00Z", deliveredAt: nil,
+            lastEventTime: "2026-04-11T10:00:00Z"
+        ),
+        TrackingListItem(
+            id: 2, carrierId: "hanjin", trackingNumber: "987654321098",
+            itemName: "에어팟 프로", currentStatus: .inTransitOut,
+            currentTValue: 0.5, carrierName: "한진택배",
+            estimatedDelivery: "내일", createdAt: "2026-04-09T15:30:00Z", deliveredAt: nil,
+            lastEventTime: "2026-04-10T08:00:00Z"
+        ),
+        TrackingListItem(
+            id: 3, carrierId: "lotte", trackingNumber: "555444333222",
+            itemName: "Nike 에어맥스", currentStatus: .delivered,
+            currentTValue: 0.95, carrierName: "롯데택배",
+            estimatedDelivery: nil, createdAt: "2026-04-07T11:00:00Z",
+            deliveredAt: "2026-04-11T14:22:00Z", lastEventTime: "2026-04-11T14:22:00Z"
+        ),
+        TrackingListItem(
+            id: 4, carrierId: "post", trackingNumber: "111222333444",
+            itemName: "무선 키보드", currentStatus: .registered,
+            currentTValue: 0.05, carrierName: "우체국택배",
+            estimatedDelivery: "3일 후", createdAt: "2026-04-12T08:00:00Z", deliveredAt: nil
+        ),
+    ]
+
+    /// TruckCustomizeView에서 내 트럭을 Dynamic Island에 미리 띄워볼 때 사용
     func startDemoLiveActivity() async {
         let demoItem = TrackingItemState(
             trackingNumber: "DEMO-0000",

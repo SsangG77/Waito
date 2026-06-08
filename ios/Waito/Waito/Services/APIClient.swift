@@ -7,6 +7,8 @@ enum APIError: LocalizedError {
     case serverError(statusCode: Int, message: String)
     case decodingError(Error)
     case networkError(Error)
+    /// 운송장 조회 불가(NOT_FOUND) — 사용자에게 확인 후 강제 추가 여부를 묻는다
+    case trackingNotFound(message: String)
 
     var errorDescription: String? {
         switch self {
@@ -18,6 +20,8 @@ enum APIError: LocalizedError {
             return "데이터 파싱 실패: \(error.localizedDescription)"
         case .networkError(let error):
             return "네트워크 오류: \(error.localizedDescription)"
+        case .trackingNotFound(let message):
+            return message
         }
     }
 }
@@ -29,7 +33,7 @@ actor APIClient {
 
     // TODO: 배포 시 실제 서버 URL로 변경
     #if DEBUG
-    private let baseURL = "http://192.168.219.45:3000"
+    private let baseURL = "http://192.168.31.189:3000"
     #else
     private let baseURL = "https://api.waito.app"
     #endif
@@ -58,13 +62,15 @@ actor APIClient {
         deviceToken: String,
         carrierId: String,
         trackingNumber: String,
-        itemName: String? = nil
+        itemName: String? = nil,
+        force: Bool = false
     ) async throws -> TrackingCreateResponse {
         try await post("/api/trackings", body: TrackingCreateRequest(
             deviceToken: deviceToken,
             carrierId: carrierId,
             trackingNumber: trackingNumber,
-            itemName: itemName
+            itemName: itemName,
+            force: force
         ))
     }
 
@@ -155,12 +161,16 @@ actor APIClient {
 
         // 4xx / 5xx
         if httpResponse.statusCode >= 400 {
-            let message: String
-            if let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data) {
-                message = errorResponse.error
-            } else {
-                message = String(data: data, encoding: .utf8) ?? "Unknown error"
+            let errorResponse = try? decoder.decode(APIErrorResponse.self, from: data)
+
+            // 운송장 조회 불가 → 확인 다이얼로그용 전용 에러
+            if httpResponse.statusCode == 422, errorResponse?.error == "TRACKING_NOT_FOUND" {
+                throw APIError.trackingNotFound(
+                    message: errorResponse?.message ?? "운송장을 조회할 수 없습니다."
+                )
             }
+
+            let message = errorResponse?.error ?? (String(data: data, encoding: .utf8) ?? "Unknown error")
             throw APIError.serverError(statusCode: httpResponse.statusCode, message: message)
         }
 

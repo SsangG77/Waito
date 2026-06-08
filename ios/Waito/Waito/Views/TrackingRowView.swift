@@ -4,20 +4,64 @@ struct TrackingRowView: View {
     let tracking: TrackingListItem
     let isLiveActive: Bool
     let onToggleLiveActivity: () -> Void
+    var onDelete: () -> Void = {}
+    /// 현재 삭제 버튼이 열린 행의 id (한 번에 하나만 열리도록 공유)
+    @Binding var openRowId: Int?
 
     @State private var isExpanded = false
+
+    // 왼쪽 슬라이드 → 삭제 버튼 노출
+    @State private var offsetX: CGFloat = 0
+    private let delWidth: CGFloat = 88
+    private let slideGap: CGFloat = 8
+    /// 완전히 열렸을 때 행이 왼쪽으로 밀리는 거리 (삭제 버튼 + 간격)
+    private var openOffset: CGFloat { -(delWidth + slideGap) }
+    // 통통 튀는 스프링 (열림/닫힘 공통)
+    private let slideSpring = Animation.spring(response: 0.4, dampingFraction: 0.6)
     
     
+    private enum DataState { case ok, checking, notFound }
+
+    /// 조회 데이터 상태. 등록 후 12시간 지나도 데이터가 없으면 notFound(번호 확인 유도)
+    private var dataState: DataState {
+        if tracking.hasTrackingData { return .ok }
+        if let created = parseServerDate(tracking.createdAt),
+           Date().timeIntervalSince(created) > 12 * 3600 {
+            return .notFound
+        }
+        return .checking
+    }
+
+    /// 프로그레스 색 — 데이터 없으면 회색
+    private var progressColor: Color {
+        dataState == .ok ? pixelStatusColor(tracking.currentStatus) : Color.pixelBorder
+    }
+
     var mainInfo: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(tracking.itemName.uppercased())
                 .font(pixelFont(15))
-                .foregroundStyle(Color.pixelText)
+                .foregroundStyle(dataState == .ok ? Color.pixelText : Color.pixelMuted)
                 .lineLimit(1)
 
-            Text(formatDate(tracking.createdAt))
-                .font(pixelFont(12))
-                .foregroundStyle(Color.pixelMuted)
+            HStack(spacing: 6) {
+                Text(formatDate(tracking.createdAt))
+                    .font(pixelFont(12))
+                    .foregroundStyle(Color.pixelMuted)
+
+                switch dataState {
+                case .checking:
+                    Text("· 확인 중")
+                        .font(pixelFont(10))
+                        .foregroundStyle(Color.pixelMuted)
+                case .notFound:
+                    Text("· 번호 확인 필요")
+                        .font(pixelFont(10))
+                        .foregroundStyle(Color.pixelOrange)
+                case .ok:
+                    EmptyView()
+                }
+            }
         }
     }
     
@@ -31,7 +75,7 @@ struct TrackingRowView: View {
             let dotSize: CGFloat = 5
             let gap: CGFloat = 4
             let lineWidth = (geo.size.width - (dotSize + gap * 2) * CGFloat(steps) + gap * 2) / CGFloat(steps - 1)
-            let activeColor = pixelStatusColor(tracking.currentStatus)
+            let activeColor = progressColor
 
             ZStack(alignment: .leading) {
                 ForEach(0..<steps - 1) { i in
@@ -69,13 +113,13 @@ struct TrackingRowView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .center, spacing: 10) {
                         Rectangle()
-                            .fill((isPast || isCurrent) ? pixelStatusColor(tracking.currentStatus) : Color.pixelBorder)
+                            .fill((isPast || isCurrent) ? progressColor : Color.pixelBorder)
                             .frame(width: 7, height: 7)
 
                         Text(stage.displayName)
                             .font(pixelFont(isCurrent ? 12 : 9))
                             .foregroundStyle(
-                                isCurrent ? pixelStatusColor(tracking.currentStatus)
+                                isCurrent ? progressColor
                                 : isPast   ? Color.pixelText.opacity(0.6)
                                 :            Color.pixelMuted.opacity(0.4)
                             )
@@ -83,7 +127,7 @@ struct TrackingRowView: View {
 
                     if index < DeliveryStatus.allCases.count - 1 {
                         Rectangle()
-                            .fill(isPast ? pixelStatusColor(tracking.currentStatus) : Color.pixelBorder)
+                            .fill(isPast ? progressColor : Color.pixelBorder)
                             .frame(width: 1, height: 19)
                             .padding(.leading, 3)
                     }
@@ -118,6 +162,31 @@ struct TrackingRowView: View {
     }
 
     var body: some View {
+        HStack(spacing: slideGap) {
+            // 행 콘텐츠 (컨테이너 전체 너비)
+            rowContent
+                .frame(maxWidth: .infinity)
+
+            // 삭제 버튼 (행 오른쪽 밖에 대기하다 함께 딸려나옴)
+            deleteButton
+        }
+        // 삭제 버튼을 행 오른쪽 바깥으로 밀어내 평소엔 숨김
+        .padding(.trailing, openOffset)
+        .offset(x: offsetX)
+        .gesture(dragGesture)
+        .clipped()
+        .onChange(of: openRowId) { _, newValue in
+            // 다른 행이 열리면 이 행은 닫는다
+            if newValue != tracking.id && offsetX != 0 {
+                withAnimation(slideSpring) { offsetX = 0 }
+            }
+        }
+        .listRowBackground(Color.bg)
+        .listRowSeparator(.hidden)
+        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+    }
+
+    private var rowContent: some View {
         VStack(alignment: .leading, spacing: 0) {
 
             // MARK: 기본 영역 (항상 보임)
@@ -140,7 +209,7 @@ struct TrackingRowView: View {
                     .transition(.opacity)
             }
 
-            // 펼친 상태: 세로 타임라인
+            // 펼친 상태: 세로 타임라인r
             if isExpanded {
                 VStack(alignment: .leading, spacing: 0) {
                     Rectangle()
@@ -158,15 +227,71 @@ struct TrackingRowView: View {
         }
         .contentShape(Rectangle())
         .onTapGesture {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                isExpanded.toggle()
+            if offsetX != 0 {
+                // 슬라이드가 열려 있으면 탭은 닫기
+                withAnimation(slideSpring) { offsetX = 0 }
+                if openRowId == tracking.id { openRowId = nil }
+            } else {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { isExpanded.toggle() }
             }
         }
         .clipped()
         .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
-        .listRowBackground(Color.bg)
-        .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+    }
+
+    // MARK: - 삭제 버튼 ("> DEL _")
+
+    private var deleteButton: some View {
+        Button {
+            withAnimation(slideSpring) { offsetX = 0 }
+            if openRowId == tracking.id { openRowId = nil }
+            onDelete()
+        } label: {
+            HStack(spacing: 8) {
+                Text(">")
+                Text("DEL_")
+            }
+            .font(pixelFont(11))
+            .foregroundStyle(Color.pixelText)
+            .frame(width: delWidth)
+            .frame(maxHeight: .infinity)
+            .pixelBox(border: Color.pixelRed.opacity(0.7), bg: Color.pixelRed, lineWidth: 1.5, notch: 4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - 슬라이드 제스처
+
+    private var dragGesture: some Gesture {
+        DragGesture(minimumDistance: 20)
+            .onChanged { value in
+                let t = value.translation.width
+                if t < 0 {
+                    // 왼쪽으로 끌기 시작하면 이 행을 활성화 → 다른 행은 닫힘
+                    if openRowId != tracking.id { openRowId = tracking.id }
+                    if t >= openOffset {
+                        offsetX = t                                  // 정상 범위: 손가락 따라감
+                    } else {
+                        // 최대치를 넘기면 고무줄처럼 저항 (탄력)
+                        offsetX = openOffset + (t - openOffset) * 0.25
+                    }
+                } else if offsetX < 0 {
+                    offsetX = min(0, openOffset + t)                 // 열린 상태에서 오른쪽으로 끌면 닫힘
+                }
+            }
+            .onEnded { value in
+                // 던지는 속도까지 반영해 열림/닫힘 결정 후 스프링으로 안착
+                let predicted = value.predictedEndTranslation.width
+                let willOpen = predicted < openOffset / 2
+                withAnimation(slideSpring) {
+                    offsetX = willOpen ? openOffset : 0
+                }
+                if willOpen {
+                    openRowId = tracking.id
+                } else if openRowId == tracking.id {
+                    openRowId = nil
+                }
+            }
     }
 
     private func labelValue(_ label: String, _ value: String) -> some View {
@@ -188,12 +313,23 @@ struct TrackingRowView: View {
         }
     }
 
+    /// 서버(SQLite datetime "yyyy-MM-dd HH:mm:ss", UTC) 또는 ISO8601 문자열을 Date 로 파싱
+    private func parseServerDate(_ s: String) -> Date? {
+        let iso = ISO8601DateFormatter()
+        iso.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let d = iso.date(from: s) { return d }
+        iso.formatOptions = [.withInternetDateTime]
+        if let d = iso.date(from: s) { return d }
+
+        let df = DateFormatter()
+        df.locale = Locale(identifier: "en_US_POSIX")
+        df.timeZone = TimeZone(identifier: "UTC")
+        df.dateFormat = "yyyy-MM-dd HH:mm:ss"
+        return df.date(from: s)
+    }
+
     private func formatDate(_ isoString: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        guard let date = formatter.date(from: isoString) ?? ISO8601DateFormatter().date(from: isoString) else {
-            return isoString
-        }
+        guard let date = parseServerDate(isoString) else { return isoString }
         let display = DateFormatter()
         display.locale = Locale(identifier: "ko_KR")
         display.dateFormat = "yyyy.MM.dd"
@@ -241,8 +377,8 @@ struct PixelChevron: Shape {
         deliveredAt: nil
     )
     List {
-        TrackingRowView(tracking: item, isLiveActive: true, onToggleLiveActivity: {})
-        TrackingRowView(tracking: item, isLiveActive: false, onToggleLiveActivity: {})
+        TrackingRowView(tracking: item, isLiveActive: true, onToggleLiveActivity: {}, openRowId: .constant(nil))
+        TrackingRowView(tracking: item, isLiveActive: false, onToggleLiveActivity: {}, openRowId: .constant(nil))
     }
     .listStyle(.plain)
     .scrollContentBackground(.hidden)
@@ -263,7 +399,7 @@ struct PixelChevron: Shape {
         deliveredAt: "2026-04-10T14:30:00Z"
     )
     List {
-        TrackingRowView(tracking: item, isLiveActive: false, onToggleLiveActivity: {})
+        TrackingRowView(tracking: item, isLiveActive: false, onToggleLiveActivity: {}, openRowId: .constant(nil))
     }
     .listStyle(.plain)
     .scrollContentBackground(.hidden)

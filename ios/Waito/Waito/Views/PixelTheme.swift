@@ -121,6 +121,115 @@ struct PixelTextField: View {
     }
 }
 
+// MARK: - PixelDropdown
+// 시스템 기본 Menu 대신, 펼치면 픽셀 스타일로 목록이 나타나는 드롭다운
+
+struct PixelDropdownOption: Identifiable, Equatable {
+    let id: String
+    let name: String
+}
+
+struct PixelDropdown: View {
+    let label: String
+    let options: [PixelDropdownOption]
+    @Binding var selectedId: String
+    var placeholder: String = "선택해주세요"
+    var emptyText: String = "로딩 중..."
+
+    @State private var isOpen = false
+
+    private var selectedName: String {
+        options.first(where: { $0.id == selectedId })?.name ?? placeholder
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(label)
+                .font(pixelFont(9))
+                .foregroundStyle(Color.pixelOrange)
+
+            VStack(spacing: 0) {
+                // 헤더 — 탭하면 펼침/접힘
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                        isOpen.toggle()
+                    }
+                } label: {
+                    HStack {
+                        Text(selectedName)
+                            .font(pixelFont(10))
+                            .foregroundStyle(selectedId.isEmpty ? Color.pixelMuted : Color.pixelText)
+                        Spacer()
+                        Text(isOpen ? "▲" : "▼")
+                            .font(pixelFont(8))
+                            .foregroundStyle(Color.pixelOrange)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 14)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                // 펼침 목록
+                if isOpen {
+                    Rectangle()
+                        .fill(Color.pixelBorder)
+                        .frame(height: 1)
+
+                    if options.isEmpty {
+                        Text(emptyText)
+                            .font(pixelFont(10))
+                            .foregroundStyle(Color.pixelMuted)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 12)
+                    } else {
+                        ForEach(Array(options.enumerated()), id: \.element.id) { index, option in
+                            if index > 0 {
+                                Rectangle()
+                                    .fill(Color.pixelBorder.opacity(0.4))
+                                    .frame(height: 1)
+                            }
+                            optionRow(option)
+                        }
+                    }
+                }
+            }
+            .pixelBox(
+                border: isOpen ? Color.pixelOrange.opacity(0.6) : Color.pixelBorder,
+                bg: Color.pixelSurface,
+                lineWidth: 1.5,
+                notch: 4
+            )
+        }
+    }
+
+    private func optionRow(_ option: PixelDropdownOption) -> some View {
+        let isSelected = option.id == selectedId
+        return Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                selectedId = option.id
+                isOpen = false
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text(isSelected ? ">" : " ")
+                    .font(pixelFont(10))
+                    .foregroundStyle(Color.pixelOrange)
+                Text(option.name)
+                    .font(pixelFont(10))
+                    .foregroundStyle(isSelected ? Color.pixelOrange : Color.pixelText)
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 12)
+            .background(isSelected ? Color.pixelOrange.opacity(0.08) : Color.clear)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+    }
+}
+
 // MARK: - PixelButton
 
 struct PixelButton: View {
@@ -251,6 +360,107 @@ extension View {
                     onConfirm()
                     isPresented.wrappedValue = false
                 }
+                .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented.wrappedValue)
+                .zIndex(999)
+            }
+        }
+    }
+}
+
+// MARK: - PixelConfirm (예/아니오 2버튼 확인 다이얼로그)
+
+struct PixelConfirm: View {
+    let title: String
+    let message: String
+    let confirmTitle: String
+    let cancelTitle: String
+    let onConfirm: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        ZStack {
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+
+            VStack(alignment: .leading, spacing: 0) {
+                Text(title.uppercased())
+                    .font(pixelFont(15))
+                    .foregroundStyle(Color.pixelOrange)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 13)
+                    .padding(.bottom, 12)
+
+                Rectangle()
+                    .fill(Color.pixelBorder)
+                    .frame(height: 1)
+                    .padding(.horizontal, 18)
+
+                Text(message)
+                    .font(pixelFont(11))
+                    .foregroundStyle(Color.pixelText)
+                    .lineSpacing(5)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 14)
+
+                Rectangle()
+                    .fill(Color.pixelBorder)
+                    .frame(height: 1)
+                    .padding(.horizontal, 18)
+
+                HStack(spacing: 0) {
+                    Button(action: onCancel) {
+                        Text(cancelTitle.uppercased())
+                            .font(pixelFont(12))
+                            .foregroundStyle(Color.pixelMuted)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                    }
+                    .buttonStyle(.plain)
+
+                    Rectangle()
+                        .fill(Color.pixelBorder)
+                        .frame(width: 1, height: 40)
+
+                    Button(action: onConfirm) {
+                        Text("> \(confirmTitle.uppercased())_")
+                            .font(pixelFont(12))
+                            .foregroundStyle(Color.pixelOrange)
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 11)
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 8)
+            .padding(.horizontal, 40)
+        }
+    }
+}
+
+extension View {
+    func pixelConfirm(
+        title: String,
+        message: String,
+        confirmTitle: String = "추가",
+        cancelTitle: String = "취소",
+        isPresented: Binding<Bool>,
+        onConfirm: @escaping () -> Void = {}
+    ) -> some View {
+        ZStack {
+            self
+            if isPresented.wrappedValue {
+                PixelConfirm(
+                    title: title,
+                    message: message,
+                    confirmTitle: confirmTitle,
+                    cancelTitle: cancelTitle,
+                    onConfirm: {
+                        onConfirm()
+                        isPresented.wrappedValue = false
+                    },
+                    onCancel: { isPresented.wrappedValue = false }
+                )
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented.wrappedValue)
                 .zIndex(999)

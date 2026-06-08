@@ -30,6 +30,7 @@ export const CARRIERS: Carrier[] = [
   { id: 'lotte', name: '롯데택배', trackerId: 'kr.lotte' },
   { id: 'epost', name: '우체국택배', trackerId: 'kr.epost' },
   { id: 'logen', name: '로젠택배', trackerId: 'kr.logen' },
+  { id: 'coupang', name: '쿠팡', trackerId: 'kr.coupangls' },
 ];
 
 export interface Tracking {

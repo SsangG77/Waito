@@ -120,15 +120,14 @@ export function startPollingScheduler(): void {
     console.log('[Webhook] Renewing expiring webhooks...');
     const db = getDb();
     const trackings = db.prepare(`
-      SELECT id, carrier_id, tracking_number, webhook_id FROM trackings
-      WHERE webhook_id IS NOT NULL
+      SELECT id, carrier_id, tracking_number FROM trackings
+      WHERE webhook_expires_at IS NOT NULL
         AND delivered_at IS NULL
         AND webhook_expires_at < datetime('now', '+24 hours')
     `).all() as Array<{
       id: number;
       carrier_id: string;
       tracking_number: string;
-      webhook_id: string;
     }>;
 
     for (const t of trackings) {
@@ -143,9 +142,9 @@ export function startPollingScheduler(): void {
         );
 
         db.prepare(`
-          UPDATE trackings SET webhook_id = ?, webhook_expires_at = ?, updated_at = datetime('now')
+          UPDATE trackings SET webhook_expires_at = ?, updated_at = datetime('now')
           WHERE id = ?
-        `).run(result.webhookId, result.expiresAt, t.id);
+        `).run(result.expiresAt, t.id);
       } catch (error) {
         console.error(`[Webhook] Renewal failed for tracking ${t.id}:`, error);
       }

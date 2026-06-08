@@ -20,7 +20,6 @@ struct ContentView: View {
                 await service.registerDevice(token: UUID().uuidString)
             }
             await service.loadTrackings()
-            service.loadDummyDataIfNeeded()
         }
         .overlay {
             DynamicIslandTruckOverlay()

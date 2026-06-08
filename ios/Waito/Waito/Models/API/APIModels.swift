@@ -24,6 +24,8 @@ struct TrackingCreateRequest: Encodable {
     let carrierId: String
     let trackingNumber: String
     let itemName: String?
+    /// 운송장 조회 실패(NOT_FOUND)에도 강제로 추가할지 여부
+    let force: Bool?
 }
 
 /// POST /api/trackings 응답 (camelCase)
@@ -50,6 +52,8 @@ struct TrackingListItem: Decodable, Identifiable {
     let carrierName: String
     let estimatedDelivery: String?
     let createdAt: String
+    let updatedAt: String?
+    let lastEventTime: String?
     let deliveredAt: String?
 
     enum CodingKeys: String, CodingKey {
@@ -62,7 +66,41 @@ struct TrackingListItem: Decodable, Identifiable {
         case carrierName = "carrier_name"
         case estimatedDelivery = "estimated_delivery"
         case createdAt = "created_at"
+        case updatedAt = "updated_at"
+        case lastEventTime = "last_event_time"
         case deliveredAt = "delivered_at"
+    }
+
+    /// 한 번이라도 조회에 성공해 이벤트를 받았는지. nil 이면 "아직 데이터 없음"
+    var hasTrackingData: Bool { lastEventTime != nil }
+
+    // 더미/프리뷰 생성 코드 호환을 위해 updatedAt / lastEventTime 은 기본값 nil
+    init(
+        id: Int,
+        carrierId: String,
+        trackingNumber: String,
+        itemName: String,
+        currentStatus: DeliveryStatus,
+        currentTValue: CGFloat,
+        carrierName: String,
+        estimatedDelivery: String?,
+        createdAt: String,
+        deliveredAt: String?,
+        updatedAt: String? = nil,
+        lastEventTime: String? = nil
+    ) {
+        self.id = id
+        self.carrierId = carrierId
+        self.trackingNumber = trackingNumber
+        self.itemName = itemName
+        self.currentStatus = currentStatus
+        self.currentTValue = currentTValue
+        self.carrierName = carrierName
+        self.estimatedDelivery = estimatedDelivery
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.lastEventTime = lastEventTime
+        self.deliveredAt = deliveredAt
     }
 }
 
@@ -134,4 +172,5 @@ struct PushTokenUpdateRequest: Encodable {
 
 struct APIErrorResponse: Decodable {
     let error: String
+    let message: String?
 }
