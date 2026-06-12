@@ -268,6 +268,65 @@ final class TrackingService {
         }
     }
 
+    // MARK: - Push-to-Start (8시간 한도 후 재시작 대비)
+
+    /// push-to-start 토큰을 관찰해 서버에 등록한다. 앱 시작 시 호출(무한 스트림이므로 백그라운드 Task에서).
+    /// iOS 17.2+ 에서만 동작. Live Activity 를 앱에서 시작하지 않아도 토큰을 받을 수 있다.
+    func observePushToStartToken() async {
+        guard #available(iOS 17.2, *) else { return }
+        for await tokenData in Activity<DeliveryAttributes>.pushToStartTokenUpdates {
+            // 디바이스 미등록 상태면 이번 토큰은 보류. 스트림은 유지되므로 등록 후 다음 토큰(회전)에서 전송된다.
+            guard let device = deviceToken else { continue }
+            let token = tokenData.map { String(format: "%02x", $0) }.joined()
+            try? await api.registerPushToStartToken(
+                deviceToken: device,
+                pushToStartToken: token,
+                truckConfig: TruckConfigStore.shared.config
+            )
+        }
+    }
+
+    /// push-to-start 로 새로 시작된 Activity 의 update 토큰을 서버에 등록한다. 앱 시작 시 호출(무한 스트림).
+    func observeActivityUpdates() async {
+        for await activity in Activity<DeliveryAttributes>.activityUpdates {
+            observeUpdateToken(for: activity)
+        }
+    }
+
+    private func observeUpdateToken(for activity: Activity<DeliveryAttributes>) {
+        Task {
+            for await tokenData in activity.pushTokenUpdates {
+                let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                await registerUpdateToken(token, for: activity)
+            }
+        }
+    }
+
+    private func registerUpdateToken(_ token: String, for activity: Activity<DeliveryAttributes>) async {
+        if trackings.isEmpty { await loadTrackings() }
+        guard let number = activity.content.state.items.first?.trackingNumber,
+              let tracking = trackings.first(where: { $0.trackingNumber == number }) else {
+            #if DEBUG
+            print("[PushToStart] update 토큰 등록 보류 — content-state 운송장에 매칭되는 tracking 없음")
+            #endif
+            return
+        }
+        try? await api.updatePushToken(trackingId: tracking.id, pushToken: token)
+    }
+
+    /// 트럭 설정이 바뀌면 push-to-start 페이로드에 쓰일 서버 측 트럭 설정도 갱신한다.
+    func refreshPushToStartConfig() async {
+        guard #available(iOS 17.2, *) else { return }
+        guard let device = deviceToken,
+              let tokenData = Activity<DeliveryAttributes>.pushToStartToken else { return }
+        let token = tokenData.map { String(format: "%02x", $0) }.joined()
+        try? await api.registerPushToStartToken(
+            deviceToken: device,
+            pushToStartToken: token,
+            truckConfig: TruckConfigStore.shared.config
+        )
+    }
+
     // MARK: - Debug
 
     #if DEBUG

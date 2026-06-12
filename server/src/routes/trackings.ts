@@ -189,8 +189,9 @@ router.put('/:id/push-token', (req: Request, res: Response) => {
   }
 
   const db = getDb();
+  // push token 을 받은 시점 = Live Activity 가 (다시) 시작된 시점 → 8시간 재시작 기준으로 기록
   const result = db.prepare(
-    "UPDATE trackings SET live_activity_push_token = ?, updated_at = datetime('now') WHERE id = ?"
+    "UPDATE trackings SET live_activity_push_token = ?, live_activity_started_at = datetime('now'), updated_at = datetime('now') WHERE id = ?"
   ).run(pushToken, req.params.id);
 
   if (result.changes === 0) {

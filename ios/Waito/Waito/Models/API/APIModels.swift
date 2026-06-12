@@ -168,6 +168,16 @@ struct PushTokenUpdateRequest: Encodable {
     let pushToken: String
 }
 
+// MARK: - Push-to-Start Token
+
+/// 디바이스/앱당 1개. 8시간 한도로 종료된 Live Activity 를 서버가 재시작할 때 사용.
+/// truckConfig 를 함께 보내 서버가 start 페이로드의 content-state 에 그대로 실어준다.
+struct PushToStartTokenRequest: Encodable {
+    let deviceToken: String
+    let pushToStartToken: String
+    let truckConfig: TruckConfig?
+}
+
 // MARK: - API Error
 
 struct APIErrorResponse: Decodable {

@@ -47,7 +47,10 @@ struct TruckCustomizeView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .onChange(of: store.config) {
-            Task { await service.pushTruckConfig() }
+            Task {
+                await service.pushTruckConfig()            // 실행 중인 Activity 즉시 반영
+                await service.refreshPushToStartConfig()   // 8h 재시작 시 쓰일 서버 측 트럭 설정도 갱신
+            }
         }
         .pixelAlert(
             title: "Waito Plus",

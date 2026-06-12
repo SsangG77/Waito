@@ -151,7 +151,11 @@ export function startPollingScheduler(): void {
     }
   });
 
+  // Push-to-Start 재개는 별도 8시간 타이머가 아니라, 배송 상태 변경 시(pushTrackingUpdate)
+  // Activity 가 죽어 있으면 그 순간 되살리는 이벤트 기반으로 처리한다. (의미 없는 재시작 알림 방지)
+
   console.log('[Polling] Scheduler started');
 }
+
 
 export { pollTracking };

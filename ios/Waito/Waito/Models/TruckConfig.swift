@@ -101,3 +101,28 @@ struct TruckConfig: Codable, Equatable, Hashable {
 
     static let `default` = TruckConfig()
 }
+
+// MARK: - 견고한 디코딩
+// 서버 push(content-state.truckConfig)나 구버전/스키마 진화로 일부 키가 빠지거나
+// 잘못된 enum raw 값이 와도, 해당 필드만 기본값으로 폴백한다.
+// (합성 Decodable 은 키 누락/잘못된 값에서 throw → ContentState 전체 디코딩 실패를 유발하므로 커스텀)
+// extension 에 두어 본체의 memberwise init(= .default) 은 그대로 유지.
+extension TruckConfig {
+    private enum CodingKeys: String, CodingKey {
+        case shape, style, headColor, cargoColor, boxColor, runMode, cab, body, wheelType
+    }
+
+    init(from decoder: Decoder) throws {
+        self.init()
+        guard let c = try? decoder.container(keyedBy: CodingKeys.self) else { return }
+        shape      = (try? c.decode(TruckShape.self,     forKey: .shape))      ?? shape
+        style      = (try? c.decode(TruckStyle.self,     forKey: .style))      ?? style
+        headColor  = (try? c.decode(TruckColor.self,     forKey: .headColor))  ?? headColor
+        cargoColor = (try? c.decode(TruckColor.self,     forKey: .cargoColor)) ?? cargoColor
+        boxColor   = (try? c.decode(TruckColor.self,     forKey: .boxColor))   ?? boxColor
+        runMode    = (try? c.decode(TruckRunMode.self,   forKey: .runMode))    ?? runMode
+        cab        = (try? c.decode(TruckCab.self,       forKey: .cab))        ?? cab
+        body       = (try? c.decode(TruckBody.self,      forKey: .body))       ?? body
+        wheelType  = (try? c.decode(TruckWheelType.self, forKey: .wheelType))  ?? wheelType
+    }
+}

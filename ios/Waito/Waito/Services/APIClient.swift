@@ -97,6 +97,18 @@ actor APIClient {
         )
     }
 
+    /// push-to-start 토큰 + 트럭 설정을 디바이스 단위로 등록
+    func registerPushToStartToken(deviceToken: String, pushToStartToken: String, truckConfig: TruckConfig) async throws {
+        let _: SuccessResponse = try await put(
+            "/api/devices/push-to-start-token",
+            body: PushToStartTokenRequest(
+                deviceToken: deviceToken,
+                pushToStartToken: pushToStartToken,
+                truckConfig: truckConfig
+            )
+        )
+    }
+
     // MARK: - Carriers
 
     func getCarriers() async throws -> [Carrier] {

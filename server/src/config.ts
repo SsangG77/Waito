@@ -20,6 +20,8 @@ export const config = {
     teamId: process.env.APNS_TEAM_ID || '',
     keyPath: process.env.APNS_KEY_PATH || './certs/AuthKey.p8',
     bundleId: process.env.APNS_BUNDLE_ID || 'com.sangjin.waito',
+    // 기본은 sandbox(개발). 프로덕션 APNs 사용 시 APNS_PRODUCTION=true
+    production: process.env.APNS_PRODUCTION === 'true',
   },
 
   webhookBaseUrl: process.env.WEBHOOK_BASE_URL || 'http://localhost:3000',

@@ -20,6 +20,10 @@ struct ContentView: View {
                 await service.registerDevice(token: UUID().uuidString)
             }
             await service.loadTrackings()
+            // 디바이스 등록 후 push-to-start / update 토큰 관찰 시작 (무한 스트림 — 뷰 생명주기 동안 유지)
+            async let pushToStart: Void = service.observePushToStartToken()
+            async let activityUpdates: Void = service.observeActivityUpdates()
+            _ = await (pushToStart, activityUpdates)
         }
         .overlay {
             DynamicIslandTruckOverlay()
