@@ -30,6 +30,9 @@ final class TrackingService {
     private let api = APIClient.shared
     private let deviceTokenKey = "waito_device_token"
     private let liveTrackingsKey = "waito_live_tracking_numbers"
+    /// "항상 노출"(배송 없어도 Dynamic Island 트럭 유지) 토글 저장 키 — SettingsView @AppStorage 와 공유
+    /// ⚠️ 값 변경 시 기존 사용자 설정이 초기화되므로 마이그레이션 필요
+    static let alwaysShowKey = "waito_always_show_di"
 
     // MARK: - Init
 
@@ -82,7 +85,11 @@ final class TrackingService {
             if !completed.isEmpty {
                 liveTrackingNumbers.removeAll { completed.contains($0) }
                 saveLiveTrackingNumbers()
-                await updateLiveActivity()
+                if liveTrackingNumbers.isEmpty {
+                    await reconcileAmbientActivity()
+                } else {
+                    await updateLiveActivity()
+                }
             }
             self.error = nil
         } catch {
@@ -159,6 +166,77 @@ final class TrackingService {
         }
     }
 
+    // MARK: - 항상 노출 (배송 없어도 Dynamic Island 트럭 유지)
+
+    /// 설정의 "항상 노출" 토글 상태
+    var alwaysShowDynamicIsland: Bool {
+        UserDefaults.standard.bool(forKey: Self.alwaysShowKey)
+    }
+
+    /// 구독 여부 — SubscriptionManager 와 동일 키를 공유해 방어적으로 재확인한다.
+    /// (구독이 만료됐는데 토글이 켜진 채로 남아 ambient 가 동작하는 것을 막는다)
+    private var isSubscribed: Bool {
+        UserDefaults.standard.bool(forKey: SubscriptionManager.storageKey)
+    }
+
+    /// 배송 없어도 트럭을 띄울 수 있는 상태 (토글 ON + 구독)
+    private var ambientEnabled: Bool {
+        alwaysShowDynamicIsland && isSubscribed
+    }
+
+    /// 설정에서 "항상 노출" 토글 변경 시 호출 — 저장 후 ambient Activity 를 즉시 반영.
+    func setAlwaysShow(_ on: Bool) async {
+        UserDefaults.standard.set(on, forKey: Self.alwaysShowKey)
+        await reconcileAmbientActivity()
+    }
+
+    /// 앱 진입 시: 배송이 없고 ambient 가 켜져 있으면 트럭을 띄운다.
+    /// 시작 전용 — 이미 떠 있는 Activity(배송 / push-to-start 복원)는 절대 건드리지 않는다.
+    /// (그렇지 않으면 복원된 배송 Activity 를 빈 ambient 로 덮어써 데이터가 사라질 수 있다)
+    func startAmbientIfEnabled() async {
+        guard liveTrackingNumbers.isEmpty, ambientEnabled,
+              Activity<DeliveryAttributes>.activities.isEmpty else { return }
+        await startAmbientActivity()
+    }
+
+    /// 배송이 없을 때 ambient Live Activity 를 켜고/끈다.
+    /// (배송이 있으면 배송 Activity 가 우선이라 관여하지 않는다)
+    func reconcileAmbientActivity() async {
+        guard liveTrackingNumbers.isEmpty else { return }
+        if ambientEnabled {
+            await startAmbientActivity()
+        } else {
+            await endLiveActivity()
+        }
+    }
+
+    /// items 없이 트럭만 담은 ambient 콘텐츠. (DI compact/minimal 은 items 없이도 트럭을 그린다)
+    private func ambientContentState() -> DeliveryAttributes.ContentState {
+        DeliveryAttributes.ContentState(items: [], truckConfig: TruckConfigStore.shared.config)
+    }
+
+    /// ambient Live Activity 시작/유지. 서버 푸시가 필요 없으므로 로컬 전용(pushType: nil).
+    /// 이미 Activity 가 있으면 ambient(빈 items) 상태로 업데이트한다.
+    private func startAmbientActivity() async {
+        guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
+
+        if let activity = Activity<DeliveryAttributes>.activities.first {
+            await activity.update(.init(state: ambientContentState(), staleDate: nil))
+            return
+        }
+
+        let attributes = DeliveryAttributes(deviceId: deviceToken ?? "unknown")
+        do {
+            _ = try Activity.request(
+                attributes: attributes,
+                content: .init(state: ambientContentState(), staleDate: nil),
+                pushType: nil
+            )
+        } catch {
+            self.error = "Live Activity 시작 실패: \(error.localizedDescription)"
+        }
+    }
+
     // MARK: - Live Activity 관리 (싱글 인스턴스, 다중 택배)
 
     /// 특정 택배가 Live Activity에 등록되어 있는지
@@ -180,7 +258,8 @@ final class TrackingService {
         saveLiveTrackingNumbers()
 
         if liveTrackingNumbers.isEmpty {
-            await endLiveActivity()
+            // 항상 노출 ON이면 종료 대신 ambient(트럭만)로 전환, 아니면 종료
+            await reconcileAmbientActivity()
         } else {
             await updateLiveActivity()
         }
@@ -227,7 +306,14 @@ final class TrackingService {
 
         // 이미 활성 Activity가 있으면 업데이트
         if let activity = Activity<DeliveryAttributes>.activities.first {
-            await activity.update(.init(state: state, staleDate: nil))
+            // 기존이 ambient(빈 items, 푸시 토큰 미등록)면, 서버 푸시를 받을 수 있도록
+            // 푸시 토큰을 갖춘 배송 Activity로 교체한다.
+            if activity.content.state.items.isEmpty {
+                await activity.end(nil, dismissalPolicy: .immediate)
+                await startLiveActivity(state: state)
+            } else {
+                await activity.update(.init(state: state, staleDate: nil))
+            }
             return
         }
 

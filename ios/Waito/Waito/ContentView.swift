@@ -20,6 +20,8 @@ struct ContentView: View {
                 await service.registerDevice(token: UUID().uuidString)
             }
             await service.loadTrackings()
+            // 항상 노출(구독 + 토글 ON)이고 배송이 없으면 ambient 트럭을 띄운다 (무한 스트림 await 이전에 호출)
+            await service.startAmbientIfEnabled()
             // 디바이스 등록 후 push-to-start / update 토큰 관찰 시작 (무한 스트림 — 뷰 생명주기 동안 유지)
             async let pushToStart: Void = service.observePushToStartToken()
             async let activityUpdates: Void = service.observeActivityUpdates()

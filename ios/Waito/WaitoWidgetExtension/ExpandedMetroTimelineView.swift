@@ -9,11 +9,36 @@ struct ExpandedMetroTimelineView: View {
         Group {
             if let primary = state.primary {
                 mainContent(primary)
+            } else {
+                idleContent
             }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .background(Color.black)
+    }
+
+    /// 배송이 없을 때(항상 노출) — 트럭만 보여주는 대기 상태
+    private var idleContent: some View {
+        HStack(spacing: 8) {
+            CatalogTruckView(
+                cab: state.truckConfig.cab,
+                truckBody: state.truckConfig.body,
+                wheels: state.truckConfig.wheelType,
+                size: 16
+            )
+            .frame(width: 22)
+
+            Text("배송 대기 중")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.white.opacity(0.7))
+
+            Spacer()
+
+            Text("Waito")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(Color.wPixelOrange)
+        }
     }
 
     private func mainContent(_ item: TrackingItemState) -> some View {

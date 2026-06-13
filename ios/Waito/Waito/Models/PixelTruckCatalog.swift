@@ -1,122 +1,145 @@
 import Foundation
 
-// MARK: - TruckCab
+// 픽셀 카탈로그 — 트럭/탱크/기차/건설 부품을 자유 조합한다.
+// rawValue = 에셋 카탈로그(PixelCatalog)의 imageset 이름과 정확히 일치 → imageName 은 rawValue 그대로.
+// 무료(비구독)는 각 부위의 기본 1종만, 나머지는 Waito Plus 필요.
+
+// MARK: - TruckCab (앞부분: 트럭 헤드 / 탱크 포신 / 기관차 / 건설 암)
 
 enum TruckCab: String, CaseIterable, Codable, Hashable {
-    case black
-    case blue
-    case brown
-    case cream
-    case green
-    case mint
-    case navy
-    case orangeBar
-    case pink
-    case purple
-    case redStack
-    case yellowBeacon
+    // 🚚 트럭 헤드
+    case truckCream        = "01_TruckHead_Cream"
+    case truckSoftBlue     = "02_TruckHead_SoftBlue"
+    case truckNavy         = "03_TruckHead_Navy"
+    case truckRedStack     = "04_TruckHead_RedStack"
+    case truckBlack        = "05_TruckHead_Black"
+    case truckOrangeBar    = "06_TruckHead_OrangeBar"
+    case truckMint         = "07_TruckHead_Mint"
+    case truckBeacon       = "08_TruckHead_Beacon"
+    case truckGreen        = "09_TruckHead_Green"
+    case truckPurple       = "10_TruckHead_Purple"
+    case truckPink         = "11_TruckHead_Pink"
+    case truckBrown        = "12_TruckHead_Brown"
+    // 🪖 탱크 포신
+    case tankGunStandard   = "13_TankGun_GunStandard"
+    case tankGunLong       = "14_TankGun_GunLong"
+    case tankGunHowitzer   = "15_TankGun_GunHowitzer"
+    // 🚆 기관차
+    case trainLocoSteam    = "16_Train_LocoSteam"
+    case trainLocoDiesel   = "17_Train_LocoDiesel"
+    case trainLocoElectric = "18_Train_LocoElectric"
+    case trainLocoBullet   = "19_Train_LocoBullet"
+    case trainLocoFunnel   = "20_Train_LocoFunnel"
+    case trainLocoMetro    = "21_Train_LocoMetro"
+    // 🏗️ 건설 암
+    case constArmExcavator    = "22_Construction_ArmExcavator"
+    case constArmCrane        = "23_Construction_ArmCrane"
+    case constArmConcretePump = "24_Construction_ArmConcretePump"
+    case constArmBreaker      = "25_Construction_ArmBreaker"
+    case constArmTelehandler  = "26_Construction_ArmTelehandler"
+    case constArmCherryPicker = "27_Construction_ArmCherryPicker"
 
-    var imageName: String {
-        switch self {
-        case .orangeBar:     return "cab_orange_bar"
-        case .redStack:      return "cab_red_stack"
-        case .yellowBeacon:  return "cab_yellow_beacon"
-        default:             return "cab_\(rawValue)"
-        }
-    }
-
-    var displayName: String {
-        switch self {
-        case .black:         return "블랙"
-        case .blue:          return "블루"
-        case .brown:         return "브라운"
-        case .cream:         return "크림"
-        case .green:         return "그린"
-        case .mint:          return "민트"
-        case .navy:          return "네이비"
-        case .orangeBar:     return "오렌지바"
-        case .pink:          return "핑크"
-        case .purple:        return "퍼플"
-        case .redStack:      return "레드스택"
-        case .yellowBeacon:  return "옐로비콘"
-        }
-    }
-
-    var requiresPlus: Bool { self != .blue }
+    var imageName: String { rawValue }
+    var displayName: String { catalogDisplayName(rawValue) }
+    /// 무료 개방 = 트럭 헤드 일부만. 탱크 포신·기관차·건설 암은 모두 Plus.
+    static let freeCases: Set<TruckCab> = [.truckSoftBlue, .truckCream]
+    var requiresPlus: Bool { !Self.freeCases.contains(self) }
 }
 
-// MARK: - TruckBody
+// MARK: - TruckBody (짐칸: 트럭 / 컨테이너 / 탱크로리 / 탱크 포탑 / 기차 차량 / 건설 차체)
 
 enum TruckBody: String, CaseIterable, Codable, Hashable {
-    case boxes
-    case container
-    case dump
-    case express
-    case flatbed
-    case food
-    case garbage
-    case moving
-    case orange
-    case reefer
-    case semi
-    case tanker
+    // 🚚 트럭 바디
+    case truckOrangeBox    = "01_Truck_OrangeBox"
+    case truckMovingCream  = "02_Truck_MovingCream"
+    case truckReefer       = "03_Truck_Reefer"
+    case truckSemiStrapped = "04_Truck_SemiStrapped"
+    case truckExpressBlack = "05_Truck_ExpressBlack"
+    case truckFlatbed      = "06_Truck_Flatbed"
+    case truckTanker       = "07_Truck_Tanker"
+    case truckFoodTruck    = "08_Truck_FoodTruck"
+    case truckDumpBody     = "09_Truck_DumpBody"
+    case truckGarbage      = "10_Truck_Garbage"
+    case truckLoadedBoxes  = "11_Truck_LoadedBoxes"
+    // 📦 컨테이너
+    case containerContainer = "12_Container_Container"
+    case containerStacked   = "13_Container_StackedContainers"
+    case containerOpenTop   = "14_Container_OpenTopContainer"
+    case containerReefer    = "15_Container_ReeferContainer"
+    // 🛢️ 탱크로리
+    case liquidMilk = "16_LiquidTank_MilkTank"
+    case liquidFuel = "17_LiquidTank_FuelTank"
+    case liquidGas  = "18_LiquidTank_GasTank"
+    // 🪖 탱크 포탑
+    case tankTurretOlive  = "19_Tank_TurretOlive"
+    case tankTurretDesert = "20_Tank_TurretDesert"
+    case tankTurretHeavy  = "21_Tank_TurretHeavy"
+    // 🚆 기차 차량
+    case trainPassenger = "22_Train_TrainPassenger"
+    case trainBoxcar    = "23_Train_TrainBoxcar"
+    case trainTankCar   = "24_Train_TrainTankCar"
+    case trainHopper    = "25_Train_TrainHopper"
+    case trainFlatcar   = "26_Train_TrainFlatcar"
+    case trainCaboose   = "27_Train_TrainCaboose"
+    // 🏗️ 건설 차체
+    case constExcavatorHouse = "28_Construction_ExcavatorHouse"
+    case constCraneBase      = "29_Construction_CraneBase"
+    case constMixerDrum      = "30_Construction_MixerDrum"
+    case constDumpBed        = "31_Construction_DumpBed"
+    case constDozerBody      = "32_Construction_DozerBody"
+    case constRollerFrame    = "33_Construction_RollerFrame"
 
-    var imageName: String { "body_\(rawValue)" }
-
-    var displayName: String {
-        switch self {
-        case .boxes:     return "박스"
-        case .container: return "컨테이너"
-        case .dump:      return "덤프"
-        case .express:   return "택배"
-        case .flatbed:   return "플랫베드"
-        case .food:      return "푸드"
-        case .garbage:   return "환경"
-        case .moving:    return "이사"
-        case .orange:    return "오렌지"
-        case .reefer:    return "냉동"
-        case .semi:      return "세미"
-        case .tanker:    return "탱커"
-        }
-    }
-
-    var requiresPlus: Bool { self != .express }
+    var imageName: String { rawValue }
+    var displayName: String { catalogDisplayName(rawValue) }
+    /// 무료 개방 = 트럭 바디 일부만. 컨테이너·탱크로리(물탱크)·탱크 포탑·기차 차량·건설 차체는 모두 Plus.
+    static let freeCases: Set<TruckBody> = [.truckExpressBlack, .truckOrangeBox, .truckMovingCream]
+    var requiresPlus: Bool { !Self.freeCases.contains(self) }
 }
 
-// MARK: - TruckWheelType
+// MARK: - TruckWheelType (바퀴: 트럭 / 탱크 궤도 / 기차 바퀴 / 건설 궤도·바퀴)
 
 enum TruckWheelType: String, CaseIterable, Codable, Hashable {
-    case standard
-    case chrome
-    case flame
-    case gold
-    case heavy
-    case mud
-    case neon
-    case offroad
-    case red
-    case small
-    case spokes
-    case whitewall
+    // 🚚 트럭 바퀴
+    case standard  = "01_Wheels_Standard"
+    case chrome    = "02_Wheels_Chrome"
+    case gold      = "03_Wheels_Gold"
+    case redRim    = "04_Wheels_RedRim"
+    case mud       = "05_Wheels_Mud"
+    case spoked    = "06_Wheels_Spoked"
+    case whiteWall = "07_Wheels_WhiteWall"
+    case heavyDuty = "08_Wheels_HeavyDuty"
+    case offRoad   = "09_Wheels_OffRoad"
+    case mini      = "10_Wheels_Mini"
+    case neon      = "11_Wheels_Neon"
+    case flame     = "12_Wheels_Flame"
+    // 🪖 탱크 궤도
+    case tankTrackSteel  = "13_TankTrack_TrackSteel"
+    case tankTrackDesert = "14_TankTrack_TrackDesert"
+    case tankTrackHeavy  = "15_TankTrack_TrackHeavy"
+    // 🚆 기차 바퀴
+    case trainWheels    = "16_Train_TrainWheels"
+    case trainDrivers   = "17_Train_TrainDrivers"
+    case trainBogie     = "18_Train_TrainBogie"
+    case trainSubway    = "19_Train_TrainSubway"
+    case trainBulletLow = "20_Train_TrainBulletLow"
+    case trainFreight   = "21_Train_TrainFreight"
+    // 🏗️ 건설 궤도·바퀴
+    case constTrack        = "22_ConstructionTrack_ConstTrack"
+    case constLoaderTires  = "23_ConstructionTrack_ConstLoaderTires"
+    case constCraneCarrier = "24_ConstructionTrack_ConstCraneCarrier"
+    case constRollerDrum   = "25_ConstructionTrack_ConstRollerDrum"
+    case constDozerTrack   = "26_ConstructionTrack_ConstDozerTrack"
+    case const6Wheel       = "27_ConstructionTrack_Const6Wheel"
 
-    var imageName: String { "wheels_\(rawValue)" }
+    var imageName: String { rawValue }
+    var displayName: String { catalogDisplayName(rawValue) }
+    /// 무료 개방 = 트럭 바퀴 일부만. 탱크 궤도·기차 바퀴·건설 궤도는 모두 Plus.
+    static let freeCases: Set<TruckWheelType> = [.standard, .chrome]
+    var requiresPlus: Bool { !Self.freeCases.contains(self) }
+}
 
-    var displayName: String {
-        switch self {
-        case .standard:  return "기본"
-        case .chrome:    return "크롬"
-        case .flame:     return "불꽃"
-        case .gold:      return "골드"
-        case .heavy:     return "헤비"
-        case .mud:       return "머드"
-        case .neon:      return "네온"
-        case .offroad:   return "오프로드"
-        case .red:       return "레드"
-        case .small:     return "스몰"
-        case .spokes:    return "스포크"
-        case .whitewall: return "화이트월"
-        }
-    }
-
-    var requiresPlus: Bool { self != .standard }
+// MARK: - 표시 이름 (UI 미사용이지만 디버그/추후 대비) — "01_TruckHead_Cream" → "Cream"
+private func catalogDisplayName(_ rawValue: String) -> String {
+    let parts = rawValue.split(separator: "_")
+    return parts.count >= 3 ? parts.dropFirst(2).joined(separator: " ") : rawValue
 }

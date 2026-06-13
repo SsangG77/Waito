@@ -25,13 +25,13 @@ struct CatalogTruckView: View {
 
 #Preview {
     VStack(spacing: 20) {
-        CatalogTruckView(cab: .blue, truckBody: .express, wheels: .standard, size: 120)
-        CatalogTruckView(cab: .redStack, truckBody: .container, wheels: .chrome, size: 120)
-        CatalogTruckView(cab: .yellowBeacon, truckBody: .tanker, wheels: .flame, size: 120)
+        CatalogTruckView(cab: .truckSoftBlue, truckBody: .truckExpressBlack, wheels: .standard, size: 120)
+        CatalogTruckView(cab: .truckRedStack, truckBody: .containerContainer, wheels: .chrome, size: 120)
+        CatalogTruckView(cab: .truckBeacon, truckBody: .truckTanker, wheels: .flame, size: 120)
 
         HStack(spacing: 12) {
-            ForEach([TruckCab.black, .mint, .purple, .navy], id: \.self) { cab in
-                CatalogTruckView(cab: cab, truckBody: .moving, wheels: .gold, size: 60)
+            ForEach([TruckCab.truckBlack, .truckMint, .truckPurple, .truckNavy], id: \.self) { cab in
+                CatalogTruckView(cab: cab, truckBody: .truckMovingCream, wheels: .gold, size: 60)
             }
         }
     }

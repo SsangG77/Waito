@@ -77,6 +77,23 @@ struct ExpandedTruckPathView: View {
             // strokeInset(상하 8pt)으로 회피.
             .frame(minHeight: 100, maxHeight: 130)
             .padding(.top, 5)
+        } else {
+            // 배송 없음(항상 노출) — 이 뷰가 Expanded 에 연결될 경우 대비한 대기 표시
+            HStack(spacing: 8) {
+                CatalogTruckView(
+                    cab: state.truckConfig.cab,
+                    truckBody: state.truckConfig.body,
+                    wheels: state.truckConfig.wheelType,
+                    size: 16
+                )
+                .frame(width: 22)
+                Text("배송 대기 중")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.7))
+                Spacer()
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
         }
     }
 

@@ -52,11 +52,14 @@ struct TruckCustomizeView: View {
                 await service.refreshPushToStartConfig()   // 8h 재시작 시 쓰일 서버 측 트럭 설정도 갱신
             }
         }
-        .pixelAlert(
-            title: "Waito Plus",
-            message: "이 옵션은 Waito Plus 구독이 필요해요.\n월 ₩2,900 / 연 ₩19,900",
-            isPresented: $showSubscriptionAlert
-        )
+        .fullScreenCover(isPresented: $showSubscriptionAlert) {
+            PlusPaywallView {
+                // TODO: 실제 StoreKit 구매 연결 (.storekit 설정 후 Product.purchase / SubscriptionStoreView)
+                #if DEBUG
+                if !subscription.isSubscribed { subscription.toggleSubscription() }
+                #endif
+            }
+        }
     }
 
     // MARK: - Dynamic Island 데모 버튼

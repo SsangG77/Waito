@@ -3,6 +3,10 @@ import SwiftUI
 struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SubscriptionManager.self) private var subscription
+    @Environment(TrackingService.self) private var service
+
+    @AppStorage(TrackingService.alwaysShowKey) private var alwaysShowDI = false
+    @State private var showPaywall = false
 
     #if DEBUG
     @AppStorage("debug_show_dummy_data") private var showDummyData = false
@@ -20,6 +24,8 @@ struct SettingsView: View {
                         subtitle: subscription.isSubscribed ? "구독 중" : "₩2,900/월 · ₩19,900/년"
                     )
 
+                    alwaysShowRow
+
                     settingsRow(icon: "info.circle", title: "버전", subtitle: "1.0.0")
 
                     #if DEBUG
@@ -33,6 +39,67 @@ struct SettingsView: View {
         .background(Color.bg)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .sheet(isPresented: $showPaywall) {
+            PaywallView()
+        }
+    }
+
+    // MARK: - 항상 노출 토글 (구독 전용 — 무료는 잠금 + 탭 시 Paywall)
+
+    private var alwaysShowRow: some View {
+        let locked = !subscription.canUseAlwaysShow
+
+        // 중첩 Button 회피: 상태를 바꾸는 곳은 PixelToggle 한 곳뿐.
+        // 행 탭(onTapGesture)은 잠금 상태에서 Paywall 을 여는 용도로만 동작한다.
+        return HStack(spacing: 12) {
+            Image(systemName: "pin.fill")
+                .font(.system(size: 14))
+                .foregroundStyle((!locked && alwaysShowDI) ? Color.pixelOrange : Color.pixelMuted)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 5) {
+                    Text("항상 노출")
+                        .font(pixelFont(11))
+                        .foregroundStyle(locked ? Color.pixelMuted : Color.pixelText)
+                    if locked {
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 8))
+                            .foregroundStyle(Color.pixelOrange)
+                    }
+                }
+                Text(subtitleText(locked: locked))
+                    .font(pixelFont(9))
+                    .foregroundStyle((!locked && alwaysShowDI) ? Color.pixelOrange : Color.pixelMuted)
+            }
+
+            Spacer()
+
+            // 구독자만 조작 가능. 무료(잠금)는 정적 visual → 탭이 아래 onTapGesture(Paywall)로 전달된다.
+            PixelToggle(isOn: locked ? false : alwaysShowDI, isEnabled: !locked) {
+                alwaysShowDI.toggle()
+                Task { await service.setAlwaysShow(alwaysShowDI) }
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 14)
+        .pixelBox(
+            border: (!locked && alwaysShowDI) ? Color.pixelOrange.opacity(0.5) : Color.pixelBorder,
+            bg: Color.pixelSurface,
+            lineWidth: 1.5,
+            notch: 4
+        )
+        .opacity(locked ? 0.6 : 1)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            // 잠금일 때만 의미 있음. 구독 상태에선 토글이 직접 처리한다.
+            if locked { showPaywall = true }
+        }
+    }
+
+    private func subtitleText(locked: Bool) -> String {
+        if locked { return "Waito Plus 전용 — 배송 없어도 트럭 표시" }
+        return alwaysShowDI ? "ON — 배송 없어도 트럭 표시 중" : "OFF — 배송 중일 때만 표시"
     }
 
     // MARK: - 일반 행

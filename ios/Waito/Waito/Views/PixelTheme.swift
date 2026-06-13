@@ -256,6 +256,8 @@ struct PixelButton: View {
 
 struct PixelToggle: View {
     let isOn: Bool
+    /// false면 비활성(회색 + 탭 불가). 탭 제스처는 상위 뷰로 전달돼 잠금 안내(Paywall 등)에 쓸 수 있다.
+    var isEnabled: Bool = true
     let onToggle: () -> Void
 
     private let trackW: CGFloat = 40
@@ -264,26 +266,35 @@ struct PixelToggle: View {
     private let thumbH: CGFloat = 12
 
     var body: some View {
-        Button(action: onToggle) {
-            ZStack(alignment: isOn ? .trailing : .leading) {
-                // 트랙
-                Rectangle()
-                    .fill(isOn ? Color.pixelOrange.opacity(0.12) : Color.pixelSurface)
-                    .overlay(
-                        Rectangle()
-                            .stroke(isOn ? Color.pixelOrange : Color.pixelBorder, lineWidth: 1.5)
-                    )
-                    .frame(width: trackW, height: trackH)
-
-                // 썸
-                Rectangle()
-                    .fill(isOn ? Color.pixelOrange : Color.pixelMuted.opacity(0.6))
-                    .frame(width: thumbW, height: thumbH)
-                    .padding(.horizontal, 2)
-            }
+        if isEnabled {
+            Button(action: onToggle) { track }
+                .buttonStyle(.plain)
+                .animation(.easeInOut(duration: 0.12), value: isOn)
+        } else {
+            // 비활성: Button으로 감싸지 않아 탭이 부모로 전달된다
+            track
+                .opacity(0.45)
+                .animation(.easeInOut(duration: 0.12), value: isOn)
         }
-        .buttonStyle(.plain)
-        .animation(.easeInOut(duration: 0.12), value: isOn)
+    }
+
+    private var track: some View {
+        ZStack(alignment: isOn ? .trailing : .leading) {
+            // 트랙
+            Rectangle()
+                .fill(isOn ? Color.pixelOrange.opacity(0.12) : Color.pixelSurface)
+                .overlay(
+                    Rectangle()
+                        .stroke(isOn ? Color.pixelOrange : Color.pixelBorder, lineWidth: 1.5)
+                )
+                .frame(width: trackW, height: trackH)
+
+            // 썸
+            Rectangle()
+                .fill(isOn ? Color.pixelOrange : Color.pixelMuted.opacity(0.6))
+                .frame(width: thumbW, height: thumbH)
+                .padding(.horizontal, 2)
+        }
     }
 }
 

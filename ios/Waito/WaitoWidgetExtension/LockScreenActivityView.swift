@@ -9,16 +9,44 @@ struct LockScreenLiveActivityView: View {
         VStack(spacing: 0) {
             if let primary = state.primary {
                 LockScreenTrackingRow(item: primary, truckConfig: state.truckConfig, showTruck: true)
-            }
 
-            if let secondary = state.secondary {
-                Divider()
-                    .background(Color.white.opacity(0.15))
-                    .padding(.horizontal, 16)
+                if let secondary = state.secondary {
+                    Divider()
+                        .background(Color.white.opacity(0.15))
+                        .padding(.horizontal, 16)
 
-                LockScreenTrackingRow(item: secondary, truckConfig: state.truckConfig, showTruck: true)
+                    LockScreenTrackingRow(item: secondary, truckConfig: state.truckConfig, showTruck: true)
+                }
+            } else {
+                // 배송 없음(항상 노출) — 잠금화면 카드는 최소 대기 상태로 표시
+                LockScreenIdleRow(truckConfig: state.truckConfig)
             }
         }
+    }
+}
+
+// MARK: - 잠금화면 대기(idle) 행 — 배송 없을 때
+
+struct LockScreenIdleRow: View {
+    let truckConfig: TruckConfig
+
+    var body: some View {
+        HStack(spacing: 12) {
+            CatalogTruckView(cab: truckConfig.cab, truckBody: truckConfig.body, wheels: truckConfig.wheelType, size: 36)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Waito")
+                    .font(.caption2)
+                    .foregroundStyle(.white.opacity(0.5))
+                Text("배송 대기 중")
+                    .font(.caption)
+                    .foregroundStyle(.white.opacity(0.7))
+            }
+
+            Spacer()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 }
 

@@ -3,12 +3,13 @@ import Observation
 
 @Observable
 final class SubscriptionManager {
+    /// 구독 상태 저장 키 — TrackingService 등 다른 레이어가 UserDefaults로 방어적 재확인할 때 공유한다.
+    static let storageKey = "waito_is_subscribed"
+
     private(set) var isSubscribed: Bool
 
-    private let key = "waito_is_subscribed"
-
     init() {
-        self.isSubscribed = UserDefaults.standard.bool(forKey: key)
+        self.isSubscribed = UserDefaults.standard.bool(forKey: Self.storageKey)
     }
 
     // MARK: - Premium 판별
@@ -43,10 +44,16 @@ final class SubscriptionManager {
         isSubscribed ? 2 : 1
     }
 
+    // MARK: - 항상 노출 (배송 없어도 Dynamic Island 트럭 유지) — 구독 전용
+
+    var canUseAlwaysShow: Bool {
+        isSubscribed
+    }
+
     // MARK: - 디버그용 토글 (나중에 StoreKit으로 교체)
 
     func toggleSubscription() {
         isSubscribed.toggle()
-        UserDefaults.standard.set(isSubscribed, forKey: key)
+        UserDefaults.standard.set(isSubscribed, forKey: Self.storageKey)
     }
 }
