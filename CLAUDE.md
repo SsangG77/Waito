@@ -288,7 +288,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **행 슬라이드 삭제**: 왼쪽 슬라이드 → "> DEL _" 버튼(HStack 딸려나옴, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), ADD 누르면 닫힘
 - **조회 안 되는 운송장**: `last_event_time` 없으면 회색 + "확인 중", 등록 12시간 경과 시 "번호 확인 필요"(오렌지)
 - **트럭 버튼**(우상단): 사용자가 선택한 트럭(`CatalogTruckView`)을 표시 — `TruckConfigStore` 변경 시 자동 갱신
-- **빈 상태(택배 0개)**: 빈 화면 대신 `emptyState` — 사용자가 고른 트럭이 화면 가운데서 `RunningTruckView`로 "달리는" 효과(인앱이라 연속 애니메이션 정상 재생) + "아직 택배가 없어요" 안내. pull-to-refresh 유지.
+- **빈 상태(택배 0개)**: 빈 화면 대신 `emptyState` — 사용자가 고른 트럭이 화면 가운데서 `RunningTruckView`로 "달리는" 효과(인앱이라 연속 애니메이션 정상 재생) + 위쪽 `chevron.up`과 "위 ADD 버튼으로 택배를 추가해보세요" 안내(상단 ADD 버튼을 가리킴, 중복 버튼 없음). pull-to-refresh 유지.
+- **첫 추가 업셀 페이월**: 첫 택배 추가 성공 직후 `PlusPaywallView`를 풀스크린 1회 노출. 평생 1회(`@AppStorage("has_shown_first_add_paywall")`) + 비구독자(`subscription.isSubscribed == false`) 한정(`maybeShowFirstAddPaywall()`). 콜드 첫 화면 하드 페이월 대신 "가치 경험(첫 추가) 직후" 노출 정책.
 
 ### 설정 (SettingsView)
 - (DEBUG) **테스트 데이터 토글**: 켜면 목록에 더미 택배 표시. 기존 "Dynamic Island 데모" 버튼은 제거

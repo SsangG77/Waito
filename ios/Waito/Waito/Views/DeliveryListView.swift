@@ -28,6 +28,10 @@ struct DeliveryListView: View {
     @State private var showPaywall = false
     @State private var showNotFoundConfirm = false
     @State private var notFoundMessage = ""
+    /// 첫 택배 추가 직후 띄우는 업셀 페이월
+    @State private var showFirstAddPaywall = false
+    /// 첫 추가 페이월을 이미 보여줬는지 (평생 1회)
+    @AppStorage("has_shown_first_add_paywall") private var hasShownFirstAddPaywall = false
     /// 삭제 버튼이 열린 행 (한 번에 하나만)
     @State private var openRowId: Int?
     /// 정렬 기준 (기본: 도착 임박순, 사용자 선택 영구 저장)
@@ -62,6 +66,14 @@ struct DeliveryListView: View {
             }
             .sheet(isPresented: $showPaywall) {
                 PaywallView()
+            }
+            .fullScreenCover(isPresented: $showFirstAddPaywall) {
+                PlusPaywallView {
+                    // TODO: 실제 StoreKit 구매 연결 (.storekit 설정 후 Product.purchase)
+                    #if DEBUG
+                    if !subscription.isSubscribed { subscription.toggleSubscription() }
+                    #endif
+                }
             }
             .pixelConfirm(
                 title: "운송장 확인",
@@ -155,7 +167,7 @@ struct DeliveryListView: View {
     /// (TruckConfigStore 는 @Observable 이라 트럭을 바꾸면 자동 갱신)
     private var emptyState: some View {
         let cfg = TruckConfigStore.shared.config
-        return VStack(spacing: 12) {
+        return VStack(spacing: 6) {
             Spacer(minLength: 0)
 
             RunningTruckView(lineCount: 8) {
@@ -166,11 +178,15 @@ struct DeliveryListView: View {
             Text("아직 택배가 없어요")
                 .font(pixelFont(13))
                 .foregroundStyle(Color.pixelText)
-                .padding(.top, 5)
+                .padding(.top, 2)
 
-            Text("ADD 버튼으로 택배를 추가해보세요")
-                .font(pixelFont(10))
-                .foregroundStyle(Color.pixelMuted)
+            HStack(spacing: 5) {
+                Image(systemName: "chevron.up")
+                    .font(.system(size: 10, weight: .bold))
+                Text("위 ADD 버튼으로 택배를 추가해보세요")
+                    .font(pixelFont(10))
+            }
+            .foregroundStyle(Color.pixelMuted)
 
             Spacer(minLength: 0)
         }
@@ -351,6 +367,7 @@ struct DeliveryListView: View {
                     showAddForm = false
                 }
                 resetForm()
+                maybeShowFirstAddPaywall()
             case .notFound(let message):
                 // 조회 불가 — 확인 다이얼로그를 띄우고, 확인 시 force 로 재시도
                 notFoundMessage = message
@@ -359,6 +376,13 @@ struct DeliveryListView: View {
                 break  // service.error 로 오류 알림이 표시됨
             }
         }
+    }
+
+    /// 첫 택배 추가 직후 한 번만 업셀 페이월을 띄운다(비구독자 한정).
+    private func maybeShowFirstAddPaywall() {
+        guard !hasShownFirstAddPaywall, !subscription.isSubscribed else { return }
+        hasShownFirstAddPaywall = true
+        showFirstAddPaywall = true
     }
 
     private func resetForm() {
