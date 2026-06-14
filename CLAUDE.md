@@ -285,6 +285,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **택배사 선택**: 시스템 Menu 대신 픽셀 스타일 펼침 드롭다운(`PixelDropdown`)
 - **추가 폼**: 인라인 폼(AddTrackingView 제거). 조회 실패(NOT_FOUND) 시 "그래도 추가" 확인 다이얼로그(`PixelConfirm`) → `force` 재요청
 - **정렬**: 도착임박순(기본) / 최근 업데이트순 / 등록순 — 칩으로 선택, `@AppStorage` 영구 저장
+- **완료 섹션 구분**: 배송완료(`currentStatus.isCompleted`) 항목은 리스트 아래 **"완료 N" 섹션**으로 분리(`activeTrackings`/`completedTrackings`, 각 그룹 안에서 현재 정렬 적용). 헤더 탭으로 접기/펼치기(`@AppStorage("completed_section_collapsed")`, 기본 접힘). 완료 없으면 섹션 숨김.
 - **행 슬라이드 → 삭제/수정**: 왼쪽 슬라이드 → "> DEL_"(빨강)·"> EDIT_"(오렌지) **2버튼 세로 분할**(각 절반 높이, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), 바깥 탭/ADD 누르면 닫힘.
   - **삭제**: 탭 시 즉시 삭제 X → 상위(`DeliveryListView`)에서 `PixelConfirm`("삭제하면 되돌릴 수 없어요") 한 번 더 확인 후 `service.deleteTracking`. (확인 팝업은 전체화면 오버레이라 행이 아닌 상위에 부착)
   - **수정(EDIT)**: 탭 시 상단 입력 폼이 **편집 모드**로 열리며 기존 값 prefill. 운송장번호/택배사는 '신원'이라 **읽기전용**(회색), **품명·메모만 수정**. 제출 버튼 라벨이 ADD→**EDIT**. `service.updateTracking`(PUT /api/trackings/:id) 호출. (`editingTrackingId`로 add/edit 분기)

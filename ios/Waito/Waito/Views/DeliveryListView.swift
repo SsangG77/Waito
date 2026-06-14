@@ -37,9 +37,15 @@ struct DeliveryListView: View {
     @State private var showDeleteConfirm = false
     /// 삭제 버튼이 열린 행 (한 번에 하나만)
     @State private var openRowId: Int?
+    /// 정렬 드롭다운 펼침 여부
+    @State private var sortMenuOpen = false
+    /// 정렬 드롭다운 헤더 높이(펼침 목록을 그 아래에 띄우기 위함)
+    @State private var sortHeaderHeight: CGFloat = 0
     /// 정렬 기준 (기본: 도착 임박순, 사용자 선택 영구 저장)
     @AppStorage("delivery_sort_order") private var sortOrderRaw = DeliverySortOrder.arrival.rawValue
     private var sortOrder: DeliverySortOrder { DeliverySortOrder(rawValue: sortOrderRaw) ?? .arrival }
+    /// 완료 섹션 접힘 상태 (기본 접힘, 영구 저장)
+    @AppStorage("completed_section_collapsed") private var completedCollapsed = true
 
     #if DEBUG
     @AppStorage("debug_show_dummy_data") private var showDummyData = false
@@ -115,6 +121,16 @@ struct DeliveryListView: View {
         return sortTrackings(service.trackings)
     }
 
+    /// 진행 중(미완료) 항목 — 현재 정렬 적용된 displayedTrackings 에서 필터(그룹 내 순서 유지)
+    private var activeTrackings: [TrackingListItem] {
+        displayedTrackings.filter { !$0.currentStatus.isCompleted }
+    }
+
+    /// 완료(배송완료) 항목 — 리스트 아래 별도 섹션으로 구분
+    private var completedTrackings: [TrackingListItem] {
+        displayedTrackings.filter { $0.currentStatus.isCompleted }
+    }
+
     private func sortTrackings(_ items: [TrackingListItem]) -> [TrackingListItem] {
         switch sortOrder {
         case .arrival:
@@ -144,28 +160,39 @@ struct DeliveryListView: View {
                 Spacer()
                 sortBar
             }
+            .zIndex(1)  // 펼친 정렬 메뉴가 아래 리스트 위에 떠 보이도록
 
             if showAddForm {
                 inlineAddForm
-                    .transition(.opacity)
+                    .transition(.opacity) 
             }
 
             ScrollView {
-                if displayedTrackings.isEmpty {
+                if activeTrackings.isEmpty && completedTrackings.isEmpty {
+                    // 아무 항목도 없음 → 화면 가운데 달리는 트럭
                     emptyState
                         .frame(minHeight: 660)
                 } else {
                     LazyVStack(spacing: 8) {
-                        ForEach(displayedTrackings) { tracking in
-                            TrackingRowView(
-                                tracking: tracking,
-                                isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
-                                onToggleLiveActivity: { toggleLiveActivity(for: tracking) },
-                                onDelete: { requestDelete(tracking) },
-                                onEdit: { startEditing(tracking) },
-                                openRowId: $openRowId,
-                                justAddedId: justAddedId
-                            )
+                        // 진행 중 — 없으면(완료만 있을 때) 트럭을 보여주고 완료 섹션은 아래에
+                        if activeTrackings.isEmpty {
+                            emptyState
+                                .frame(minHeight: 360)
+                        } else {
+                            ForEach(activeTrackings) { tracking in
+                                rowView(tracking)
+                            }
+                        }
+
+                        // 완료 — 리스트 아래 별도 섹션(헤더 탭으로 접기/펼치기)
+                        if !completedTrackings.isEmpty {
+                            completedHeader
+                            if !completedCollapsed {
+                                ForEach(completedTrackings) { tracking in
+                                    rowView(tracking)
+                                        .transition(.move(edge: .top).combined(with: .opacity))
+                                }
+                            }
                         }
                     }
                     .padding(.vertical, 4)
@@ -176,6 +203,44 @@ struct DeliveryListView: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .background(Color.bg)
+    }
+
+    /// 택배 행 1개 (진행 중/완료 섹션 공용)
+    private func rowView(_ tracking: TrackingListItem) -> some View {
+        TrackingRowView(
+            tracking: tracking,
+            isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
+            onToggleLiveActivity: { toggleLiveActivity(for: tracking) },
+            onDelete: { requestDelete(tracking) },
+            onEdit: { startEditing(tracking) },
+            openRowId: $openRowId,
+            justAddedId: justAddedId
+        )
+    }
+
+    /// "완료 N" 섹션 헤더 — 탭하면 접기/펼치기
+    private var completedHeader: some View {
+        Button {
+            openRowId = nil
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                completedCollapsed.toggle()
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Text("완료 \(completedTrackings.count)")
+                    .font(pixelFont(10))
+                    .foregroundStyle(Color.pixelMuted)
+                Spacer()
+                PixelChevron(isExpanded: !completedCollapsed)
+                    .frame(width: 10, height: 7)
+                    .foregroundStyle(Color.pixelMuted)
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+        }
+        .buttonStyle(.plain)
+        .padding(.top, 4)
     }
 
     // MARK: - 빈 상태 (택배 없음 → 달리는 트럭)
@@ -231,32 +296,92 @@ struct DeliveryListView: View {
         }
     }
 
-    // MARK: - 정렬 선택 바
+    // MARK: - 정렬 선택 (드롭다운)
 
+    /// 3버튼 칩 대신 콤팩트 드롭다운. 선택은 @AppStorage("delivery_sort_order") 에 유지된다.
+    /// 펼침 목록은 overlay 로 띄워 아래 요소(리스트)를 밀지 않고 위에 덮는다.
     private var sortBar: some View {
-        HStack(spacing: 6) {
-            ForEach(DeliverySortOrder.allCases, id: \.self) { order in
-                let selected = sortOrder == order
+        sortHeader
+            .background(
+                GeometryReader { geo in
+                    Color.clear.onAppear { sortHeaderHeight = geo.size.height }
+                }
+            )
+            .overlay(alignment: .topLeading) {
+                if sortMenuOpen {
+                    sortOptions
+                        .offset(y: sortHeaderHeight + 4)
+                }
+            }
+    }
+
+    private var sortHeader: some View {
+        Button {
+            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) { sortMenuOpen.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Text(sortOrder.label)
+                    .font(pixelFont(9))
+                    .foregroundStyle(Color.pixelText)
+                Spacer(minLength: 8)
+                Text(sortMenuOpen ? "▲" : "▼")
+                    .font(pixelFont(8))
+                    .foregroundStyle(Color.pixelOrange)
+            }
+            .padding(.horizontal, 10)
+            .padding(.vertical, 7)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(width: 132)
+        .pixelBox(
+            border: sortMenuOpen ? Color.pixelOrange.opacity(0.6) : Color.pixelBorder,
+            bg: Color.pixelSurface,
+            lineWidth: 1.5,
+            notch: 3
+        )
+    }
+
+    private var sortOptions: some View {
+        VStack(spacing: 0) {
+            ForEach(Array(DeliverySortOrder.allCases.enumerated()), id: \.element) { idx, order in
+                if idx > 0 {
+                    Rectangle()
+                        .fill(Color.pixelBorder.opacity(0.4))
+                        .frame(height: 1)
+                }
+                let selected = order == sortOrder
                 Button {
-                    sortOrderRaw = order.rawValue
-                    openRowId = nil  // 정렬 바꾸면 열린 삭제 버튼 닫기
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                        sortOrderRaw = order.rawValue
+                        sortMenuOpen = false
+                    }
+                    openRowId = nil  // 정렬 바꾸면 열린 액션 버튼 닫기
                 } label: {
-                    Text(order.label)
-                        .font(pixelFont(9))
-                        .foregroundStyle(selected ? Color.pixelOrange : Color.pixelMuted)
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .pixelBox(
-                            border: selected ? Color.pixelOrange.opacity(0.6) : Color.pixelBorder,
-                            bg: selected ? Color.pixelOrange.opacity(0.1) : Color.pixelSurface,
-                            lineWidth: 1.5,
-                            notch: 3
-                        )
+                    HStack(spacing: 6) {
+                        Text(selected ? ">" : " ")
+                            .font(pixelFont(9))
+                            .foregroundStyle(Color.pixelOrange)
+                        Text(order.label)
+                            .font(pixelFont(9))
+                            .foregroundStyle(selected ? Color.pixelOrange : Color.pixelText)
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(selected ? Color.pixelOrange.opacity(0.08) : Color.clear)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
-            Spacer()
         }
+        .frame(width: 132)
+        .pixelBox(
+            border: Color.pixelOrange.opacity(0.6),
+            bg: Color.pixelSurface,
+            lineWidth: 1.5,
+            notch: 3
+        )
     }
 
     private var settingsButton: some View {
@@ -583,5 +708,44 @@ struct DeliveryListView: View {
         DeliveryListView()
     }
     .environment(TrackingService(preview: []))
+    .environment(SubscriptionManager())
+}
+
+#Preview("완료만 있을 때") {
+    // 배송중(진행 중) 항목 없이 배송완료만 → 위에 달리는 트럭 + 아래 "완료 N" 섹션
+    // 완료 섹션은 기본 접힘이라, 프리뷰에선 펼친 상태로 보이도록 키를 미리 세팅
+    UserDefaults.standard.set(false, forKey: "completed_section_collapsed")
+    // DEBUG 더미 데이터 토글이 켜져 있으면 주입한 완료-전용 데이터 대신 더미(배송중 포함)가 떠서 꺼둔다
+    UserDefaults.standard.set(false, forKey: "debug_show_dummy_data")
+    let service = TrackingService(preview: [
+        TrackingListItem(
+            id: 10,
+            carrierId: "lotte",
+            trackingNumber: "555444333222",
+            itemName: "Nike 에어맥스",
+            currentStatus: .delivered,
+            currentTValue: 0.95,
+            carrierName: "롯데택배",
+            estimatedDelivery: nil,
+            createdAt: "2026-04-07T11:00:00Z",
+            deliveredAt: "2026-04-11T14:22:00Z"
+        ),
+        TrackingListItem(
+            id: 11,
+            carrierId: "cj",
+            trackingNumber: "123123123123",
+            itemName: "텀블러",
+            currentStatus: .delivered,
+            currentTValue: 0.95,
+            carrierName: "CJ대한통운",
+            estimatedDelivery: nil,
+            createdAt: "2026-04-05T09:00:00Z",
+            deliveredAt: "2026-04-08T13:00:00Z"
+        ),
+    ])
+    return NavigationStack {
+        DeliveryListView()
+    }
+    .environment(service)
     .environment(SubscriptionManager())
 }

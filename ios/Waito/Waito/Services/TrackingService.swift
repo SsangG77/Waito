@@ -1,6 +1,7 @@
 import Foundation
 import ActivityKit
 import Observation
+import Security
 
 // MARK: - Add Tracking Result
 
@@ -49,14 +50,23 @@ final class TrackingService {
 
     // MARK: - Device Token
 
+    /// 디바이스 토큰은 Keychain 에 저장한다 — UserDefaults 와 달리 앱 삭제 후 재설치에도
+    /// 남으므로, 디바이스 단위 진행도(예: 배송 완료 누적 카운트)가 리셋되지 않는다.
+    /// 기존 사용자(UserDefaults 에 토큰 보유)는 최초 접근 시 1회 Keychain 으로 이전한다.
     var deviceToken: String? {
-        UserDefaults.standard.string(forKey: deviceTokenKey)
+        if let token = Keychain.read(deviceTokenKey) { return token }
+        if let legacy = UserDefaults.standard.string(forKey: deviceTokenKey) {
+            Keychain.save(legacy, for: deviceTokenKey)
+            UserDefaults.standard.removeObject(forKey: deviceTokenKey)
+            return legacy
+        }
+        return nil
     }
 
     func registerDevice(token: String) async {
         do {
             _ = try await api.registerDevice(token: token)
-            UserDefaults.standard.set(token, forKey: deviceTokenKey)
+            Keychain.save(token, for: deviceTokenKey)
         } catch {
             self.error = error.localizedDescription
         }
@@ -494,4 +504,53 @@ final class TrackingService {
         await endLiveActivity()
     }
     #endif
+}
+
+// MARK: - Keychain (디바이스 토큰 등 영속 식별자 저장)
+// UserDefaults 와 달리 앱 삭제 후 재설치에도 값이 남는다(같은 기기 한정).
+// 기기 간 동기화는 2차 개발의 로그인 기능에서 처리한다.
+// (별도 파일 Services/Keychain.swift 로 분리 가능 — Xcode 타깃 등록 필요)
+enum Keychain {
+    @discardableResult
+    static func save(_ value: String, for key: String) -> Bool {
+        guard let data = value.data(using: .utf8) else { return false }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+        ]
+        let attributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock,
+        ]
+        if SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess {
+            return SecItemUpdate(query as CFDictionary, attributes as CFDictionary) == errSecSuccess
+        }
+        var addQuery = query
+        addQuery.merge(attributes) { _, new in new }
+        return SecItemAdd(addQuery as CFDictionary, nil) == errSecSuccess
+    }
+
+    static func read(_ key: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data,
+              let value = String(data: data, encoding: .utf8) else { return nil }
+        return value
+    }
+
+    @discardableResult
+    static func delete(_ key: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+        ]
+        let status = SecItemDelete(query as CFDictionary)
+        return status == errSecSuccess || status == errSecItemNotFound
+    }
 }
