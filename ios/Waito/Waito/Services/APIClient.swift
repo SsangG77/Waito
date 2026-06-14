@@ -63,6 +63,7 @@ actor APIClient {
         carrierId: String,
         trackingNumber: String,
         itemName: String? = nil,
+        memo: String? = nil,
         force: Bool = false
     ) async throws -> TrackingCreateResponse {
         try await post("/api/trackings", body: TrackingCreateRequest(
@@ -70,8 +71,14 @@ actor APIClient {
             carrierId: carrierId,
             trackingNumber: trackingNumber,
             itemName: itemName,
+            memo: memo,
             force: force
         ))
+    }
+
+    /// 품명/메모 수정 (PUT /api/trackings/:id) — 수정된 항목을 반환
+    func updateTracking(id: Int, itemName: String?, memo: String?) async throws -> TrackingListItem {
+        try await put("/api/trackings/\(id)", body: TrackingUpdateRequest(itemName: itemName, memo: memo))
     }
 
     func listTrackings(deviceToken: String) async throws -> [TrackingListItem] {

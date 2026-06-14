@@ -5,7 +5,8 @@ import Observation
 // MARK: - Add Tracking Result
 
 enum AddTrackingResult {
-    case success
+    /// 추가 성공 — 새로 만들어진 tracking id (목록 바운스 강조용)
+    case success(id: Int)
     /// 운송장 조회 불가 — 확인 다이얼로그 후 force 재시도 대상
     case notFound(message: String)
     case failure
@@ -101,6 +102,7 @@ final class TrackingService {
         carrierId: String,
         trackingNumber: String,
         itemName: String?,
+        memo: String? = nil,
         limit: Int = 1,
         force: Bool = false
     ) async -> AddTrackingResult {
@@ -111,6 +113,7 @@ final class TrackingService {
                 carrierId: carrierId,
                 trackingNumber: trackingNumber,
                 itemName: itemName,
+                memo: memo,
                 force: force
             )
             await loadTrackings()
@@ -121,13 +124,29 @@ final class TrackingService {
             }
 
             self.error = nil
-            return .success
+            return .success(id: result.id)
         } catch APIError.trackingNotFound(let message) {
             // 조회 불가 — 호출부에서 확인 다이얼로그를 띄운다 (에러로 표시하지 않음)
             return .notFound(message: message)
         } catch {
             self.error = error.localizedDescription
             return .failure
+        }
+    }
+
+    /// 품명/메모 수정. 성공 시 로컬 목록과 Live Activity 를 갱신한다.
+    func updateTracking(id: Int, itemName: String?, memo: String?) async -> Bool {
+        do {
+            let updated = try await api.updateTracking(id: id, itemName: itemName, memo: memo)
+            if let index = trackings.firstIndex(where: { $0.id == id }) {
+                trackings[index] = updated
+            }
+            await updateLiveActivity()
+            self.error = nil
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
         }
     }
 

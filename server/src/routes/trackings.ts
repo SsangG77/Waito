@@ -10,7 +10,7 @@ const router = Router();
 
 // POST /api/trackings — 택배 추적 등록
 router.post('/', async (req: Request, res: Response) => {
-  const { deviceToken, carrierId, trackingNumber, itemName, force } = req.body;
+  const { deviceToken, carrierId, trackingNumber, itemName, memo, force } = req.body;
 
   if (!deviceToken || !carrierId || !trackingNumber) {
     res.status(400).json({ error: 'deviceToken, carrierId, trackingNumber are required' });
@@ -67,13 +67,14 @@ router.post('/', async (req: Request, res: Response) => {
 
   // DB 삽입
   const insertResult = db.prepare(`
-    INSERT INTO trackings (device_id, carrier_id, tracking_number, item_name, current_status, current_t_value, carrier_name, last_event_time)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO trackings (device_id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value, carrier_name, last_event_time)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     device.id,
     carrierId,
     trackingNumber,
     itemName || '',
+    memo || '',
     initialStatus,
     STATUS_T_VALUES[initialStatus],
     carrier.name,
@@ -123,7 +124,7 @@ router.get('/', (req: Request, res: Response) => {
   }
 
   const trackings = db.prepare(`
-    SELECT id, carrier_id, tracking_number, item_name, current_status, current_t_value,
+    SELECT id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value,
            carrier_name, estimated_delivery, created_at, updated_at, last_event_time, delivered_at
     FROM trackings WHERE device_id = ? ORDER BY created_at DESC
   `).all(device.id);
@@ -159,6 +160,29 @@ router.delete('/:id', (req: Request, res: Response) => {
   }
 
   res.status(204).send();
+});
+
+// PUT /api/trackings/:id — 품명/메모 수정 (택배사·운송장번호는 '신원'이라 불변)
+router.put('/:id', (req: Request, res: Response) => {
+  const { itemName, memo } = req.body;
+
+  const db = getDb();
+  const result = db.prepare(
+    "UPDATE trackings SET item_name = ?, memo = ?, updated_at = datetime('now') WHERE id = ?"
+  ).run(itemName ?? '', memo ?? '', req.params.id);
+
+  if (result.changes === 0) {
+    res.status(404).json({ error: 'Tracking not found' });
+    return;
+  }
+
+  const updated = db.prepare(`
+    SELECT id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value,
+           carrier_name, estimated_delivery, created_at, updated_at, last_event_time, delivered_at
+    FROM trackings WHERE id = ?
+  `).get(req.params.id);
+
+  res.json(updated);
 });
 
 // POST /api/trackings/:id/refresh — 수동 새로고침

@@ -24,8 +24,16 @@ struct TrackingCreateRequest: Encodable {
     let carrierId: String
     let trackingNumber: String
     let itemName: String?
+    let memo: String?
     /// 운송장 조회 실패(NOT_FOUND)에도 강제로 추가할지 여부
     let force: Bool?
+}
+
+// MARK: - Tracking Update (품명/메모 수정)
+
+struct TrackingUpdateRequest: Encodable {
+    let itemName: String?
+    let memo: String?
 }
 
 /// POST /api/trackings 응답 (camelCase)
@@ -47,6 +55,7 @@ struct TrackingListItem: Decodable, Identifiable {
     let carrierId: String
     let trackingNumber: String
     let itemName: String
+    let memo: String?
     let currentStatus: DeliveryStatus
     let currentTValue: CGFloat
     let carrierName: String
@@ -61,6 +70,7 @@ struct TrackingListItem: Decodable, Identifiable {
         case carrierId = "carrier_id"
         case trackingNumber = "tracking_number"
         case itemName = "item_name"
+        case memo
         case currentStatus = "current_status"
         case currentTValue = "current_t_value"
         case carrierName = "carrier_name"
@@ -86,6 +96,7 @@ struct TrackingListItem: Decodable, Identifiable {
         estimatedDelivery: String?,
         createdAt: String,
         deliveredAt: String?,
+        memo: String? = nil,
         updatedAt: String? = nil,
         lastEventTime: String? = nil
     ) {
@@ -93,6 +104,7 @@ struct TrackingListItem: Decodable, Identifiable {
         self.carrierId = carrierId
         self.trackingNumber = trackingNumber
         self.itemName = itemName
+        self.memo = memo
         self.currentStatus = currentStatus
         self.currentTValue = currentTValue
         self.carrierName = carrierName
@@ -111,6 +123,7 @@ struct TrackingDetail: Decodable, Identifiable {
     let carrierId: String
     let trackingNumber: String
     let itemName: String
+    let memo: String?
     let currentStatus: DeliveryStatus
     let currentTValue: CGFloat
     let carrierName: String
@@ -128,6 +141,7 @@ struct TrackingDetail: Decodable, Identifiable {
         case carrierId = "carrier_id"
         case trackingNumber = "tracking_number"
         case itemName = "item_name"
+        case memo
         case currentStatus = "current_status"
         case currentTValue = "current_t_value"
         case carrierName = "carrier_name"

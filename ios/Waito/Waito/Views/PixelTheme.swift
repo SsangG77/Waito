@@ -103,6 +103,8 @@ extension View {
 struct PixelTextField: View {
     let label: String
     @Binding var text: String
+    /// 읽기전용(편집 모드에서 운송장번호/택배사처럼 수정 불가 항목 표시용)
+    var disabled: Bool = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -112,11 +114,13 @@ struct PixelTextField: View {
 
             TextField("", text: $text)
                 .font(pixelFont(10))
-                .foregroundStyle(Color.pixelText)
+                .foregroundStyle(disabled ? Color.pixelMuted : Color.pixelText)
                 .tint(Color.pixelOrange)
+                .disabled(disabled)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 14)
                 .pixelBox()
+                .opacity(disabled ? 0.6 : 1.0)
         }
     }
 }

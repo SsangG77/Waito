@@ -32,6 +32,9 @@ struct DeliveryListView: View {
     @State private var showFirstAddPaywall = false
     /// 첫 추가 페이월을 이미 보여줬는지 (평생 1회)
     @AppStorage("has_shown_first_add_paywall") private var hasShownFirstAddPaywall = false
+    /// 삭제 확인 대상 / 표시 여부
+    @State private var pendingDeleteTracking: TrackingListItem?
+    @State private var showDeleteConfirm = false
     /// 삭제 버튼이 열린 행 (한 번에 하나만)
     @State private var openRowId: Int?
     /// 정렬 기준 (기본: 도착 임박순, 사용자 선택 영구 저장)
@@ -48,6 +51,10 @@ struct DeliveryListView: View {
     @State private var newItemName = ""
     @State private var newMemo = ""
     @State private var isSubmitting = false
+    /// 편집 중인 택배 id (nil 이면 신규 추가 모드). 설정되면 폼이 EDIT 모드로 동작.
+    @State private var editingTrackingId: Int?
+    /// 방금 추가돼 한 번 바운스로 강조할 행 id
+    @State private var justAddedId: Int?
 
     var body: some View {
         listContent
@@ -83,6 +90,15 @@ struct DeliveryListView: View {
                 isPresented: $showNotFoundConfirm
             ) {
                 submit(force: true)
+            }
+            .pixelConfirm(
+                title: "택배 삭제",
+                message: deleteConfirmMessage,
+                confirmTitle: "삭제",
+                cancelTitle: "취소",
+                isPresented: $showDeleteConfirm
+            ) {
+                performDelete()
             }
             .task {
                 if service.carriers.isEmpty {
@@ -145,8 +161,10 @@ struct DeliveryListView: View {
                                 tracking: tracking,
                                 isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
                                 onToggleLiveActivity: { toggleLiveActivity(for: tracking) },
-                                onDelete: { deleteTracking(tracking) },
-                                openRowId: $openRowId
+                                onDelete: { requestDelete(tracking) },
+                                onEdit: { startEditing(tracking) },
+                                openRowId: $openRowId,
+                                justAddedId: justAddedId
                             )
                         }
                     }
@@ -318,14 +336,23 @@ struct DeliveryListView: View {
 
     // MARK: - 인라인 입력 폼
 
+    /// 편집 모드 여부 (운송장번호/택배사는 '신원'이라 수정 불가 → 품명/메모만 수정)
+    private var isEditing: Bool { editingTrackingId != nil }
+
     private var inlineAddForm: some View {
         VStack(alignment: .leading, spacing: 12) {
-            PixelTextField(label: "TRACKING NO.", text: $newTrackingNumber)
-            carrierPicker
+            if isEditing {
+                // 운송장번호/택배사는 읽기전용으로 채워서 보여줌
+                PixelTextField(label: "TRACKING NO.", text: $newTrackingNumber, disabled: true)
+                PixelTextField(label: "CARRIER", text: .constant(editingCarrierName), disabled: true)
+            } else {
+                PixelTextField(label: "TRACKING NO.", text: $newTrackingNumber)
+                carrierPicker
+            }
             PixelTextField(label: "ITEM NAME", text: $newItemName)
             PixelTextField(label: "MEMO", text: $newMemo)
 
-            PixelButton(title: isSubmitting ? "ADDING..." : "ADD") {
+            PixelButton(title: submitButtonTitle) {
                 submit()
             }
             .disabled(!isFormValid || isSubmitting)
@@ -333,6 +360,16 @@ struct DeliveryListView: View {
         }
         .padding(14)
         .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+    }
+
+    /// 편집 모드에서 읽기전용으로 보여줄 택배사 이름
+    private var editingCarrierName: String {
+        service.carriers.first(where: { $0.id == newCarrierId })?.name ?? newCarrierId
+    }
+
+    private var submitButtonTitle: String {
+        if isEditing { return isSubmitting ? "EDITING..." : "EDIT" }
+        return isSubmitting ? "ADDING..." : "ADD"
     }
 
     private var carrierPicker: some View {
@@ -350,23 +387,28 @@ struct DeliveryListView: View {
     // MARK: - Actions
 
     private func submit(force: Bool = false) {
+        if isEditing { submitEdit(); return }
+
         isSubmitting = true
         Task {
             let name = newItemName.trimmingCharacters(in: .whitespaces)
+            let memo = newMemo.trimmingCharacters(in: .whitespaces)
             let result = await service.addTracking(
                 carrierId: newCarrierId,
                 trackingNumber: newTrackingNumber.trimmingCharacters(in: .whitespaces),
                 itemName: name.isEmpty ? nil : name,
+                memo: memo.isEmpty ? nil : memo,
                 limit: subscription.liveActivityLimit,
                 force: force
             )
             isSubmitting = false
             switch result {
-            case .success:
+            case .success(let id):
                 withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
                     showAddForm = false
                 }
                 resetForm()
+                highlightNewRow(id: id)        // 새 행 한 번 바운스
                 maybeShowFirstAddPaywall()
             case .notFound(let message):
                 // 조회 불가 — 확인 다이얼로그를 띄우고, 확인 시 force 로 재시도
@@ -375,6 +417,51 @@ struct DeliveryListView: View {
             case .failure:
                 break  // service.error 로 오류 알림이 표시됨
             }
+        }
+    }
+
+    /// 편집 저장 — 품명/메모만 수정
+    private func submitEdit() {
+        guard let id = editingTrackingId else { return }
+        isSubmitting = true
+        Task {
+            let name = newItemName.trimmingCharacters(in: .whitespaces)
+            let memo = newMemo.trimmingCharacters(in: .whitespaces)
+            let ok = await service.updateTracking(
+                id: id,
+                itemName: name.isEmpty ? nil : name,
+                memo: memo.isEmpty ? nil : memo
+            )
+            isSubmitting = false
+            if ok {
+                withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+                    showAddForm = false
+                }
+                resetForm()
+            }
+            // 실패 시 service.error 로 알림 표시, 폼 유지
+        }
+    }
+
+    /// 방금 추가된 행을 잠깐 강조(바운스)한 뒤 해제
+    private func highlightNewRow(id: Int) {
+        justAddedId = id
+        Task {
+            try? await Task.sleep(nanoseconds: 1_200_000_000)
+            if justAddedId == id { justAddedId = nil }
+        }
+    }
+
+    /// 행의 EDIT 탭 → 폼을 편집 모드로 열고 기존 값으로 채운다
+    private func startEditing(_ tracking: TrackingListItem) {
+        openRowId = nil
+        editingTrackingId = tracking.id
+        newTrackingNumber = tracking.trackingNumber
+        newCarrierId = tracking.carrierId
+        newItemName = tracking.itemName
+        newMemo = tracking.memo ?? ""
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            showAddForm = true
         }
     }
 
@@ -390,9 +477,26 @@ struct DeliveryListView: View {
         newCarrierId = ""
         newItemName = ""
         newMemo = ""
+        editingTrackingId = nil
     }
 
-    private func deleteTracking(_ tracking: TrackingListItem) {
+    /// 삭제 확인 다이얼로그 문구 (대상 품명 포함)
+    private var deleteConfirmMessage: String {
+        let name = pendingDeleteTracking?.itemName ?? ""
+        let label = name.isEmpty ? "이 택배" : "'\(name)'"
+        return "\(label)를 삭제할까요?\n삭제하면 되돌릴 수 없어요."
+    }
+
+    /// 행의 삭제 탭 → 확인 다이얼로그 표시
+    private func requestDelete(_ tracking: TrackingListItem) {
+        pendingDeleteTracking = tracking
+        showDeleteConfirm = true
+    }
+
+    /// 확인 후 실제 삭제
+    private func performDelete() {
+        guard let tracking = pendingDeleteTracking else { return }
+        pendingDeleteTracking = nil
         #if DEBUG
         if showDummyData { return }  // 더미 표시 중에는 실제 삭제하지 않음
         #endif

@@ -11,8 +11,15 @@ struct ContentView: View {
     @Environment(TrackingService.self) private var service
 
     var body: some View {
-        NavigationStack {
-            DeliveryListView()
+        ZStack {
+            // 고정 배경: ZStack 형제 레이어라 키보드/폼으로 컨텐츠가 밀려도 함께 올라가지 않음.
+            // (.background 로 붙이면 NavigationStack 과 같이 밀려 올라가 뒤 흰색이 드러남)
+            // ignoresSafeArea()(.all)에 키보드 영역 포함 → 항상 전체 화면을 덮음.
+            Color.bg.ignoresSafeArea()
+
+            NavigationStack {
+                DeliveryListView()
+            }
         }
         .task {
             await service.loadCarriers()

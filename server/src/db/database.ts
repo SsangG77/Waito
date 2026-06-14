@@ -29,6 +29,7 @@ function runColumnMigrations(database: Database.Database): void {
   addColumnIfMissing(database, 'devices', 'push_to_start_token', 'TEXT');
   addColumnIfMissing(database, 'devices', 'truck_config', 'TEXT');
   addColumnIfMissing(database, 'trackings', 'live_activity_started_at', 'TEXT');
+  addColumnIfMissing(database, 'trackings', 'memo', 'TEXT');
 }
 
 function addColumnIfMissing(

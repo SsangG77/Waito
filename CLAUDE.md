@@ -147,7 +147,7 @@ Live Activity Expanded View
 ├── db/database.ts, migrations/001_initial.sql  # 멱등 컬럼 마이그레이션 포함
 ├── routes/
 │   ├── carriers.ts                     # GET /api/carriers (CARRIERS 상수)
-│   ├── trackings.ts                    # 택배 CRUD + push-token 등록 + force 추가
+│   ├── trackings.ts                    # 택배 CRUD(PUT /:id = 품명·메모 수정) + push-token 등록 + force 추가
 │   ├── devices.ts                      # 디바이스 등록 + push-to-start-token 등록
 │   ├── webhooks.ts                     # tracker.delivery 콜백 → track 재조회
 │   └── admin.ts                        # credential 관리 HTML 페이지
@@ -285,7 +285,11 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **택배사 선택**: 시스템 Menu 대신 픽셀 스타일 펼침 드롭다운(`PixelDropdown`)
 - **추가 폼**: 인라인 폼(AddTrackingView 제거). 조회 실패(NOT_FOUND) 시 "그래도 추가" 확인 다이얼로그(`PixelConfirm`) → `force` 재요청
 - **정렬**: 도착임박순(기본) / 최근 업데이트순 / 등록순 — 칩으로 선택, `@AppStorage` 영구 저장
-- **행 슬라이드 삭제**: 왼쪽 슬라이드 → "> DEL _" 버튼(HStack 딸려나옴, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), ADD 누르면 닫힘
+- **행 슬라이드 → 삭제/수정**: 왼쪽 슬라이드 → "> DEL_"(빨강)·"> EDIT_"(오렌지) **2버튼 세로 분할**(각 절반 높이, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), 바깥 탭/ADD 누르면 닫힘.
+  - **삭제**: 탭 시 즉시 삭제 X → 상위(`DeliveryListView`)에서 `PixelConfirm`("삭제하면 되돌릴 수 없어요") 한 번 더 확인 후 `service.deleteTracking`. (확인 팝업은 전체화면 오버레이라 행이 아닌 상위에 부착)
+  - **수정(EDIT)**: 탭 시 상단 입력 폼이 **편집 모드**로 열리며 기존 값 prefill. 운송장번호/택배사는 '신원'이라 **읽기전용**(회색), **품명·메모만 수정**. 제출 버튼 라벨이 ADD→**EDIT**. `service.updateTracking`(PUT /api/trackings/:id) 호출. (`editingTrackingId`로 add/edit 분기)
+- **추가 직후 강조**: 새로 추가된 행이 한 번 통통 바운스(`justAddedId` → `scaleEffect` 스프링). 사용자가 추가됨을 인지.
+- **메모(memo)**: 추가/수정 시 입력, 펼친 상세에 "MEMO" 표시. **풀스택 영속**(DB `trackings.memo` 컬럼 + 서버 create/update/list 반영 + `TrackingListItem.memo`).
 - **조회 안 되는 운송장**: `last_event_time` 없으면 회색 + "확인 중", 등록 12시간 경과 시 "번호 확인 필요"(오렌지)
 - **트럭 버튼**(우상단): 사용자가 선택한 트럭(`CatalogTruckView`)을 표시 — `TruckConfigStore` 변경 시 자동 갱신
 - **빈 상태(택배 0개)**: 빈 화면 대신 `emptyState` — 사용자가 고른 트럭이 화면 가운데서 `RunningTruckView`로 "달리는" 효과(인앱이라 연속 애니메이션 정상 재생) + 위쪽 `chevron.up`과 "위 ADD 버튼으로 택배를 추가해보세요" 안내(상단 ADD 버튼을 가리킴, 중복 버튼 없음). pull-to-refresh 유지.

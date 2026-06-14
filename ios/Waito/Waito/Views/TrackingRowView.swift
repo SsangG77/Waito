@@ -4,11 +4,18 @@ struct TrackingRowView: View {
     let tracking: TrackingListItem
     let isLiveActive: Bool
     let onToggleLiveActivity: () -> Void
+    /// 삭제 요청(상위에서 확인 팝업 후 실제 삭제). 슬라이드는 이미 닫고 호출한다.
     var onDelete: () -> Void = {}
-    /// 현재 삭제 버튼이 열린 행의 id (한 번에 하나만 열리도록 공유)
+    /// 수정 요청(상위에서 입력 폼을 편집 모드로 연다)
+    var onEdit: () -> Void = {}
+    /// 현재 액션 버튼이 열린 행의 id (한 번에 하나만 열리도록 공유)
     @Binding var openRowId: Int?
+    /// 방금 추가돼 한 번 바운스로 강조할 행 id (이 행과 같으면 바운스)
+    var justAddedId: Int? = nil
 
     @State private var isExpanded = false
+    /// 추가 직후 강조 바운스 스케일
+    @State private var bounceScale: CGFloat = 1
 
     // 왼쪽 슬라이드 → 삭제 버튼 노출
     @State private var offsetX: CGFloat = 0
@@ -167,12 +174,13 @@ struct TrackingRowView: View {
             rowContent
                 .frame(maxWidth: .infinity)
 
-            // 삭제 버튼 (행 오른쪽 밖에 대기하다 함께 딸려나옴)
-            deleteButton
+            // 삭제/수정 버튼 (행 오른쪽 밖에 대기하다 함께 딸려나옴, 각 절반 높이)
+            actionColumn
         }
-        // 삭제 버튼을 행 오른쪽 바깥으로 밀어내 평소엔 숨김
+        // 액션 버튼을 행 오른쪽 바깥으로 밀어내 평소엔 숨김
         .padding(.trailing, openOffset)
         .offset(x: offsetX)
+        .scaleEffect(bounceScale)
         .gesture(dragGesture)
         .clipped()
         .onChange(of: openRowId) { _, newValue in
@@ -181,9 +189,20 @@ struct TrackingRowView: View {
                 withAnimation(slideSpring) { offsetX = 0 }
             }
         }
-        .listRowBackground(Color.bg)
-        .listRowSeparator(.hidden)
-        .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 4, trailing: 16))
+        .onChange(of: justAddedId) { _, newValue in
+            if newValue == tracking.id { playAddBounce() }
+        }
+        .onAppear {
+            if justAddedId == tracking.id { playAddBounce() }
+        }
+    }
+
+    /// 추가 직후 한 번 통통 튀는 강조
+    private func playAddBounce() {
+        bounceScale = 0.92
+        withAnimation(.spring(response: 0.45, dampingFraction: 0.45)) {
+            bounceScale = 1
+        }
     }
 
     private var rowContent: some View {
@@ -209,7 +228,7 @@ struct TrackingRowView: View {
                     .transition(.opacity)
             }
 
-            // 펼친 상태: 세로 타임라인r
+            // 펼친 상태: 세로 타임라인
             if isExpanded {
                 VStack(alignment: .leading, spacing: 0) {
                     Rectangle()
@@ -219,6 +238,21 @@ struct TrackingRowView: View {
                         .padding(.bottom, 10)
 
                     verticalProgress
+
+                    if let memo = tracking.memo, !memo.isEmpty {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("MEMO")
+                                .font(pixelFont(8))
+                                .foregroundStyle(Color.pixelMuted)
+                            Text(memo)
+                                .font(pixelFont(10))
+                                .foregroundStyle(Color.pixelText)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 10)
+                    }
                 }
                 .transition(.opacity)
             }
@@ -239,23 +273,49 @@ struct TrackingRowView: View {
         .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
     }
 
-    // MARK: - 삭제 버튼 ("> DEL _")
+    // MARK: - 액션 버튼 (삭제 / 수정, 각 절반 높이)
+
+    private var actionColumn: some View {
+        VStack(spacing: slideGap) {
+            deleteButton
+            editButton
+        }
+        .frame(width: delWidth)
+        .frame(maxHeight: .infinity)
+    }
 
     private var deleteButton: some View {
         Button {
             withAnimation(slideSpring) { offsetX = 0 }
             if openRowId == tracking.id { openRowId = nil }
-            onDelete()
+            onDelete()        // 상위에서 확인 팝업 후 실제 삭제
         } label: {
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Text(">")
                 Text("DEL_")
             }
             .font(pixelFont(11))
             .foregroundStyle(Color.pixelText)
-            .frame(width: delWidth)
-            .frame(maxHeight: .infinity)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
             .pixelBox(border: Color.pixelRed.opacity(0.7), bg: Color.pixelRed, lineWidth: 1.5, notch: 4)
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var editButton: some View {
+        Button {
+            withAnimation(slideSpring) { offsetX = 0 }
+            if openRowId == tracking.id { openRowId = nil }
+            onEdit()
+        } label: {
+            HStack(spacing: 6) {
+                Text(">")
+                Text("EDIT_")
+            }
+            .font(pixelFont(11))
+            .foregroundStyle(Color.pixelText)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
         }
         .buttonStyle(.plain)
     }
