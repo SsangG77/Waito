@@ -1,6 +1,10 @@
 import Database from 'better-sqlite3';
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
+
+// ESM 에는 __dirname 이 없으므로 import.meta.url 로 대체
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 let db: Database.Database | null = null;
 

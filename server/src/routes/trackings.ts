@@ -187,7 +187,7 @@ router.put('/:id', (req: Request, res: Response) => {
 
 // POST /api/trackings/:id/refresh — 수동 새로고침
 router.post('/:id/refresh', async (req: Request, res: Response) => {
-  const trackingId = parseInt(req.params.id, 10);
+  const trackingId = parseInt(String(req.params.id), 10);
   if (isNaN(trackingId)) {
     res.status(400).json({ error: 'Invalid tracking ID' });
     return;

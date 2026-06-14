@@ -2,10 +2,11 @@
   "name": "waito-server",
   "version": "0.1.0",
   "description": "Waito delivery tracking server",
+  "type": "module",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
+    "build": "tsc && cp -R src/db/migrations dist/db/migrations",
     "start": "node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest"
