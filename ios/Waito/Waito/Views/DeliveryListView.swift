@@ -123,24 +123,58 @@ struct DeliveryListView: View {
             }
 
             ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(displayedTrackings) { tracking in
-                        TrackingRowView(
-                            tracking: tracking,
-                            isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
-                            onToggleLiveActivity: { toggleLiveActivity(for: tracking) },
-                            onDelete: { deleteTracking(tracking) },
-                            openRowId: $openRowId
-                        )
+                if displayedTrackings.isEmpty {
+                    emptyState
+                        .frame(minHeight: 660)
+                } else {
+                    LazyVStack(spacing: 8) {
+                        ForEach(displayedTrackings) { tracking in
+                            TrackingRowView(
+                                tracking: tracking,
+                                isLiveActive: service.isInLiveActivity(trackingNumber: tracking.trackingNumber),
+                                onToggleLiveActivity: { toggleLiveActivity(for: tracking) },
+                                onDelete: { deleteTracking(tracking) },
+                                openRowId: $openRowId
+                            )
+                        }
                     }
+                    .padding(.vertical, 4)
                 }
-                .padding(.vertical, 4)
             }
             .refreshable { await service.loadTrackings() }
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .background(Color.bg)
+    }
+
+    // MARK: - 빈 상태 (택배 없음 → 달리는 트럭)
+
+    /// 택배가 하나도 없을 때, 사용자가 고른 트럭이 화면 가운데서 "달리는" 효과.
+    /// 인앱 화면이라 RunningTruckView 의 연속 애니메이션이 정상 재생된다.
+    /// (TruckConfigStore 는 @Observable 이라 트럭을 바꾸면 자동 갱신)
+    private var emptyState: some View {
+        let cfg = TruckConfigStore.shared.config
+        return VStack(spacing: 12) {
+            Spacer(minLength: 0)
+
+            RunningTruckView(lineCount: 8) {
+                CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 96)
+            }
+            .frame(height: 170)
+
+            Text("아직 택배가 없어요")
+                .font(pixelFont(13))
+                .foregroundStyle(Color.pixelText)
+                .padding(.top, 5)
+
+            Text("ADD 버튼으로 택배를 추가해보세요")
+                .font(pixelFont(10))
+                .foregroundStyle(Color.pixelMuted)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity)
     }
 
     // MARK: - 버튼 영역
@@ -413,5 +447,13 @@ struct DeliveryListView: View {
         DeliveryListView()
     }
     .environment(service)
+    .environment(SubscriptionManager())
+}
+
+#Preview("빈 상태 - 달리는 트럭") {
+    NavigationStack {
+        DeliveryListView()
+    }
+    .environment(TrackingService(preview: []))
     .environment(SubscriptionManager())
 }

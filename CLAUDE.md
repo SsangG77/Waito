@@ -125,6 +125,7 @@ Live Activity Expanded View
 │   ├── PlusPaywallView.swift           # 커스텀 풀스크린 페이월(트럭 그리드+혜택+CTA), 잠금 항목 탭 시
 │   ├── TruckCustomizeView.swift        # 트럭 꾸미기(잠금 탭 → PlusPaywallView)
 │   └── TruckDrawing/                    # CatalogTruckView(이미지 기반) 등 트럭 렌더링
+│       └── RunningTruckScene.swift      # RunningTruckView: 트럭 바운스+속도선 "달리는" 효과 래퍼(@ViewBuilder), 위젯 타깃 공유 / Color(hex:UInt32)
 ├── Models/
 │   ├── DeliveryStatus.swift            # 배송 단계 enum(String raw) + t값/회전각
 │   ├── TruckConfig.swift, TruckConfigStore.swift
@@ -287,10 +288,11 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **행 슬라이드 삭제**: 왼쪽 슬라이드 → "> DEL _" 버튼(HStack 딸려나옴, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), ADD 누르면 닫힘
 - **조회 안 되는 운송장**: `last_event_time` 없으면 회색 + "확인 중", 등록 12시간 경과 시 "번호 확인 필요"(오렌지)
 - **트럭 버튼**(우상단): 사용자가 선택한 트럭(`CatalogTruckView`)을 표시 — `TruckConfigStore` 변경 시 자동 갱신
+- **빈 상태(택배 0개)**: 빈 화면 대신 `emptyState` — 사용자가 고른 트럭이 화면 가운데서 `RunningTruckView`로 "달리는" 효과(인앱이라 연속 애니메이션 정상 재생) + "아직 택배가 없어요" 안내. pull-to-refresh 유지.
 
 ### 설정 (SettingsView)
 - (DEBUG) **테스트 데이터 토글**: 켜면 목록에 더미 택배 표시. 기존 "Dynamic Island 데모" 버튼은 제거
-- **항상 노출 토글**(구독 전용): 배송이 없어도 Dynamic Island에 트럭 상시 표시. 무료는 회색 잠금+크라운, 탭 시 PaywallView. 동작 게이팅은 `TrackingService.ambientEnabled`(토글 && 구독) 이중 확인 — 배송 없을 때 ambient Live Activity(`pushType:nil`, 빈 items) 시작/종료. ⚠️ iOS 제약: Live Activity는 잠금화면 카드에도 함께 노출(DI 단독 표시 불가) → 위젯에 idle 뷰 추가. `PixelToggle`은 `isEnabled`로 비활성 표시.
+- **항상 노출 토글**(구독 전용): 배송이 없어도 Dynamic Island에 트럭 상시 표시. 무료는 회색 잠금+크라운, 탭 시 PaywallView. 동작 게이팅은 `TrackingService.ambientEnabled`(토글 && 구독) 이중 확인 — 배송 없을 때 ambient Live Activity(`pushType:nil`, 빈 items) 시작/종료. ⚠️ iOS 제약: Live Activity는 잠금화면 카드에도 함께 노출(DI 단독 표시 불가) → 위젯에 idle 뷰 추가. 배송 없을 때 idle 표시: **접힘** = leading 트럭 / trailing 없음, **펼침·잠금화면** = `RunningTruckView`(달리는 효과). `PixelToggle`은 `isEnabled`로 비활성 표시. (`RoamingTruckView`는 좌우 왕복 컴포넌트로 `CompactIslandViews.swift`에 남아 있으나 현재 미사용.)
 
 ### 트럭 꾸미기 (TruckCustomizeView)
 - **픽셀 카탈로그(이미지 기반)**: cab 27 / body 33 / wheel 27 — 4계열(🚚트럭·🪖탱크·🚆기차·🏗️건설) 자유 조합 ≈ 24,057가지. `CatalogTruckView`가 `Image(에셋명)`으로 렌더(에셋: `Assets.xcassets/PixelCatalog/{Cabs,Bodies,Wheels}`, SVG). **enum rawValue = 에셋 imageset 이름과 1:1** → 이름 누락/불일치 시 트럭이 빈 화면이 됨(주의).
@@ -300,6 +302,10 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### Live Activity 푸시 (서버 + iOS)
 - APNs 실제 전송 + push-to-start 이벤트 기반 (위 "데이터 흐름" 참조)
 - 무료 1개 / 유료 2개 추적 제한(`SubscriptionManager.liveActivityLimit`)
+- **트럭 표시(위젯)**: 접힌 DI(compact leading)·잠금화면 idle/배송 행·펼친 DI idle 모두 **`CatalogTruckView` 트럭만** 정적 표시.
+  - ⚠️ **iOS 제약**: Live Activity(잠금화면/DI)는 시스템이 SwiftUI 애니메이션 모디파이어를 무시 → `repeatForever` 등 연속 애니메이션이 **실기기/시뮬에서 안 돎**(공식 문서 "Animating data updates in widgets and Live Activities"). Pixel Pals 류도 자유 애니메이션이 아님. → 위젯에선 애니메이션 효과를 쓰지 않음.
+  - **`RunningTruckView`(`RunningTruckScene.swift`)**: 트럭 바운스+속도선 "달리는" 효과 래퍼(`animated` 플래그). **인앱/프리뷰 전용**(일반 SwiftUI라 정상 재생). 현재 **목록 빈 상태(DeliveryListView)** 에서 사용. 모션은 `TimelineView(.animation)` 공유 시간축 + 위상(phase) 기반 — 각 속도선이 항상 화면 전체에 균등 분배돼 우→좌로 흐름(이전 `repeatForever`+`delay` 방식의 뭉침/트럭 뒤 출현 문제 해결). `Color(hex: UInt32)` 포함. 위젯에선 미사용.
+  - (`RoamingTruckView` 좌우 왕복도 `CompactIslandViews.swift`에 미사용 잔존.)
 
 ---
 

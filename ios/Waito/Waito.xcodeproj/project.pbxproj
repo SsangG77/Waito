@@ -57,6 +57,7 @@
 				Models/TruckConfig.swift,
 				Models/TruckPathCalculator.swift,
 				Views/TruckDrawing/CatalogTruckView.swift,
+				Views/TruckDrawing/RunningTruckScene.swift,
 				Views/TruckDrawing/TruckShapes.swift,
 				Views/TruckDrawing/TruckStyleModifier.swift,
 			);

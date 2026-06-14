@@ -30,6 +30,7 @@ struct SettingsView: View {
 
                     #if DEBUG
                     dummyDataToggleRow
+                    debugSubscriptionRow
                     #endif
                 }
                 .padding(.horizontal, 16)
@@ -161,6 +162,47 @@ struct SettingsView: View {
             .padding(.vertical, 14)
             .pixelBox(
                 border: showDummyData ? Color.pixelOrange.opacity(0.5) : Color.pixelBorder,
+                bg: Color.pixelSurface,
+                lineWidth: 1.5,
+                notch: 4
+            )
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - 디버그: 구독 상태 토글 (켜면 모든 잠금 해제 — 트럭 부품 + 항상 노출)
+
+    private var debugSubscriptionRow: some View {
+        Button {
+            subscription.toggleSubscription()
+            Task { await service.reconcileAmbientActivity() }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: subscription.isSubscribed ? "crown.fill" : "crown")
+                    .font(.system(size: 14))
+                    .foregroundStyle(subscription.isSubscribed ? Color.pixelOrange : Color.pixelMuted)
+                    .frame(width: 28)
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("DEBUG SUBSCRIPTION")
+                        .font(pixelFont(11))
+                        .foregroundStyle(Color.pixelText)
+                    Text(subscription.isSubscribed ? "ON — 구독 상태(모든 잠금 해제)" : "OFF — 무료")
+                        .font(pixelFont(9))
+                        .foregroundStyle(subscription.isSubscribed ? Color.pixelOrange : Color.pixelMuted)
+                }
+
+                Spacer()
+
+                PixelToggle(isOn: subscription.isSubscribed) {
+                    subscription.toggleSubscription()
+                    Task { await service.reconcileAmbientActivity() }
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 14)
+            .pixelBox(
+                border: subscription.isSubscribed ? Color.pixelOrange.opacity(0.5) : Color.pixelBorder,
                 bg: Color.pixelSurface,
                 lineWidth: 1.5,
                 notch: 4

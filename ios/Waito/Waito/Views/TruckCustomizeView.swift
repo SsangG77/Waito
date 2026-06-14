@@ -9,6 +9,10 @@ struct TruckCustomizeView: View {
     @State private var showSubscriptionAlert = false
     @State private var isDemoActive = false
 
+    /// 미리보기용 임시 조합. 잠금 요소도 자유롭게 골라 미리 볼 수 있고,
+    /// "저장하기"를 눌러야 store.config 에 커밋된다(= Live Activity/서버 갱신).
+    @State private var draft = TruckConfigStore.shared.config
+
     var body: some View {
         VStack(spacing: 0) {
             PixelNavBar(title: "MY TRUCK", onBack: { dismiss() })
@@ -17,27 +21,24 @@ struct TruckCustomizeView: View {
                 VStack(spacing: 20) {
                     previewSection
                     dynamicIslandDemoButton
-                    catalogSection(title: "CAB", items: TruckCab.allCases, selected: store.config.cab) { cab in
-                        CatalogTruckView(cab: cab, truckBody:store.config.body, wheels: store.config.wheelType, size: 56)
+                    catalogSection(title: "CAB", items: TruckCab.allCases, selected: draft.cab) { cab in
+                        CatalogTruckView(cab: cab, truckBody: draft.body, wheels: draft.wheelType, size: 56)
                     } onSelect: { cab in
-                        store.config.cab = cab
+                        draft.cab = cab
                     } requiresPlus: { $0.requiresPlus }
 
-                    catalogSection(title: "BODY", items: TruckBody.allCases, selected: store.config.body) { body in
-                        CatalogTruckView(cab: store.config.cab, truckBody:body, wheels: store.config.wheelType, size: 56)
+                    catalogSection(title: "BODY", items: TruckBody.allCases, selected: draft.body) { body in
+                        CatalogTruckView(cab: draft.cab, truckBody: body, wheels: draft.wheelType, size: 56)
                     } onSelect: { body in
-                        store.config.body = body
+                        draft.body = body
                     } requiresPlus: { $0.requiresPlus }
 
-                    catalogSection(title: "WHEELS", items: TruckWheelType.allCases, selected: store.config.wheelType) { wheels in
-                        CatalogTruckView(cab: store.config.cab, truckBody:store.config.body, wheels: wheels, size: 56)
+                    catalogSection(title: "WHEELS", items: TruckWheelType.allCases, selected: draft.wheelType) { wheels in
+                        CatalogTruckView(cab: draft.cab, truckBody: draft.body, wheels: wheels, size: 56)
                     } onSelect: { wheels in
-                        store.config.wheelType = wheels
+                        draft.wheelType = wheels
                     } requiresPlus: { $0.requiresPlus }
 
-                    #if DEBUG
-                    debugSubscriptionSection
-                    #endif
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -46,6 +47,7 @@ struct TruckCustomizeView: View {
         .background(Color.bg)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .safeAreaInset(edge: .bottom) { saveBar }
         .onChange(of: store.config) {
             Task {
                 await service.pushTruckConfig()            // 실행 중인 Activity 즉시 반영
@@ -58,8 +60,56 @@ struct TruckCustomizeView: View {
                 #if DEBUG
                 if !subscription.isSubscribed { subscription.toggleSubscription() }
                 #endif
+                // 구독 직후, 미리보기 중이던 조합을 저장(커밋)
+                if subscription.isSubscribed { store.config = draft }
             }
         }
+    }
+
+    // MARK: - 저장 바 (하단 고정) — 유료 부품 포함 시 비구독이면 Paywall
+
+    private var draftRequiresPlus: Bool {
+        draft.cab.requiresPlus || draft.body.requiresPlus || draft.wheelType.requiresPlus
+    }
+
+    private var hasChanges: Bool { draft != store.config }
+
+    private func handleSave() {
+        // 유료 부품이 하나라도 포함됐고 비구독이면 → 구독 요청 모달
+        if draftRequiresPlus && !subscription.isSubscribed {
+            showSubscriptionAlert = true
+            return
+        }
+        store.config = draft   // 커밋 → onChange 가 Live Activity/서버 설정 갱신
+    }
+
+    private var saveBar: some View {
+        // 외형은 유료 여부와 무관하게 동일. 변경 유무로만 강조/비활성 구분.
+        Button(action: handleSave) {
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 13))
+                Text("저장하기_")
+                    .font(pixelFont(12))
+                Spacer()
+            }
+            .foregroundStyle(hasChanges ? .black : Color.pixelMuted)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 16)
+            .frame(maxWidth: .infinity)
+            .pixelBox(
+                border: Color.pixelBorder,
+                bg: hasChanges ? Color.pixelOrange : Color.pixelSurface,
+                lineWidth: 1.5, notch: 4
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!hasChanges)
+        .opacity(hasChanges ? 1 : 0.45)
+        .padding(.horizontal, 16)
+        .padding(.top, 8)
+        .padding(.bottom, 10)
+        .background(Color.bg)
     }
 
     // MARK: - Dynamic Island 데모 버튼
@@ -106,9 +156,9 @@ struct TruckCustomizeView: View {
             Color.black
                 .clipShape(NotchedRectangle(notch: 8))
             CatalogTruckView(
-                cab: store.config.cab,
-                truckBody: store.config.body,
-                wheels: store.config.wheelType,
+                cab: draft.cab,
+                truckBody: draft.body,
+                wheels: draft.wheelType,
                 size: 140
             )
         }
@@ -142,13 +192,8 @@ struct TruckCustomizeView: View {
                             isSelected: item == selected,
                             locked: requiresPlus(item) && !subscription.isSubscribed,
                             thumbnail: { thumbnail(item) },
-                            onTap: {
-                                if requiresPlus(item) && !subscription.isSubscribed {
-                                    showSubscriptionAlert = true
-                                } else {
-                                    onSelect(item)
-                                }
-                            }
+                            // 잠금 요소도 미리보기로 선택 가능 — 게이팅은 "저장하기"에서.
+                            onTap: { onSelect(item) }
                         )
                     }
                 }
@@ -188,27 +233,6 @@ struct TruckCustomizeView: View {
         .buttonStyle(.plain)
     }
 
-    // MARK: - 디버그 구독 토글
-
-    #if DEBUG
-    private var debugSubscriptionSection: some View {
-        VStack(spacing: 8) {
-            Rectangle()
-                .fill(Color.pixelBorder)
-                .frame(height: 1)
-            Button {
-                subscription.toggleSubscription()
-            } label: {
-                HStack {
-                    Image(systemName: subscription.isSubscribed ? "checkmark.circle.fill" : "circle")
-                    Text(subscription.isSubscribed ? "구독 중 (디버그)" : "구독 안 함 (디버그)")
-                }
-                .font(pixelFont(9))
-                .foregroundStyle(Color.pixelMuted)
-            }
-        }
-    }
-    #endif
 }
 
 #Preview {

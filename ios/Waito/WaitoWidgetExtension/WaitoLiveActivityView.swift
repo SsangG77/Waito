@@ -13,7 +13,8 @@ struct WaitoLiveActivity: Widget {
                     ExpandedMetroTimelineView(state: context.state)
                 }
             } compactLeading: {
-                BouncingTruckView(config: context.state.truckConfig, size: 24)
+                let cfg = context.state.truckConfig
+                CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 24)
             } compactTrailing: {
                 if let primary = context.state.primary {
                     DeliveryProgressRingView(progress: primary.status.progress, size: 20)
@@ -41,14 +42,38 @@ private extension DeliveryAttributes.ContentState {
             )
         ], truckConfig: .default)
     }
+
+    /// 배송 없을 때(항상 노출) — 달리는 트럭 idle 상태
+    static var idle: Self { .init(items: [], truckConfig: .default) }
 }
 
 private let _previewAttr = DeliveryAttributes(deviceId: "preview")
 
 
-#Preview("Lock Screen", as: .content, using: _previewAttr) {
+#Preview("잠금화면", as: .content, using: _previewAttr) {
     WaitoLiveActivity()
 } contentStates: {
+    DeliveryAttributes.ContentState.idle
     DeliveryAttributes.ContentState.make(status: .delivering)
     DeliveryAttributes.ContentState.make(status: .delivered)
+}
+
+#Preview("DI 펼침", as: .dynamicIsland(.expanded), using: _previewAttr) {
+    WaitoLiveActivity()
+} contentStates: {
+    DeliveryAttributes.ContentState.idle
+    DeliveryAttributes.ContentState.make(status: .outForDelivery)
+}
+
+#Preview("DI 접힘", as: .dynamicIsland(.compact), using: _previewAttr) {
+    WaitoLiveActivity()
+} contentStates: {
+    DeliveryAttributes.ContentState.idle
+    DeliveryAttributes.ContentState.make(status: .delivering)
+}
+
+#Preview("DI 최소", as: .dynamicIsland(.minimal), using: _previewAttr) {
+    WaitoLiveActivity()
+} contentStates: {
+    DeliveryAttributes.ContentState.idle
 }

@@ -50,14 +50,14 @@ struct PlusPaywallView: View {
             let size = (geo.size.width + bleed - spacing * CGFloat(cols - 1)) / CGFloat(cols)
             VStack(spacing: 10) {
                 ForEach(Self.gridRows.indices, id: \.self) { idx in
-                    let row = Self.gridRows[idx]
-                    HStack(spacing: spacing) {
-                        ForEach(row.indices, id: \.self) { c in
-                            CatalogTruckView(cab: row[c].0, truckBody: row[c].1, wheels: row[c].2, size: size)
-                        }
-                    }
-                    // 행마다 반 칸씩 엇갈리게(브릭 패턴) — 양옆은 마스크로 흐려짐
-                    .offset(x: idx.isMultiple(of: 2) ? -(size + spacing) / 4 : (size + spacing) / 4)
+                    // 행마다 좌/우 번갈아 천천히 흐르며 다른 조합이 계속 지나간다.
+                    PaywallMarqueeRow(
+                        combos: Self.gridRows[idx],
+                        size: size,
+                        spacing: spacing,
+                        toLeft: idx.isMultiple(of: 2),
+                        period: Double(Self.gridRows[idx].count) * 2.4
+                    )
                 }
             }
             .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
@@ -236,17 +236,61 @@ struct PlusPaywallView: View {
         .frame(width: 26, height: 26)
     }
 
-    // MARK: - 트럭 그리드 조합 (4행 × 5열)
+    // MARK: - 트럭 그리드 조합 (4행 × 8열) — 마퀴로 흐르므로 행마다 다양하게
 
     private static let gridRows: [[(TruckCab, TruckBody, TruckWheelType)]] = {
         let cabs = TruckCab.allCases
         let bodies = TruckBody.allCases
         let wheels = TruckWheelType.allCases
-        let combos: [(TruckCab, TruckBody, TruckWheelType)] = (0..<20).map { i in
-            (cabs[i % cabs.count], bodies[(i * 3) % bodies.count], wheels[(i * 5) % wheels.count])
+        let rows = 4
+        let perRow = 8
+        return (0..<rows).map { r in
+            (0..<perRow).map { c -> (TruckCab, TruckBody, TruckWheelType) in
+                let i = r * perRow + c
+                return (
+                    cabs[(i * 7 + r) % cabs.count],
+                    bodies[(i * 5 + r * 3) % bodies.count],
+                    wheels[(i * 3 + r) % wheels.count]
+                )
+            }
         }
-        return stride(from: 0, to: combos.count, by: 5).map { Array(combos[$0..<min($0 + 5, combos.count)]) }
     }()
+}
+
+// MARK: - 페이월 트럭 마퀴 행 (좌/우로 끊김 없이 순환)
+
+/// 한 행의 콤보를 2벌 이어붙여 offset 을 한 벌 너비만큼 선형 반복 → 끊김 없는 순환.
+private struct PaywallMarqueeRow: View {
+    let combos: [(TruckCab, TruckBody, TruckWheelType)]
+    let size: CGFloat
+    let spacing: CGFloat
+    let toLeft: Bool
+    let period: Double
+
+    @State private var animate = false
+
+    var body: some View {
+        let count = combos.count
+        let rowWidth = (size + spacing) * CGFloat(count)   // 한 벌 너비 = 순환 주기 거리
+        HStack(spacing: spacing) {
+            ForEach(0..<(count * 2), id: \.self) { i in
+                let c = combos[i % count]
+                CatalogTruckView(cab: c.0, truckBody: c.1, wheels: c.2, size: size)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .offset(x: offsetX(rowWidth: rowWidth))
+        .animation(.linear(duration: period).repeatForever(autoreverses: false), value: animate)
+        .onAppear { animate = true }
+    }
+
+    private func offsetX(rowWidth: CGFloat) -> CGFloat {
+        if toLeft {
+            return animate ? -rowWidth : 0          // 0 → -rowWidth (왼쪽으로 흐름)
+        } else {
+            return animate ? 0 : -rowWidth          // -rowWidth → 0 (오른쪽으로 흐름)
+        }
+    }
 }
 
 #Preview {

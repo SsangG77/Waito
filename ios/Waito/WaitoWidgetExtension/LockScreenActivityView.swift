@@ -25,28 +25,16 @@ struct LockScreenLiveActivityView: View {
     }
 }
 
-// MARK: - 잠금화면 대기(idle) 행 — 배송 없을 때
+// MARK: - 잠금화면 대기(idle) 행 — 배송 없을 때 좌우로 왔다갔다 하는 트럭
 
 struct LockScreenIdleRow: View {
     let truckConfig: TruckConfig
 
     var body: some View {
-        HStack(spacing: 12) {
-            CatalogTruckView(cab: truckConfig.cab, truckBody: truckConfig.body, wheels: truckConfig.wheelType, size: 36)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text("Waito")
-                    .font(.caption2)
-                    .foregroundStyle(.white.opacity(0.5))
-                Text("배송 대기 중")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.7))
-            }
-
-            Spacer()
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        CatalogTruckView(cab: truckConfig.cab, truckBody: truckConfig.body, wheels: truckConfig.wheelType, size: 40)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
     }
 }
 
@@ -124,4 +112,27 @@ struct ProgressBarView: View {
         }
         .frame(height: dotSize)
     }
+}
+
+// MARK: - Previews
+
+#Preview("잠금화면 — 배송 중") {
+    LockScreenLiveActivityView(state: .init(
+        items: [
+            TrackingItemState(
+                trackingNumber: "123456789012",
+                status: .delivering,
+                carrierName: "CJ대한통운",
+                itemName: "맥북 프로 14인치",
+                estimatedDelivery: "오늘 도착 예정"
+            )
+        ],
+        truckConfig: .default
+    ))
+    .background(Color.black)
+}
+
+#Preview("잠금화면 — idle 달리는 트럭") {
+    LockScreenLiveActivityView(state: .init(items: [], truckConfig: .default))
+        .background(Color.black)
 }
