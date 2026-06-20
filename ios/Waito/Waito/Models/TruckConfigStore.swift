@@ -2,6 +2,7 @@ import Foundation
 import Observation
 import SwiftUI
 
+@MainActor
 @Observable
 final class TruckConfigStore {
     static let shared = TruckConfigStore()

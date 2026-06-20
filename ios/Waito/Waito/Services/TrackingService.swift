@@ -15,6 +15,7 @@ enum AddTrackingResult {
 
 // MARK: - Tracking Service
 
+@MainActor
 @Observable
 final class TrackingService {
     private(set) var trackings: [TrackingListItem] = []

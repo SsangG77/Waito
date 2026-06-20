@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 
+@MainActor
 @Observable
 final class SubscriptionManager {
     /// 구독 상태 저장 키 — TrackingService 등 다른 레이어가 UserDefaults로 방어적 재확인할 때 공유한다.
