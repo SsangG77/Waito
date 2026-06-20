@@ -1,0 +1,35 @@
+name: Deploy server to Vultr
+
+# server/ 코드가 main에 푸시되면 Vultr 인스턴스에 자동 반영
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'server/**'
+      - '.github/workflows/deploy.yml'
+  workflow_dispatch: {} # 수동 실행도 허용
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        env:
+          SSH_KEY: ${{ secrets.VULTR_SSH_KEY }}
+          HOST: ${{ secrets.VULTR_HOST }}
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/id_deploy
+          chmod 600 ~/.ssh/id_deploy
+          ssh-keyscan -H "$HOST" >> ~/.ssh/known_hosts 2>/dev/null
+          ssh -i ~/.ssh/id_deploy -o IdentitiesOnly=yes root@"$HOST" 'bash -s' <<'EOF'
+          set -e
+          cd /var/www/waito
+          git pull origin main
+          cd server
+          npm ci
+          npm run build
+          pm2 restart waito --update-env
+          pm2 save
+          echo "✅ deploy done"
+          EOF
