@@ -43,6 +43,8 @@ struct LockScreenIdleRow: View {
             CatalogTruckView(cab: truckConfig.cab, truckBody: truckConfig.body, wheels: truckConfig.wheelType, size: 40)
                 .offset(y: bounce)
                 .animation(nil, value: bounce)   // 보간 없이 스냅 → 8비트 게임처럼 끊기는 바운스
+                .padding(.trailing, 30)
+                .padding(.leading, 10)
 
             // 누르면 BounceTruckIntent 실행 → 트럭이 위아래로 바운스
             // 빨강 ADD 버튼(> ADD_) 과 동일한 픽셀 박스 스타일
@@ -61,10 +63,10 @@ struct LockScreenIdleRow: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.leading, 30)
+            
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(.horizontal, 26)
+        .padding(.horizontal, 20)
         .padding(.vertical, 12)
     }
 }

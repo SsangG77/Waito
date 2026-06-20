@@ -9,6 +9,10 @@ struct PlusPaywallView: View {
     /// "구독 시작하기" 탭 시 실행 (실제 StoreKit 구매 연결 지점)
     var onSubscribe: () -> Void = {}
 
+    /// 포인트 부족으로 띄운 경우 보유/부족 포인트를 함께 표시. 그 외 진입점은 nil → 미표시.
+    var pointStatus: PointStatus? = nil
+    struct PointStatus { let need: Int; let balance: Int }
+
     // 디자인 골드 팔레트
     private let gold = Color(hex: "#E8C24A")        // 타이틀·가격·코인
     private let buttonGold = Color(hex: "#F2CF63")  // CTA 버튼
@@ -28,6 +32,10 @@ struct PlusPaywallView: View {
 
                 Spacer(minLength: 16)
 
+                if let ps = pointStatus {
+                    pointStatusBlock(ps)
+                        .padding(.bottom, 12)
+                }
                 priceBlock
                 ctaButton
                     .padding(.horizontal, 20)
@@ -132,12 +140,36 @@ struct PlusPaywallView: View {
 
     // MARK: - 가격 / CTA / 푸터
 
+    /// 포인트 부족 안내 — 내 포인트 + 부족분 (포인트 경로로 띄웠을 때만)
+    private func pointStatusBlock(_ ps: PointStatus) -> some View {
+        let short = max(ps.need - ps.balance, 0)
+        return HStack(spacing: 8) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(gold)
+            Text("내 포인트 \(ps.balance)P")
+                .font(pixelFont(11))
+                .foregroundStyle(.white.opacity(0.9))
+            Text("·")
+                .font(pixelFont(11))
+                .foregroundStyle(Color.pixelMuted)
+            Text("\(short)P 부족")
+                .font(pixelFont(11))
+                .foregroundStyle(gold)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(Color.pixelSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.pixelBorder, lineWidth: 1))
+    }
+
     private var priceBlock: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
             Text("₩200")
                 .font(pixelFont(30))
                 .foregroundStyle(gold)
-            Text("/ 하루")
+            Text("/ 1 day")
                 .font(pixelFont(14))
                 .foregroundStyle(.white.opacity(0.85))
         }

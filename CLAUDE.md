@@ -317,7 +317,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
   - **포인트 해제(`pointUnlockable`, 비용 `pointUnlockCost`=3)**: 트럭 계열 추가 부품만(에셋명 2번째 토큰 `TruckHead`/`Truck`/`Wheels`). 배송완료 포인트로 해제.
   - **Plus 전용(`plusOnly`, 포인트로도 불가)**: 탱크·기차·물탱크(탱크로리)·건설·컨테이너(`TankGun/Tank/TankTrack/Train/LiquidTank/Construction/ConstructionTrack/Container`)
 - **포인트 경제**: 배송완료 1건=1포인트(디바이스별, 서버 `devices.delivered_count`). 부품 1개 해제=3포인트(서버 `devices.unlocked_parts` JSON). 잔액 = 누적−해제수×3. `TrackingService.pointBalance/isUnlocked/loadDeviceProgress/unlockPart`. delivered 전환 +1은 `pollingService`, 해제 검증(Plus계열 403/잔액 400)은 `devices.ts` POST `/unlock-part`. ⚠️ 디바이스 단위(키체인 토큰) — 기기 간 동기화는 2차 로그인.
-- **My Truck 게이팅**: 셀 잠금 = 무료/구독이면 없음, `pointUnlockable` 미해제면 "3P"(코인), `plusOnly`면 크라운. 저장 시 `handleSave` — Plus전용 끼면 페이월, 포인트대상이면 `PixelConfirm`로 N×3P 차감 후 커밋(부족하면 "Plus 보기" 유도).
+- **My Truck 게이팅**: 셀 잠금 = 무료/구독이면 없음, `pointUnlockable` 미해제면 "3P"(코인), `plusOnly`면 크라운. 저장 시 `handleSave` — Plus전용 끼면 페이월, 포인트대상이면 `PixelConfirm`로 N×3P 차감 후 커밋. **포인트 부족 시 중간 안내 없이 바로 `PlusPaywallView` 직행** — 페이월 가격 위에 보유/부족 포인트 표시(`PlusPaywallView.pointStatus`, 옵셔널이라 잠금탭·첫추가 업셀 등 다른 진입점은 미표시).
 - cab/body/wheel 조합 → `TruckConfigStore`(UserDefaults). 변경 시 실행 중 Activity 갱신(`pushTruckConfig`) + 서버 push-to-start 설정 갱신(`refreshPushToStartConfig`)
 
 ### Live Activity 푸시 (서버 + iOS)
@@ -353,6 +353,14 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **자동배포**: `.github/workflows/deploy.yml` — `server/**` push 시 GitHub Actions가 SSH로 Vultr 접속 → `git pull && npm ci && build && pm2 restart`. 시크릿 `VULTR_SSH_KEY`/`VULTR_HOST`.
 - **credential 만료 알림**: 만료 3일 전부터 매일 이메일(`emailService` = Resend HTTP API, `RESEND_API_KEY`). 메일에 운영 admin 갱신 링크(시크릿 포함) 버튼.
 - `.env`/`certs/*.p8`/`*.ttf 위치` 주의: `.env`·`certs/`는 gitignore — 서버엔 scp로 직접.
+
+---
+
+## Swift 동시성 / 빌드 설정
+
+- **`SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated`** (`project.pbxproj` 4개 빌드설정). Xcode가 한때 이를 `MainActor` 로 자동 설정 → 모든 타입이 암묵적 `@MainActor` 가 되어, `actor APIClient`/위젯 `BounceTruckIntent` 가 데이터 모델(DTO·`DeliveryAttributes`)의 MainActor 격리 conformance 와 충돌(Swift 6 모드 에러). `nonisolated` 로 되돌려 해결.
+- 대신 UI 상태관리 클래스는 **`@MainActor` 명시**: `TrackingService`·`TruckConfigStore`·`SubscriptionManager`(모두 `@Observable`). 데이터 모델/DTO 는 격리 없음 → actor·위젯 어디서든 인코딩/디코딩 가능.
+- ⚠️ 새 `@Observable` 상태관리 클래스 추가 시 `@MainActor` 를 직접 붙일 것(자동 추론 없음).
 
 ---
 
@@ -394,3 +402,8 @@ Key routing rules:
 - Architecture review → invoke plan-eng-review
 - Save progress, checkpoint, resume → invoke checkpoint
 - Code quality, health check → invoke health
+- 노션 프로젝트에 할일/태스크 등록 → invoke project-task-add
+  - 한국어 트리거(아래 표현이면 직접 답하지 말고 무조건 project-task-add 호출):
+    "이거 (어떤) 프로젝트에 할일로 추가해줘", "OO 프로젝트에 OO 작업 등록", "할일 만들어줘",
+    "노션에 태스크 추가", "이거 할일로 등록", "process database에 추가"
+  - 대상 프로젝트가 불명확하면 스킬 실행 중 사용자에게 어떤 프로젝트인지 물어 진행

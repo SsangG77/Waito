@@ -204,6 +204,8 @@ struct DeliveryListView: View {
                         }
                     }
                     .padding(.vertical, 4)
+                    // 정렬 순서가 바뀌면 행들이 새 위치로 부드럽게 이동(ForEach가 id로 행을 매칭)
+                    .animation(.spring(response: 0.42, dampingFraction: 0.82), value: sortOrder)
                 }
             }
             .refreshable { await service.loadTrackings() }

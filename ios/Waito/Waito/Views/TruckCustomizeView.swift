@@ -7,7 +7,9 @@ struct TruckCustomizeView: View {
     @Bindable private var store = TruckConfigStore.shared
 
     @State private var showSubscriptionAlert = false
+    #if DEBUG
     @State private var isDemoActive = false
+    #endif
 
     /// 미리보기용 임시 조합. 잠금 요소도 자유롭게 골라 미리 볼 수 있고,
     /// "저장하기"를 눌러야 store.config 에 커밋된다(= Live Activity/서버 갱신).
@@ -15,9 +17,9 @@ struct TruckCustomizeView: View {
 
     // 포인트 해제 흐름 상태
     @State private var showUnlockConfirm = false
-    @State private var showInsufficient = false
     @State private var pendingUnlock: [String] = []   // 해제할 부품 rawValue
     @State private var unlockCost = 0
+    @State private var paywallPoints: PlusPaywallView.PointStatus? = nil   // 포인트 부족 페이월에 보유/부족 표시(Plus전용 경로는 nil)
 
     /// 셀 잠금 표시 종류
     private enum CellLock { case none, plus, point }
@@ -30,7 +32,9 @@ struct TruckCustomizeView: View {
                 VStack(spacing: 20) {
                     previewSection
                     pointBar
+                    #if DEBUG
                     dynamicIslandDemoButton
+                    #endif
 
                     catalogSection(title: "CAB", items: TruckCab.allCases, selected: draft.cab) { cab in
                         CatalogTruckView(cab: cab, truckBody: draft.body, wheels: draft.wheelType, size: 56)
@@ -74,17 +78,8 @@ struct TruckCustomizeView: View {
         ) {
             confirmUnlockAndSave()
         }
-        .pixelConfirm(
-            title: "포인트 부족",
-            message: "필요 \(unlockCost)P / 보유 \(service.pointBalance)P\n배송을 완료하면 포인트가 쌓여요. Waito Plus로 한 번에 풀 수도 있어요.",
-            confirmTitle: "Plus 보기",
-            cancelTitle: "닫기",
-            isPresented: $showInsufficient
-        ) {
-            showSubscriptionAlert = true
-        }
         .fullScreenCover(isPresented: $showSubscriptionAlert) {
-            PlusPaywallView {
+            PlusPaywallView(pointStatus: paywallPoints) {
                 // TODO: 실제 StoreKit 구매 연결 (.storekit 설정 후 Product.purchase / SubscriptionStoreView)
                 #if DEBUG
                 if !subscription.isSubscribed { subscription.toggleSubscription() }
@@ -151,6 +146,7 @@ struct TruckCustomizeView: View {
         }
         // Plus 전용 부품이 끼어 있으면 포인트로 못 풀므로 구독 유도
         if unusable.contains(where: { $0.tier == .plusOnly }) {
+            paywallPoints = nil            // Plus 전용 — 포인트와 무관하므로 표시 안 함
             showSubscriptionAlert = true
             return
         }
@@ -161,7 +157,9 @@ struct TruckCustomizeView: View {
         if service.pointBalance >= cost {
             showUnlockConfirm = true
         } else {
-            showInsufficient = true
+            // 포인트 부족 → 중간 안내 없이 바로 Plus 페이월(보유/부족 포인트 동반)
+            paywallPoints = .init(need: cost, balance: service.pointBalance)
+            showSubscriptionAlert = true
         }
     }
 
@@ -208,8 +206,9 @@ struct TruckCustomizeView: View {
         .background(Color.bg)
     }
 
-    // MARK: - Dynamic Island 데모 버튼
+    // MARK: - Dynamic Island 데모 버튼 (DEBUG 전용 — service 의 데모 메서드가 #if DEBUG)
 
+    #if DEBUG
     private var dynamicIslandDemoButton: some View {
         Button {
             Task {
@@ -244,6 +243,7 @@ struct TruckCustomizeView: View {
         }
         .buttonStyle(.plain)
     }
+    #endif
 
     // MARK: - 미리보기
 
