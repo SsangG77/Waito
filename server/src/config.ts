@@ -29,6 +29,13 @@ export const config = {
   admin: {
     secret: process.env.ADMIN_SECRET || 'waito-admin',
   },
+
+  // credential 만료 임박 등 운영 알림 이메일 (Resend HTTP API 사용, 키 없으면 비활성)
+  alert: {
+    resendApiKey: process.env.RESEND_API_KEY || '',
+    emailTo: process.env.ALERT_EMAIL_TO || '',
+    emailFrom: process.env.ALERT_EMAIL_FROM || 'Waito <onboarding@resend.dev>',
+  },
 };
 
 /**
