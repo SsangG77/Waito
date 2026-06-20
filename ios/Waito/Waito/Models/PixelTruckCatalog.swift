@@ -143,3 +143,38 @@ private func catalogDisplayName(_ rawValue: String) -> String {
     let parts = rawValue.split(separator: "_")
     return parts.count >= 3 ? parts.dropFirst(2).joined(separator: " ") : rawValue
 }
+
+// MARK: - 부품 등급(Tier) & 포인트 해제
+
+enum PartTier {
+    case free            // 무료 기본 제공
+    case pointUnlockable // 배송완료 포인트로 해제 가능 (트럭 계열 추가 부품)
+    case plusOnly        // Waito Plus 전용 — 포인트로 불가 (탱크·기차·물탱크·건설·컨테이너)
+}
+
+/// 부품 1개 해제 비용(포인트). 배송완료 1건 = 1포인트.
+let pointUnlockCost = 3
+
+/// 포인트로 해제 가능한 계열 토큰(에셋명 2번째 segment). 그 외 비무료 부품은 Plus 전용.
+/// cab=TruckHead / body=Truck / wheel=Wheels 만 포인트 대상.
+private let pointUnlockableFamilies: Set<String> = ["TruckHead", "Truck", "Wheels"]
+
+private func catalogFamilyToken(_ rawValue: String) -> String {
+    let parts = rawValue.split(separator: "_")
+    return parts.count >= 2 ? String(parts[1]) : ""
+}
+
+private func partTier(rawValue: String, isFree: Bool) -> PartTier {
+    if isFree { return .free }
+    return pointUnlockableFamilies.contains(catalogFamilyToken(rawValue)) ? .pointUnlockable : .plusOnly
+}
+
+extension TruckCab {
+    var tier: PartTier { partTier(rawValue: rawValue, isFree: Self.freeCases.contains(self)) }
+}
+extension TruckBody {
+    var tier: PartTier { partTier(rawValue: rawValue, isFree: Self.freeCases.contains(self)) }
+}
+extension TruckWheelType {
+    var tier: PartTier { partTier(rawValue: rawValue, isFree: Self.freeCases.contains(self)) }
+}

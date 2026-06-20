@@ -34,6 +34,12 @@ function runColumnMigrations(database: Database.Database): void {
   addColumnIfMissing(database, 'devices', 'truck_config', 'TEXT');
   addColumnIfMissing(database, 'trackings', 'live_activity_started_at', 'TEXT');
   addColumnIfMissing(database, 'trackings', 'memo', 'TEXT');
+  // 디바이스별 배송완료 누적 카운트 (트럭 부품 해제 보상용). 토큰은 클라 Keychain 에 영속.
+  addColumnIfMissing(database, 'devices', 'delivered_count', 'INTEGER DEFAULT 0');
+  // 포인트로 해제한 부품 목록(JSON 배열). 잔여 포인트 = delivered_count - 해제수 * 비용
+  addColumnIfMissing(database, 'devices', 'unlocked_parts', 'TEXT');
+  // 표준 원격알림(일반 배너)용 APNs device token. Live Activity 토큰과 별개.
+  addColumnIfMissing(database, 'devices', 'apns_token', 'TEXT');
 }
 
 function addColumnIfMissing(

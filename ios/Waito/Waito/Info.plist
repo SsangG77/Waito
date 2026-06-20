@@ -8,7 +8,11 @@
 	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<!-- 로컬 개발 서버(사설 IP, http)를 ATS 예외 없이 허용. IP가 바뀌어도 수정 불필요 -->
+		<!-- 운영 서버가 공인 IP+HTTP(도메인/HTTPS 미사용)라 ATS 전체 허용.
+		     공인 IP 평문 HTTP는 NSAllowsLocalNetworking으로 불가 → NSAllowsArbitraryLoads 필요.
+		     ⚠️ App Store 심사 시 ATS 임의 허용 사유 소명 요구될 수 있음(추후 HTTPS 도메인 전환 권장). -->
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>

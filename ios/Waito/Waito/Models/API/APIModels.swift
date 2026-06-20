@@ -36,6 +36,26 @@ struct TrackingUpdateRequest: Encodable {
     let memo: String?
 }
 
+// MARK: - Device Progress (배송완료 포인트 + 해제 부품)
+
+/// GET /api/devices/me, POST /api/devices/unlock-part 공통 응답
+struct DeviceProgress: Decodable {
+    let deliveredCount: Int     // 배송완료 누적 = 획득 포인트
+    let unlockedParts: [String] // 포인트로 해제한 부품 rawValue 목록
+}
+
+struct UnlockPartRequest: Encodable {
+    let deviceToken: String
+    let part: String            // 부품 enum rawValue (= 에셋명)
+}
+
+// MARK: - APNs 일반 알림 토큰 등록
+
+struct APNsTokenRegisterRequest: Encodable {
+    let deviceToken: String     // 앱 식별 UUID
+    let apnsToken: String       // 표준 원격알림 device token (hex)
+}
+
 /// POST /api/trackings 응답 (camelCase)
 struct TrackingCreateResponse: Decodable {
     let id: Int

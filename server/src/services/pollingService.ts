@@ -71,6 +71,15 @@ async function pollTracking(trackingId: number): Promise<void> {
         trackingId,
       );
 
+      // 배송완료로 "전환되는 순간"에만 해당 디바이스의 누적 완료 카운트 +1
+      // (old != new 이고 new == delivered 이므로 항상 진짜 전환 = 중복 카운트 없음)
+      if (newStatus === DeliveryStatus.Delivered) {
+        db.prepare(`
+          UPDATE devices SET delivered_count = delivered_count + 1
+          WHERE id = (SELECT device_id FROM trackings WHERE id = ?)
+        `).run(trackingId);
+      }
+
       await pushTrackingUpdate(trackingId, newStatus);
     }
 

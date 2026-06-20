@@ -1,6 +1,6 @@
 import { DeliveryStatus } from '../types/delivery.js';
 import { getDb } from '../db/database.js';
-import { sendLiveActivityPush } from './apnsClient.js';
+import { sendLiveActivityPush, sendAlertPush } from './apnsClient.js';
 
 /**
  * iOS DeliveryAttributes.ContentState 와 정확히 일치해야 하는 구조.
@@ -85,12 +85,13 @@ export async function sendLiveActivityUpdate(
   }
   // update(중간 상태 변경)는 alert 없이 화면만 조용히 갱신 (배너 알림 없음)
 
-  // update 는 오프라인 대비 1시간 보관/재시도, end 는 보관 불필요(즉시 1회)
+  // update/end 모두 오프라인 대비 1시간 보관/재시도.
+  // (end 를 expiration=0 으로 보내면 오프라인 시 폐기되어 완료 배너가 누락될 수 있어 보관한다)
   const result = await sendLiveActivityPush({
     deviceToken: pushToken,
     payload: { aps },
     priority: 10,
-    expiration: isEnd ? 0 : now + 60 * 60,
+    expiration: now + 60 * 60,
   });
   return { ok: result.ok, reason: result.reason, skipped: result.skipped };
 }
@@ -110,7 +111,7 @@ export async function pushTrackingUpdate(trackingId: number, status: DeliverySta
     .prepare(
       `SELECT t.live_activity_push_token, t.live_activity_started_at,
               t.tracking_number, t.carrier_name, t.item_name, t.estimated_delivery,
-              d.device_token, d.push_to_start_token, d.truck_config
+              d.device_token, d.push_to_start_token, d.truck_config, d.apns_token
        FROM trackings t JOIN devices d ON d.id = t.device_id
        WHERE t.id = ?`,
     )
@@ -125,6 +126,7 @@ export async function pushTrackingUpdate(trackingId: number, status: DeliverySta
         device_token: string;
         push_to_start_token: string | null;
         truck_config: string | null;
+        apns_token: string | null;
       }
     | undefined;
 
@@ -144,27 +146,79 @@ export async function pushTrackingUpdate(trackingId: number, status: DeliverySta
   const startedAt = parseSqliteUtc(row.live_activity_started_at);
   const aliveByTime = startedAt > 0 && Date.now() - startedAt < ACTIVITY_MAX_MS;
 
-  // 1) 살아있으면 update 로 화면 갱신
+  // Live Activity 경로가 이미 배너를 띄웠는지(=중복 알림 방지용). end / push-to-start 는 배너 동반.
+  let bannerShown = false;
+  // update 가 처리(성공/설정미비)되어 push-to-start 폴백이 불필요한지
+  let laHandled = false;
+
+  // 1) 살아있으면 update 로 화면 갱신 (중간 상태는 무음, end 는 배너)
   if (row.live_activity_push_token && aliveByTime) {
     const result = await sendLiveActivityUpdate(row.live_activity_push_token, [item], truckConfig, isEnd);
-    if (result.skipped || result.ok) return;
-    if (result.reason === 'Unregistered') {
-      db.prepare('UPDATE trackings SET live_activity_push_token = NULL WHERE id = ?').run(trackingId);
+    if (result.ok) {
+      bannerShown = isEnd;   // end 만 배너, 중간 update 는 무음
+      laHandled = true;
+    } else if (result.skipped) {
+      laHandled = true;      // APNs 설정 미비 — 폴백도 어차피 skip
+    } else {
+      if (result.reason === 'Unregistered') {
+        db.prepare('UPDATE trackings SET live_activity_push_token = NULL WHERE id = ?').run(trackingId);
+      }
+      // update 실패(만료 등) → 아래 push-to-start 폴백으로 진행
     }
-    // update 실패(만료 등) → 아래 push-to-start 폴백으로 진행
   }
 
-  // 2) Activity 가 죽었거나 update 실패 → 이번 상태 변경을 계기로 push-to-start 로 되살림
-  if (!isEnd && row.push_to_start_token) {
+  // 2) Activity 가 죽었거나 update 실패 → 이번 상태 변경을 계기로 push-to-start 로 되살림 (배너 동반)
+  if (!laHandled && !isEnd && row.push_to_start_token) {
     const result = await sendPushToStartEvent(row.push_to_start_token, row.device_token, [item], truckConfig);
     if (result.ok) {
+      bannerShown = true;
       db.prepare("UPDATE trackings SET live_activity_started_at = datetime('now') WHERE id = ?").run(trackingId);
     } else if (result.reason === 'Unregistered') {
-      console.warn(`[Push-to-Start] 토큰 무효화 (device ${row.device_token.slice(0, 8)}…, Unregistered)`);
+      console.warn(`[Push-to-Start] 토큰 무효화 (tracking ${trackingId}, Unregistered)`);
       db.prepare('UPDATE devices SET push_to_start_token = NULL WHERE device_token = ?').run(row.device_token);
     } else if (!result.skipped) {
       console.warn(`[Push-to-Start] 되살리기 실패 (tracking ${trackingId}, reason=${result.reason ?? 'unknown'})`);
     }
+  }
+
+  // 3) 모든 상태 변경 → 일반 알림(배너). 단 위에서 이미 배너를 띄웠으면 중복 방지로 생략.
+  //    Live Activity 미사용 택배도 이 경로로 알림을 받는다.
+  if (!bannerShown && row.apns_token) {
+    await sendStatusAlert(row.device_token, row.apns_token, item, status);
+  }
+}
+
+/**
+ * 표준 원격알림(일반 배너)으로 배송 상태 변경을 알린다. (Live Activity 와 무관, 모든 택배 대상)
+ */
+async function sendStatusAlert(
+  deviceToken: string,
+  apnsToken: string,
+  item: TrackingItemState,
+  status: DeliveryStatus,
+): Promise<void> {
+  const now = Math.floor(Date.now() / 1000);
+  const result = await sendAlertPush({
+    deviceToken: apnsToken,
+    payload: {
+      aps: {
+        alert: {
+          title: item.itemName || item.carrierName,
+          body: STATUS_DESCRIPTIONS[status],
+        },
+        sound: 'default',
+      },
+    },
+    priority: 10,
+    expiration: now + 60 * 60,  // 오프라인 대비 1시간 보관/재시도
+  });
+
+  if (result.reason === 'Unregistered') {
+    // 앱 삭제 등 → 해당 디바이스 토큰만 무효화 (토큰 값으로만 매칭하면 같은 토큰을 가진
+    // 다른 행까지 지울 수 있어 device 범위로 한정한다)
+    getDb()
+      .prepare('UPDATE devices SET apns_token = NULL WHERE device_token = ? AND apns_token = ?')
+      .run(deviceToken, apnsToken);
   }
 }
 

@@ -87,10 +87,9 @@ export interface ApnsResult {
 }
 
 /**
- * Live Activity 관련 push(start/update/end)를 APNs 로 전송한다.
- * push-type 은 항상 liveactivity, topic 은 LIVE_ACTIVITY_TOPIC 고정.
+ * APNs HTTP/2 전송 코어. push-type 과 topic 을 인자로 받아 재사용한다.
  */
-export function sendLiveActivityPush(req: ApnsRequest): Promise<ApnsResult> {
+function sendPush(req: ApnsRequest, pushType: string, topic: string): Promise<ApnsResult> {
   if (!isApnsConfigured()) {
     console.warn('[APNs] 설정/키 미비 — 푸시 건너뜀 (APNS_KEY_ID/TEAM_ID/KEY_PATH 확인)');
     return Promise.resolve({ ok: false, status: 0, skipped: true });
@@ -136,8 +135,8 @@ export function sendLiveActivityPush(req: ApnsRequest): Promise<ApnsResult> {
       ':method': 'POST',
       ':path': `/3/device/${req.deviceToken}`,
       'authorization': `bearer ${token}`,
-      'apns-push-type': 'liveactivity',
-      'apns-topic': LIVE_ACTIVITY_TOPIC,
+      'apns-push-type': pushType,
+      'apns-topic': topic,
       'apns-priority': String(req.priority ?? 10),
       'apns-expiration': String(req.expiration ?? 0),
       'content-type': 'application/json',
@@ -168,4 +167,19 @@ export function sendLiveActivityPush(req: ApnsRequest): Promise<ApnsResult> {
     stream.write(body);
     stream.end();
   });
+}
+
+/**
+ * Live Activity 관련 push(start/update/end). push-type=liveactivity, topic=LIVE_ACTIVITY_TOPIC.
+ */
+export function sendLiveActivityPush(req: ApnsRequest): Promise<ApnsResult> {
+  return sendPush(req, 'liveactivity', LIVE_ACTIVITY_TOPIC);
+}
+
+/**
+ * 일반 사용자 알림(배너). push-type=alert, topic=bundleId.
+ * 표준 원격알림 device token(devices.apns_token)으로 전송한다.
+ */
+export function sendAlertPush(req: ApnsRequest): Promise<ApnsResult> {
+  return sendPush(req, 'alert', config.apns.bundleId);
 }

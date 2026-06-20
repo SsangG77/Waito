@@ -25,12 +25,23 @@ final class TrackingService {
     /// Live Activity에 등록된 택배 운송장 번호 목록
     private(set) var liveTrackingNumbers: [String] = []
 
+    /// 배송완료 누적 = 획득 포인트 (디바이스별, 서버 보관)
+    private(set) var deliveredCount = 0
+    /// 포인트로 해제한 부품 rawValue 집합
+    private(set) var unlockedParts: Set<String> = []
+    /// 사용 가능한 잔여 포인트 = 획득 - 해제수 * 비용
+    var pointBalance: Int { max(0, deliveredCount - unlockedParts.count * pointUnlockCost) }
+
+    func isUnlocked(_ partRawValue: String) -> Bool { unlockedParts.contains(partRawValue) }
+
     func clearError() {
         error = nil
     }
 
     private let api = APIClient.shared
-    private let deviceTokenKey = "waito_device_token"
+    /// 디바이스 식별 UUID 의 Keychain 키 (AppDelegate 도 동일 키로 읽어 APNs 토큰을 등록)
+    static let deviceTokenKeychainKey = "waito_device_token"
+    private let deviceTokenKey = TrackingService.deviceTokenKeychainKey
     private let liveTrackingsKey = "waito_live_tracking_numbers"
     /// "항상 노출"(배송 없어도 Dynamic Island 트럭 유지) 토글 저장 키 — SettingsView @AppStorage 와 공유
     /// ⚠️ 값 변경 시 기존 사용자 설정이 초기화되므로 마이그레이션 필요
@@ -152,6 +163,32 @@ final class TrackingService {
                 trackings[index] = updated
             }
             await updateLiveActivity()
+            self.error = nil
+            return true
+        } catch {
+            self.error = error.localizedDescription
+            return false
+        }
+    }
+
+    // MARK: - 진행도(포인트) / 부품 해제
+
+    /// 서버에서 배송완료 포인트 + 해제 부품을 불러온다.
+    func loadDeviceProgress() async {
+        guard let token = deviceToken else { return }
+        if let progress = try? await api.getDeviceProgress(deviceToken: token) {
+            deliveredCount = progress.deliveredCount
+            unlockedParts = Set(progress.unlockedParts)
+        }
+    }
+
+    /// 포인트로 부품 1개 해제. 성공 시 로컬 상태 갱신.
+    func unlockPart(_ partRawValue: String) async -> Bool {
+        guard let token = deviceToken else { return false }
+        do {
+            let progress = try await api.unlockPart(deviceToken: token, part: partRawValue)
+            deliveredCount = progress.deliveredCount
+            unlockedParts = Set(progress.unlockedParts)
             self.error = nil
             return true
         } catch {

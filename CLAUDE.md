@@ -148,7 +148,7 @@ Live Activity Expanded View
 ├── routes/
 │   ├── carriers.ts                     # GET /api/carriers (CARRIERS 상수)
 │   ├── trackings.ts                    # 택배 CRUD(PUT /:id = 품명·메모 수정) + push-token 등록 + force 추가
-│   ├── devices.ts                      # 디바이스 등록 + push-to-start-token 등록
+│   ├── devices.ts                      # 디바이스 등록 + push-to-start-token + PUT /apns-token(일반알림) + GET /me(포인트) + POST /unlock-part
 │   ├── webhooks.ts                     # tracker.delivery 콜백 → track 재조회
 │   └── admin.ts                        # credential 관리 HTML 페이지
 └── services/
@@ -222,11 +222,12 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### Live Activity 푸시 아키텍처 (핵심)
 - **APNs 토큰 인증**: `apnsClient.ts` 가 `.p8` 키로 ES256 JWT 서명(Node 내장 crypto) + HTTP/2 전송. 외부 패키지 0.
   - 키/설정 없으면 모든 푸시 graceful skip (앱은 인앱 동작). `.p8` 설정법은 Notion "p8 파일 설정" 참고.
-  - sandbox/production 은 `APNS_PRODUCTION` 로 전환. `apns-topic` = `<bundleId>.push-type.liveactivity`.
-- **두 종류 토큰**: update 토큰(Activity 인스턴스당, 갱신용) / push-to-start 토큰(디바이스당, 되살리기용, iOS 17.2+).
-  - 앱이 `Activity.pushToStartTokenUpdates` 관찰 → `truckConfig` 와 함께 서버에 등록(devices 테이블).
+  - sandbox/production 은 `APNS_PRODUCTION` 로 전환. `apnsClient.sendPush(generic)` → LA: push-type `liveactivity` + topic `<bundleId>.push-type.liveactivity` / 일반 알림: `sendAlertPush` push-type `alert` + topic `<bundleId>`.
+- **세 종류 토큰**: update 토큰(Activity 인스턴스당, 갱신용) / push-to-start 토큰(디바이스당, 되살리기용, iOS 17.2+) / **표준 원격알림 토큰(`devices.apns_token`, 일반 배너용)**.
+  - 앱이 `Activity.pushToStartTokenUpdates` 관찰 → `truckConfig` 와 함께 서버 등록. 표준 토큰은 `AppDelegate.didRegisterForRemoteNotifications` → `PUT /api/devices/apns-token`(ContentView.task 의 `syncAPNsToken` 재시도 경로 병행).
 - **8시간 한도 대응**: Live Activity 는 8h 후 시스템이 종료. 별도 타이머 없이 **상태 변경 시점에** 죽었으면 push-to-start 로 되살리는 이벤트 기반.
-- **알림 정책**: 중간 상태 update = 무음 / 배송 완료(end) = 배너 + 1h 잔존 / push-to-start 되살림 = 배너(Apple 강제).
+- **알림 정책**: 상태 변경당 **배너 정확히 1개**. LA 중간 update = 무음 / 배송완료 end = 배너 / push-to-start 되살림 = 배너(Apple 강제). **그 외(LA가 배너 안 띄운 모든 경우) = 표준 일반 알림(`sendStatusAlert`)** 으로 배너 — LA 미사용 택배 포함 모든 택배가 상태 변경 시 알림 받음. `pushService` 의 `bannerShown` 플래그로 중복 방지.
+  - ⚠️ 표준 원격알림은 Xcode **Push Notifications capability(aps-environment entitlement)** 필요.
 - **조회 실패(NOT_FOUND) 처리**: 등록 시 force 미지정이면 422 → 앱이 확인 다이얼로그. 등록 후 데이터 없으면 앱에서 "확인 중"(12h 경과 시 "번호 확인 필요") 회색 표시.
 
 ---
@@ -269,13 +270,15 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ## 수익 모델 (Pixel Pals 참고)
 
-| 티어 | 내용 | 가격 (예시) |
-|---|---|---|
-| 무료 | 기본 트럭 1종, 추적 2개 | 무료 |
-| Waito Plus | 트럭 스킨 다수, 추적 무제한, 커스텀 애니메이션 | ₩2,900/월 or ₩19,900/년 |
+> 가격 단일 출처 = 노션 Lean Canvas. 현재 **₩1,400/월**.
 
-- 트럭 스킨: 기본 트럭 / 귀여운 트럭 / 픽셀 트럭 / 시즌 한정 등
-- 장기 리텐션을 위해 "택배 없을 때도 켜두고 싶은 기능" 추가 고려
+| 티어 | 내용 | 가격 |
+|---|---|---|
+| 무료 | 기본 트럭 + Live Activity 1개 + 배송완료 포인트로 트럭 계열 부품 해제(3P/개) | 무료 |
+| Waito Plus | 프리미엄 스킨(탱크·기차·물탱크·건설·컨테이너) 즉시 전부 + Live Activity 2개 + 데코(항상 노출) | ₩1,400/월 |
+
+- **포인트 경제**: 배송완료 1건 = 1P, 부품 1개 해제 = 3P(차감형). 탱크·기차·물탱크·건설·컨테이너는 **Plus 전용**(포인트 불가, 트럭 계열만 포인트 해제)
+- 장기 리텐션: "택배 없을 때도 켜두고 싶은 기능"(데코/시즌 스킨) + 포인트 보상
 
 ---
 
@@ -302,7 +305,12 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ### 트럭 꾸미기 (TruckCustomizeView)
 - **픽셀 카탈로그(이미지 기반)**: cab 27 / body 33 / wheel 27 — 4계열(🚚트럭·🪖탱크·🚆기차·🏗️건설) 자유 조합 ≈ 24,057가지. `CatalogTruckView`가 `Image(에셋명)`으로 렌더(에셋: `Assets.xcassets/PixelCatalog/{Cabs,Bodies,Wheels}`, SVG). **enum rawValue = 에셋 imageset 이름과 1:1** → 이름 누락/불일치 시 트럭이 빈 화면이 됨(주의).
-- **무료/유료**: 무료는 트럭 부품 일부만(헤드2/바디3/바퀴2 = 각 enum `freeCases` 화이트리스트). 탱크·물탱크(탱크로리)·기차·건설·컨테이너 + 나머지 트럭 부품은 Plus. 잠금 항목 탭 → `PlusPaywallView`(`showSubscriptionAlert` → `fullScreenCover`).
+- **부품 등급(`PartTier`, PixelTruckCatalog)**: 3단계.
+  - **무료**: 각 enum `freeCases`(헤드2/바디3/바퀴2)
+  - **포인트 해제(`pointUnlockable`, 비용 `pointUnlockCost`=3)**: 트럭 계열 추가 부품만(에셋명 2번째 토큰 `TruckHead`/`Truck`/`Wheels`). 배송완료 포인트로 해제.
+  - **Plus 전용(`plusOnly`, 포인트로도 불가)**: 탱크·기차·물탱크(탱크로리)·건설·컨테이너(`TankGun/Tank/TankTrack/Train/LiquidTank/Construction/ConstructionTrack/Container`)
+- **포인트 경제**: 배송완료 1건=1포인트(디바이스별, 서버 `devices.delivered_count`). 부품 1개 해제=3포인트(서버 `devices.unlocked_parts` JSON). 잔액 = 누적−해제수×3. `TrackingService.pointBalance/isUnlocked/loadDeviceProgress/unlockPart`. delivered 전환 +1은 `pollingService`, 해제 검증(Plus계열 403/잔액 400)은 `devices.ts` POST `/unlock-part`. ⚠️ 디바이스 단위(키체인 토큰) — 기기 간 동기화는 2차 로그인.
+- **My Truck 게이팅**: 셀 잠금 = 무료/구독이면 없음, `pointUnlockable` 미해제면 "3P"(코인), `plusOnly`면 크라운. 저장 시 `handleSave` — Plus전용 끼면 페이월, 포인트대상이면 `PixelConfirm`로 N×3P 차감 후 커밋(부족하면 "Plus 보기" 유도).
 - cab/body/wheel 조합 → `TruckConfigStore`(UserDefaults). 변경 시 실행 중 Activity 갱신(`pushTruckConfig`) + 서버 push-to-start 설정 갱신(`refreshPushToStartConfig`)
 
 ### Live Activity 푸시 (서버 + iOS)

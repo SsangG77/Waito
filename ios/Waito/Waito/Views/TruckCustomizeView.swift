@@ -13,6 +13,15 @@ struct TruckCustomizeView: View {
     /// "저장하기"를 눌러야 store.config 에 커밋된다(= Live Activity/서버 갱신).
     @State private var draft = TruckConfigStore.shared.config
 
+    // 포인트 해제 흐름 상태
+    @State private var showUnlockConfirm = false
+    @State private var showInsufficient = false
+    @State private var pendingUnlock: [String] = []   // 해제할 부품 rawValue
+    @State private var unlockCost = 0
+
+    /// 셀 잠금 표시 종류
+    private enum CellLock { case none, plus, point }
+
     var body: some View {
         VStack(spacing: 0) {
             PixelNavBar(title: "MY TRUCK", onBack: { dismiss() })
@@ -20,25 +29,26 @@ struct TruckCustomizeView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     previewSection
+                    pointBar
                     dynamicIslandDemoButton
+
                     catalogSection(title: "CAB", items: TruckCab.allCases, selected: draft.cab) { cab in
                         CatalogTruckView(cab: cab, truckBody: draft.body, wheels: draft.wheelType, size: 56)
                     } onSelect: { cab in
                         draft.cab = cab
-                    } requiresPlus: { $0.requiresPlus }
+                    } lock: { cellLock(tier: $0.tier, raw: $0.rawValue) }
 
                     catalogSection(title: "BODY", items: TruckBody.allCases, selected: draft.body) { body in
                         CatalogTruckView(cab: draft.cab, truckBody: body, wheels: draft.wheelType, size: 56)
                     } onSelect: { body in
                         draft.body = body
-                    } requiresPlus: { $0.requiresPlus }
+                    } lock: { cellLock(tier: $0.tier, raw: $0.rawValue) }
 
                     catalogSection(title: "WHEELS", items: TruckWheelType.allCases, selected: draft.wheelType) { wheels in
                         CatalogTruckView(cab: draft.cab, truckBody: draft.body, wheels: wheels, size: 56)
                     } onSelect: { wheels in
                         draft.wheelType = wheels
-                    } requiresPlus: { $0.requiresPlus }
-
+                    } lock: { cellLock(tier: $0.tier, raw: $0.rawValue) }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 12)
@@ -48,11 +58,30 @@ struct TruckCustomizeView: View {
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) { saveBar }
+        .task { await service.loadDeviceProgress() }
         .onChange(of: store.config) {
             Task {
                 await service.pushTruckConfig()            // 실행 중인 Activity 즉시 반영
                 await service.refreshPushToStartConfig()   // 8h 재시작 시 쓰일 서버 측 트럭 설정도 갱신
             }
+        }
+        .pixelConfirm(
+            title: "포인트로 해제",
+            message: "선택한 부품 \(pendingUnlock.count)개를 \(unlockCost)P로 해제하고 저장할까요?\n보유 \(service.pointBalance)P",
+            confirmTitle: "해제",
+            cancelTitle: "취소",
+            isPresented: $showUnlockConfirm
+        ) {
+            confirmUnlockAndSave()
+        }
+        .pixelConfirm(
+            title: "포인트 부족",
+            message: "필요 \(unlockCost)P / 보유 \(service.pointBalance)P\n배송을 완료하면 포인트가 쌓여요. Waito Plus로 한 번에 풀 수도 있어요.",
+            confirmTitle: "Plus 보기",
+            cancelTitle: "닫기",
+            isPresented: $showInsufficient
+        ) {
+            showSubscriptionAlert = true
         }
         .fullScreenCover(isPresented: $showSubscriptionAlert) {
             PlusPaywallView {
@@ -66,25 +95,92 @@ struct TruckCustomizeView: View {
         }
     }
 
-    // MARK: - 저장 바 (하단 고정) — 유료 부품 포함 시 비구독이면 Paywall
+    // MARK: - 포인트 표시 바
 
-    private var draftRequiresPlus: Bool {
-        draft.cab.requiresPlus || draft.body.requiresPlus || draft.wheelType.requiresPlus
+    private var pointBar: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.pixelOrange)
+            Text("\(service.pointBalance) P")
+                .font(pixelFont(12))
+                .foregroundStyle(Color.pixelText)
+            Spacer()
+            Text("배송완료 1건 = 1P · 해제 \(pointUnlockCost)P")
+                .font(pixelFont(8))
+                .foregroundStyle(Color.pixelMuted)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+    }
+
+    // MARK: - 잠금 판정
+
+    /// 셀에 표시할 잠금 종류
+    private func cellLock(tier: PartTier, raw: String) -> CellLock {
+        if tier == .free || subscription.isSubscribed { return .none }
+        if tier == .pointUnlockable { return service.isUnlocked(raw) ? .none : .point }
+        return .plus
+    }
+
+    // MARK: - 저장 / 해제
+
+    private struct DraftPart { let raw: String; let tier: PartTier }
+    private var draftParts: [DraftPart] {
+        [DraftPart(raw: draft.cab.rawValue, tier: draft.cab.tier),
+         DraftPart(raw: draft.body.rawValue, tier: draft.body.tier),
+         DraftPart(raw: draft.wheelType.rawValue, tier: draft.wheelType.tier)]
+    }
+
+    /// 지금 바로 저장 가능한 부품인지 (무료 / 구독 / 포인트 해제됨)
+    private func isUsable(_ p: DraftPart) -> Bool {
+        if p.tier == .free { return true }
+        if subscription.isSubscribed { return true }
+        if p.tier == .pointUnlockable { return service.isUnlocked(p.raw) }
+        return false
     }
 
     private var hasChanges: Bool { draft != store.config }
 
     private func handleSave() {
-        // 유료 부품이 하나라도 포함됐고 비구독이면 → 구독 요청 모달
-        if draftRequiresPlus && !subscription.isSubscribed {
+        let unusable = draftParts.filter { !isUsable($0) }
+        if unusable.isEmpty {
+            store.config = draft   // 커밋 → onChange 가 Live Activity/서버 설정 갱신
+            return
+        }
+        // Plus 전용 부품이 끼어 있으면 포인트로 못 풀므로 구독 유도
+        if unusable.contains(where: { $0.tier == .plusOnly }) {
             showSubscriptionAlert = true
             return
         }
-        store.config = draft   // 커밋 → onChange 가 Live Activity/서버 설정 갱신
+        // 남은 건 모두 포인트 해제 대상 — 비용 계산
+        let cost = unusable.count * pointUnlockCost
+        unlockCost = cost
+        pendingUnlock = unusable.map { $0.raw }
+        if service.pointBalance >= cost {
+            showUnlockConfirm = true
+        } else {
+            showInsufficient = true
+        }
+    }
+
+    private func confirmUnlockAndSave() {
+        let parts = pendingUnlock
+        Task {
+            for raw in parts {
+                _ = await service.unlockPart(raw)
+            }
+            // 전부 해제 성공하면 커밋
+            if parts.allSatisfy({ service.isUnlocked($0) }) {
+                store.config = draft
+            }
+            pendingUnlock = []
+        }
     }
 
     private var saveBar: some View {
-        // 외형은 유료 여부와 무관하게 동일. 변경 유무로만 강조/비활성 구분.
+        // 외형은 등급과 무관하게 동일. 변경 유무로만 강조/비활성 구분.
         Button(action: handleSave) {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark")
@@ -177,7 +273,7 @@ struct TruckCustomizeView: View {
         selected: T,
         thumbnail: @escaping (T) -> V,
         onSelect: @escaping (T) -> Void,
-        requiresPlus: @escaping (T) -> Bool
+        lock: @escaping (T) -> CellLock
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
@@ -188,9 +284,8 @@ struct TruckCustomizeView: View {
                 HStack(spacing: 8) {
                     ForEach(items, id: \.self) { item in
                         catalogCell(
-                            item: item,
                             isSelected: item == selected,
-                            locked: requiresPlus(item) && !subscription.isSubscribed,
+                            lock: lock(item),
                             thumbnail: { thumbnail(item) },
                             // 잠금 요소도 미리보기로 선택 가능 — 게이팅은 "저장하기"에서.
                             onTap: { onSelect(item) }
@@ -202,10 +297,9 @@ struct TruckCustomizeView: View {
         }
     }
 
-    private func catalogCell<T, V: View>(
-        item: T,
+    private func catalogCell<V: View>(
         isSelected: Bool,
-        locked: Bool,
+        lock: CellLock,
         thumbnail: () -> V,
         onTap: @escaping () -> Void
     ) -> some View {
@@ -215,11 +309,27 @@ struct TruckCustomizeView: View {
 
                 thumbnail()
 
-                if locked {
+                if lock != .none {
                     Color.black.opacity(0.5)
-                    Image(systemName: "lock.fill")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.pixelMuted)
+                    switch lock {
+                    case .plus:
+                        // Plus 전용
+                        Image(systemName: "crown.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.pixelOrange)
+                    case .point:
+                        // 포인트로 해제 가능 — 비용 표시
+                        VStack(spacing: 2) {
+                            Image(systemName: "lock.fill")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Color.pixelMuted)
+                            Text("\(pointUnlockCost)P")
+                                .font(pixelFont(8))
+                                .foregroundStyle(Color.pixelOrange)
+                        }
+                    case .none:
+                        EmptyView()
+                    }
                 }
             }
             .frame(width: 72, height: 54)
@@ -232,7 +342,6 @@ struct TruckCustomizeView: View {
         }
         .buttonStyle(.plain)
     }
-
 }
 
 #Preview {

@@ -31,11 +31,12 @@ enum APIError: LocalizedError {
 actor APIClient {
     static let shared = APIClient()
 
-    // TODO: 배포 시 실제 서버 URL로 변경
+    // 운영 서버: Vultr 인스턴스에 공인 IP+HTTP 직접 접속(도메인/HTTPS 미사용, ATS 전체 허용 전제)
+    // brawlytics가 3000 사용 중 → Waito는 3001
     #if DEBUG
     private let baseURL = "http://192.168.31.189:3000"
     #else
-    private let baseURL = "https://api.waito.app"
+    private let baseURL = "http://158.247.223.154:3001"
     #endif
 
     private let session: URLSession
@@ -48,6 +49,16 @@ actor APIClient {
         self.session = URLSession(configuration: config)
         self.encoder = JSONEncoder()
         self.decoder = JSONDecoder()
+    }
+
+    /// 쿼리스트링 값 percent-encoding (현재 UUID 라 무변화이나 토큰 형식이 바뀌어도 안전)
+    private static let queryValueAllowed: CharacterSet = {
+        var set = CharacterSet.alphanumerics
+        set.insert(charactersIn: "-._~")
+        return set
+    }()
+    private func q(_ value: String) -> String {
+        value.addingPercentEncoding(withAllowedCharacters: Self.queryValueAllowed) ?? value
     }
 
     // MARK: - Devices
@@ -81,8 +92,26 @@ actor APIClient {
         try await put("/api/trackings/\(id)", body: TrackingUpdateRequest(itemName: itemName, memo: memo))
     }
 
+    /// 디바이스 진행도(배송완료 포인트 + 해제 부품) 조회
+    func getDeviceProgress(deviceToken: String) async throws -> DeviceProgress {
+        try await get("/api/devices/me?deviceToken=\(q(deviceToken))")
+    }
+
+    /// 포인트로 부품 1개 해제 — 갱신된 진행도 반환
+    func unlockPart(deviceToken: String, part: String) async throws -> DeviceProgress {
+        try await post("/api/devices/unlock-part", body: UnlockPartRequest(deviceToken: deviceToken, part: part))
+    }
+
+    /// 표준 원격알림(일반 배너)용 APNs device token 등록
+    func registerAPNsToken(deviceToken: String, apnsToken: String) async throws {
+        let _: SuccessResponse = try await put(
+            "/api/devices/apns-token",
+            body: APNsTokenRegisterRequest(deviceToken: deviceToken, apnsToken: apnsToken)
+        )
+    }
+
     func listTrackings(deviceToken: String) async throws -> [TrackingListItem] {
-        try await get("/api/trackings?deviceToken=\(deviceToken)")
+        try await get("/api/trackings?deviceToken=\(q(deviceToken))")
     }
 
     func getTracking(id: Int) async throws -> TrackingDetail {
