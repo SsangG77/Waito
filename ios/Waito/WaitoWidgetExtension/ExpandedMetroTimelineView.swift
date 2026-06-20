@@ -9,25 +9,18 @@ struct ExpandedMetroTimelineView: View {
         Group {
             if let primary = state.primary {
                 mainContent(primary)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
             } else {
-                idleContent
+                idleContent   // LockScreenIdleRow 자체 패딩 사용
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
         .background(Color.black)
     }
 
-    /// 배송이 없을 때(항상 노출) — 트럭만 표시
+    /// 배송이 없을 때(항상 노출) — 잠금화면 idle 과 동일(좌측 트럭 + BOUNCE 버튼)
     private var idleContent: some View {
-        CatalogTruckView(
-            cab: state.truckConfig.cab,
-            truckBody: state.truckConfig.body,
-            wheels: state.truckConfig.wheelType,
-            size: 26
-        )
-        .frame(maxWidth: .infinity, alignment: .center)
-//        .frame(height: 40)
+        LockScreenIdleRow(truckConfig: state.truckConfig, bounce: state.truckBounce ?? 0)
     }
 
     /// center 영역 — 물품명(위) + 가변 타임라인(아래) 세로 배치.

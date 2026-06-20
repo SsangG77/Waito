@@ -323,7 +323,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### Live Activity 푸시 (서버 + iOS)
 - APNs 실제 전송 + push-to-start 이벤트 기반 (위 "데이터 흐름" 참조)
 - 무료 1개 / 유료 2개 추적 제한(`SubscriptionManager.liveActivityLimit`)
-- **트럭 표시(위젯)**: 접힌 DI(compact leading)·잠금화면 idle/배송 행·펼친 DI idle 모두 **`CatalogTruckView` 트럭만** 정적 표시.
+- **트럭 표시(위젯)**: 접힌 DI(compact leading)·잠금화면 배송 행은 **`CatalogTruckView` 트럭만** 정적 표시. **잠금화면 idle 과 펼친 DI idle(배송 없음 + 항상노출)은 동일한 `LockScreenIdleRow`(좌측 트럭 + `> BOUNCE_` 버튼) 공유** — `ExpandedMetroTimelineView.idleContent` 가 그대로 재사용.
   - ⚠️ **iOS 제약**: Live Activity(잠금화면/DI)는 시스템이 SwiftUI 애니메이션 모디파이어를 무시 → `repeatForever` 등 연속 애니메이션이 **실기기/시뮬에서 안 돎**(공식 문서 "Animating data updates in widgets and Live Activities"). 위젯에선 **오직 content state(ContentState) 변경 시에만** 화면이 갱신됨. → 위젯에선 자율 애니메이션 효과를 쓰지 않음.
     - **실기기 검증 결과(2026-06)**: idle 트럭을 "스스로 움직이게" 하려는 3가지 시도 모두 정지 확인 — ①`ProgressView(timerInterval:)`+커스텀 `ProgressViewStyle`(시스템이 `fractionCompleted` 를 커스텀 스타일에 안 흘려줌), ②`PhaseAnimator`(위젯에서 순환 안 함), ③`repeatForever`+`onAppear`(트리거 미발동). **자동 동력이 필요하면 서버 push 뿐이나 APNs Live Activity update 는 15초 throttle → walk-cycle 불가.** 결론: idle 트럭은 정적 + `> BOUNCE` 버튼(탭=state 변경)으로만 움직임.
   - **`RunningTruckView`(`RunningTruckScene.swift`)**: 트럭 바운스+속도선 "달리는" 효과 래퍼(`animated` 플래그). **인앱/프리뷰 전용**(일반 SwiftUI라 정상 재생). 현재 **목록 빈 상태(DeliveryListView)** 에서 사용. 모션은 `TimelineView(.animation)` 공유 시간축 + 위상(phase) 기반 — 각 속도선이 항상 화면 전체에 균등 분배돼 우→좌로 흐름(이전 `repeatForever`+`delay` 방식의 뭉침/트럭 뒤 출현 문제 해결). `Color(hex: UInt32)` 포함. 위젯에선 미사용.
@@ -351,6 +351,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **서버**: Vultr 인스턴스 `158.247.223.154`(Ubuntu, 기존 brawlytics와 공존). Waito는 **포트 3001**, pm2 `waito`, `/var/www/waito/server`(repo sparse-checkout: `server/`만). `APNS_PRODUCTION=true`.
 - **앱 ↔ 서버**: RELEASE `APIClient.baseURL = http://158.247.223.154:3001` (도메인/HTTPS 미사용 → `Info.plist` ATS `NSAllowsArbitraryLoads`). DEBUG는 로컬 IP.
 - **자동배포**: `.github/workflows/deploy.yml` — `server/**` push 시 GitHub Actions가 SSH로 Vultr 접속 → `git pull && npm ci && build && pm2 restart`. 시크릿 `VULTR_SSH_KEY`/`VULTR_HOST`.
+- ⚠️ **브랜치 정책**: `main` 직접 푸시 금지 — push 시 자동배포가 트리거됨. 모든 작업은 **`dev` 브랜치**에 커밋·푸시하고, 검증 후 main 으로 머지(배포)한다.
 - **credential 만료 알림**: 만료 3일 전부터 매일 이메일(`emailService` = Resend HTTP API, `RESEND_API_KEY`). 메일에 운영 admin 갱신 링크(시크릿 포함) 버튼.
 - `.env`/`certs/*.p8`/`*.ttf 위치` 주의: `.env`·`certs/`는 gitignore — 서버엔 scp로 직접.
 
