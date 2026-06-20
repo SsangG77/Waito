@@ -152,7 +152,8 @@ async function checkAndAlert(): Promise<void> {
     if (alreadyAlertedToday()) return;
 
     const dday = health.daysRemaining <= 0 ? 'D-day(만료)' : `D-${health.daysRemaining}`;
-    const renewUrl = `${config.webhookBaseUrl}/admin`;
+    // 시크릿을 포함한 '바로 열리는' 갱신 링크 (수신자가 본인 이메일뿐이므로 클릭 한 번 갱신을 우선)
+    const renewUrl = `${config.webhookBaseUrl}/admin?secret=${encodeURIComponent(config.admin.secret)}`;
     const subject = `[Waito] tracker.delivery credential 만료 임박 (${dday})`;
     const html = `
       <div style="font-family:sans-serif;line-height:1.6">
@@ -165,9 +166,16 @@ async function checkAndAlert(): Promise<void> {
         </ul>
         <p>
           1) tracker.delivery 콘솔에서 credential 재발급 →
-          2) 아래 운영 갱신 페이지에서 새 clientId/clientSecret 입력:
+          2) 아래 버튼(갱신 페이지)에서 새 clientId/clientSecret 입력
         </p>
-        <p><a href="${renewUrl}">${renewUrl}</a> (?secret=ADMIN_SECRET 필요)</p>
+        <p>
+          <a href="${renewUrl}"
+             style="display:inline-block;padding:12px 20px;background:#2D7DF6;color:#fff;
+                    text-decoration:none;border-radius:8px;font-weight:bold">
+            운영 서버 credential 갱신하기 →
+          </a>
+        </p>
+        <p style="font-size:12px;color:#888">버튼이 안 되면 이 주소를 복사해 여세요:<br>${renewUrl}</p>
       </div>`;
 
     const sent = await sendAlertEmail(subject, html);
