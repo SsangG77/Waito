@@ -36,32 +36,35 @@ struct LockScreenIdleRow: View {
     var bounce: Double = 0
 
     var body: some View {
-        // 배송 없을 때(항상 노출): 왼쪽 끝 트럭 아이콘 + 나머지 공간에 "Waito" 크게.
-        // 카드 세로 전체를 차지해 배경색(bg)이 위아래 끝까지 덮이게 한다.
+        // 배송 없을 때(항상 노출): 왼쪽 끝 트럭 + 오른쪽 BOUNCE 버튼.
+        // 트럭은 정적이고, 버튼을 누를 때만 truckBounce(state) 가 단계 갱신되며
+        // .animation(nil) 로 보간 없이 툭툭 — 8비트 픽셀풍 스냅 바운스.
         HStack(spacing: 10) {
             CatalogTruckView(cab: truckConfig.cab, truckBody: truckConfig.body, wheels: truckConfig.wheelType, size: 40)
                 .offset(y: bounce)
                 .animation(nil, value: bounce)   // 보간 없이 스냅 → 8비트 게임처럼 끊기는 바운스
 
             // 누르면 BounceTruckIntent 실행 → 트럭이 위아래로 바운스
+            // 빨강 ADD 버튼(> ADD_) 과 동일한 픽셀 박스 스타일
             Button(intent: BounceTruckIntent()) {
-                Text("> BOUNCE")
-                    .font(pixelFont(20))   // 공유 픽셀 폰트(Galmuri9)
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.5)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 8)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.white.opacity(0.55), lineWidth: 1.5)
-                    )
+                HStack(spacing: 8) {
+                    Text(">")
+                    Text("BOUNCE_")
+                }
+                .font(pixelFont(20))   // 공유 픽셀 폰트(Galmuri9)
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .wPixelBox(border: Color.wPixelRed.opacity(0.7), bg: Color.wPixelRed, lineWidth: 2, notch: 4)
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.leading, 30)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .padding(.horizontal, 16)
+        .padding(.horizontal, 26)
         .padding(.vertical, 12)
     }
 }

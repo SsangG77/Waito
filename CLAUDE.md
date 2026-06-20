@@ -192,7 +192,7 @@ struct TrackingItemState: Codable, Hashable {
     // 가변 이벤트 타임라인 compact 필드(위젯 타깃은 TrackingEvent 전체를 못 봄). 전부 Optional(하위호환).
     var eventCount: Int?       // 원본 이벤트 개수 → 점 개수(가변). nil/0 이면 status 기반 7단계 폴백
     var statusLabel: String?   // 마지막 이벤트 원본 description. nil 이면 status.displayName
-    var departureDate: String? // 목록 createdAt(출발/등록일). 위젯에서 "M/d"로 표시
+    var departureDate: String? // 목록 createdAt(출발/등록일). 위젯에서 "YYYY.MM.DD"로 표시
     var truckBounce: Double?   // idle 트럭 y오프셋(LA bounce). > BOUNCE 버튼이 갱신
 }
 
@@ -324,7 +324,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - APNs 실제 전송 + push-to-start 이벤트 기반 (위 "데이터 흐름" 참조)
 - 무료 1개 / 유료 2개 추적 제한(`SubscriptionManager.liveActivityLimit`)
 - **트럭 표시(위젯)**: 접힌 DI(compact leading)·잠금화면 idle/배송 행·펼친 DI idle 모두 **`CatalogTruckView` 트럭만** 정적 표시.
-  - ⚠️ **iOS 제약**: Live Activity(잠금화면/DI)는 시스템이 SwiftUI 애니메이션 모디파이어를 무시 → `repeatForever` 등 연속 애니메이션이 **실기기/시뮬에서 안 돎**(공식 문서 "Animating data updates in widgets and Live Activities"). Pixel Pals 류도 자유 애니메이션이 아님. → 위젯에선 애니메이션 효과를 쓰지 않음.
+  - ⚠️ **iOS 제약**: Live Activity(잠금화면/DI)는 시스템이 SwiftUI 애니메이션 모디파이어를 무시 → `repeatForever` 등 연속 애니메이션이 **실기기/시뮬에서 안 돎**(공식 문서 "Animating data updates in widgets and Live Activities"). 위젯에선 **오직 content state(ContentState) 변경 시에만** 화면이 갱신됨. → 위젯에선 자율 애니메이션 효과를 쓰지 않음.
+    - **실기기 검증 결과(2026-06)**: idle 트럭을 "스스로 움직이게" 하려는 3가지 시도 모두 정지 확인 — ①`ProgressView(timerInterval:)`+커스텀 `ProgressViewStyle`(시스템이 `fractionCompleted` 를 커스텀 스타일에 안 흘려줌), ②`PhaseAnimator`(위젯에서 순환 안 함), ③`repeatForever`+`onAppear`(트리거 미발동). **자동 동력이 필요하면 서버 push 뿐이나 APNs Live Activity update 는 15초 throttle → walk-cycle 불가.** 결론: idle 트럭은 정적 + `> BOUNCE` 버튼(탭=state 변경)으로만 움직임.
   - **`RunningTruckView`(`RunningTruckScene.swift`)**: 트럭 바운스+속도선 "달리는" 효과 래퍼(`animated` 플래그). **인앱/프리뷰 전용**(일반 SwiftUI라 정상 재생). 현재 **목록 빈 상태(DeliveryListView)** 에서 사용. 모션은 `TimelineView(.animation)` 공유 시간축 + 위상(phase) 기반 — 각 속도선이 항상 화면 전체에 균등 분배돼 우→좌로 흐름(이전 `repeatForever`+`delay` 방식의 뭉침/트럭 뒤 출현 문제 해결). `Color(hex: UInt32)` 포함. 위젯에선 미사용.
   - (`RoamingTruckView` 좌우 왕복도 `CompactIslandViews.swift`에 미사용 잔존.)
 
@@ -336,7 +337,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - `ExpandedTruckPathView`(폐기된 Island Circuit 1차 디자인) 삭제됨.
 
 ### 잠금화면 idle (항상 노출)
-- 좌측 트럭 + **`> BOUNCE` 버튼**(`BounceTruckIntent: LiveActivityIntent`). 탭 시 트럭 y오프셋(`truckBounce`)을 단계 갱신 → **8비트풍 스냅 바운스**(위젯 트럭에 `.animation(nil)`). `BounceGate` 액터로 진행 중 재탭 무시.
+- 좌측 정적 트럭 + 우측 **`> BOUNCE` 버튼**(`BounceTruckIntent: LiveActivityIntent`). 탭 시 트럭 y오프셋(`truckBounce`)을 단계 갱신 → **8비트풍 스냅 바운스**(위젯 트럭에 `.animation(nil)`). `BounceGate` 액터로 진행 중 재탭 무시.
+- BOUNCE 버튼 외형 = 앱 빨강 ADD 버튼과 동일한 픽셀 박스. 앱 `PixelTheme` 는 위젯에서 못 쓰므로 `WaitoWidgetColors.swift` 에 self-contained 복제(`wPixelBox`/`wPixelRed`/`WNotchedRectangle`/`WPixelBorderShape`).
 - 배경 = `Color("bg")`(에셋), idle 카드 세로 꽉 채움.
 - **픽셀 폰트 Galmuri9**: `pixelFont(_:)` 가 `PixelFont.swift`(앱·위젯 공유)로 이동, `Font.custom("Galmuri9-Regular")`. `Fonts/Galmuri9.ttf` + 두 타깃 `UIAppFonts` 등록.
 

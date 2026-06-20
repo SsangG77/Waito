@@ -2,12 +2,10 @@ import SwiftUI
 import WidgetKit
 import ActivityKit
 
-/// 서버/앱이 보낸 날짜 문자열("YYYY-MM-DD HH:mm:ss")을 짧게 "M/d" 로. (위젯은 문자열 파싱만)
+/// 서버/앱이 보낸 날짜 문자열("YYYY-MM-DD HH:mm:ss")을 "YYYY.MM.DD" 로. (위젯은 문자열 파싱만)
 private func waitoShortDate(_ raw: String?) -> String {
     guard let raw, raw.count >= 10 else { return raw ?? "" }
-    let comps = raw.prefix(10).split(separator: "-")   // ["YYYY","MM","DD"]
-    guard comps.count == 3, let m = Int(comps[1]), let d = Int(comps[2]) else { return String(raw.prefix(10)) }
-    return "\(m)/\(d)"
+    return raw.prefix(10).replacingOccurrences(of: "-", with: ".")   // "2026-06-17 ..." → "2026.06.17"
 }
 
 struct WaitoLiveActivity: Widget {
@@ -26,7 +24,6 @@ struct WaitoLiveActivity: Widget {
                 DynamicIslandExpandedRegion(.bottom) {
                     if let primary = state.primary {
                         HStack {
-                            // 출발(등록) 날짜 — 목록 createdAt 을 짧게(M/d) 표시
                             Text(waitoShortDate(primary.departureDate))
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(Color.wPixelMuted)
@@ -38,8 +35,10 @@ struct WaitoLiveActivity: Widget {
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.7)
                         }
+                        .padding(.horizontal, 10)
                     }
                 }
+               
             } compactLeading: {
                 let cfg = context.state.truckConfig
                 CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 24)
@@ -66,7 +65,10 @@ private extension DeliveryAttributes.ContentState {
                 status: status,
                 carrierName: "CJ대한통운",
                 itemName: itemName,
-                estimatedDelivery: "오늘 도착 예정"
+                estimatedDelivery: "오늘 도착 예정",
+                eventCount: 5,
+                statusLabel: "옥천HUB 간선상차",
+                departureDate: "2026-06-17 09:00:00"   // 프리뷰 날짜 → "6/17"
             )
         ], truckConfig: .default)
     }
