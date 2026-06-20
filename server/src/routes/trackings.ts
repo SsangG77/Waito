@@ -127,9 +127,23 @@ router.get('/', (req: Request, res: Response) => {
     SELECT id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value,
            carrier_name, estimated_delivery, created_at, updated_at, last_event_time, delivered_at
     FROM trackings WHERE device_id = ? ORDER BY created_at DESC
-  `).all(device.id);
+  `).all(device.id) as Array<{ id: number }>;
 
-  res.json(trackings);
+  // 각 택배의 원본 이벤트를 한 번에 읽어 id별로 묶어 붙인다(가변 타임라인용).
+  let eventsByTracking: Record<number, unknown[]> = {};
+  if (trackings.length > 0) {
+    const ids = trackings.map((t) => t.id);
+    const placeholders = ids.map(() => '?').join(',');
+    const allEvents = db.prepare(
+      `SELECT * FROM tracking_events WHERE tracking_id IN (${placeholders}) ORDER BY event_time ASC`
+    ).all(...ids) as Array<{ tracking_id: number }>;
+    eventsByTracking = allEvents.reduce((acc, ev) => {
+      (acc[ev.tracking_id] ??= []).push(ev);
+      return acc;
+    }, {} as Record<number, unknown[]>);
+  }
+
+  res.json(trackings.map((t) => ({ ...t, events: eventsByTracking[t.id] ?? [] })));
 });
 
 // GET /api/trackings/:id — 상세 조회

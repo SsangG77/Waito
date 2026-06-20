@@ -6,7 +6,11 @@ import { sendLiveActivityPush, sendAlertPush } from './apnsClient.js';
  * iOS DeliveryAttributes.ContentState 와 정확히 일치해야 하는 구조.
  * (키/타입 불일치 시 시스템이 디코딩에 실패해 업데이트가 무시됨)
  *   ContentState { items: [TrackingItemState], truckConfig: TruckConfig }
- *   TrackingItemState { trackingNumber, status, carrierName, itemName, estimatedDelivery }
+ *   TrackingItemState { trackingNumber, status, carrierName, itemName, estimatedDelivery,
+ *                       eventCount, statusLabel }
+ *
+ * eventCount/statusLabel 은 가변 이벤트 타임라인용 compact 필드(위젯 타깃은
+ * TrackingEvent 전체를 못 보므로 개수 + 최신 라벨만 전달). iOS 에선 Optional.
  */
 interface TrackingItemState {
   trackingNumber: string;
@@ -14,6 +18,9 @@ interface TrackingItemState {
   carrierName: string;
   itemName: string;
   estimatedDelivery: string | null;
+  eventCount: number;
+  statusLabel: string | null;
+  departureDate: string | null;
 }
 
 const STATUS_DESCRIPTIONS: Record<DeliveryStatus, string> = {
@@ -79,7 +86,8 @@ export async function sendLiveActivityUpdate(
     // 배송 완료를 사용자가 인지하도록 배너 알림을 띄우고, 최종 상태를 1시간 보여준 뒤 정리
     aps.alert = {
       title: '배송 완료',
-      body: items[0] ? STATUS_DESCRIPTIONS[items[0].status] : STATUS_DESCRIPTIONS[DeliveryStatus.Delivered],
+      body: items[0]?.statusLabel
+        ?? (items[0] ? STATUS_DESCRIPTIONS[items[0].status] : STATUS_DESCRIPTIONS[DeliveryStatus.Delivered]),
     };
     aps['dismissal-date'] = now + 60 * 60;
   }
@@ -110,8 +118,11 @@ export async function pushTrackingUpdate(trackingId: number, status: DeliverySta
   const row = db
     .prepare(
       `SELECT t.live_activity_push_token, t.live_activity_started_at,
-              t.tracking_number, t.carrier_name, t.item_name, t.estimated_delivery,
-              d.device_token, d.push_to_start_token, d.truck_config, d.apns_token
+              t.tracking_number, t.carrier_name, t.item_name, t.estimated_delivery, t.created_at,
+              d.device_token, d.push_to_start_token, d.truck_config, d.apns_token,
+              (SELECT COUNT(*) FROM tracking_events e WHERE e.tracking_id = t.id) AS event_count,
+              (SELECT e.description FROM tracking_events e WHERE e.tracking_id = t.id
+                 ORDER BY e.event_time DESC LIMIT 1) AS last_event_description
        FROM trackings t JOIN devices d ON d.id = t.device_id
        WHERE t.id = ?`,
     )
@@ -123,10 +134,13 @@ export async function pushTrackingUpdate(trackingId: number, status: DeliverySta
         carrier_name: string;
         item_name: string;
         estimated_delivery: string | null;
+        created_at: string | null;
         device_token: string;
         push_to_start_token: string | null;
         truck_config: string | null;
         apns_token: string | null;
+        event_count: number;
+        last_event_description: string | null;
       }
     | undefined;
 
@@ -138,6 +152,9 @@ export async function pushTrackingUpdate(trackingId: number, status: DeliverySta
     carrierName: row.carrier_name,
     itemName: row.item_name,
     estimatedDelivery: row.estimated_delivery,
+    eventCount: row.event_count ?? 0,
+    statusLabel: row.last_event_description ?? null,
+    departureDate: row.created_at ?? null,
   };
   const truckConfig = safeParseJson(row.truck_config);
   const isEnd = status === DeliveryStatus.Delivered;
@@ -204,7 +221,7 @@ async function sendStatusAlert(
       aps: {
         alert: {
           title: item.itemName || item.carrierName,
-          body: STATUS_DESCRIPTIONS[status],
+          body: item.statusLabel ?? STATUS_DESCRIPTIONS[status],
         },
         sound: 'default',
       },
@@ -248,7 +265,8 @@ export async function sendPushToStartEvent(
       // 상태 변경을 계기로 되살리므로, 알림 내용도 그 상태로 (의미 있는 알림)
       alert: {
         title: '배송 상태 업데이트',
-        body: items[0] ? STATUS_DESCRIPTIONS[items[0].status] : '택배 위치를 다시 표시합니다.',
+        body: items[0]?.statusLabel
+          ?? (items[0] ? STATUS_DESCRIPTIONS[items[0].status] : '택배 위치를 다시 표시합니다.'),
       },
     },
   };

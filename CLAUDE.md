@@ -189,6 +189,11 @@ struct TrackingItemState: Codable, Hashable {
     var carrierName: String
     var itemName: String
     var estimatedDelivery: String?
+    // 가변 이벤트 타임라인 compact 필드(위젯 타깃은 TrackingEvent 전체를 못 봄). 전부 Optional(하위호환).
+    var eventCount: Int?       // 원본 이벤트 개수 → 점 개수(가변). nil/0 이면 status 기반 7단계 폴백
+    var statusLabel: String?   // 마지막 이벤트 원본 description. nil 이면 status.displayName
+    var departureDate: String? // 목록 createdAt(출발/등록일). 위젯에서 "M/d"로 표시
+    var truckBounce: Double?   // idle 트럭 y오프셋(LA bounce). > BOUNCE 버튼이 갱신
 }
 
 struct DeliveryAttributes: ActivityAttributes {
@@ -202,6 +207,8 @@ struct DeliveryAttributes: ActivityAttributes {
 
 > ⚠️ 서버가 보내는 APNs `content-state` 는 이 구조와 **정확히 일치**해야 디코딩됨.
 > `TruckConfig` 는 키 누락/잘못된 enum 값에도 견디도록 커스텀 `init(from:)` 으로 폴백 처리.
+> **신규 필드는 반드시 Optional** — 기본값을 주면 합성 Codable 이 키를 필수로 간주해 구 payload/persisted Activity 디코딩이 실패함.
+> `eventCount`/`statusLabel`/`departureDate` 는 iOS `buildContentState` 와 서버 `pushService` 둘 다 동일하게 채움.
 
 ---
 
@@ -320,6 +327,30 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
   - ⚠️ **iOS 제약**: Live Activity(잠금화면/DI)는 시스템이 SwiftUI 애니메이션 모디파이어를 무시 → `repeatForever` 등 연속 애니메이션이 **실기기/시뮬에서 안 돎**(공식 문서 "Animating data updates in widgets and Live Activities"). Pixel Pals 류도 자유 애니메이션이 아님. → 위젯에선 애니메이션 효과를 쓰지 않음.
   - **`RunningTruckView`(`RunningTruckScene.swift`)**: 트럭 바운스+속도선 "달리는" 효과 래퍼(`animated` 플래그). **인앱/프리뷰 전용**(일반 SwiftUI라 정상 재생). 현재 **목록 빈 상태(DeliveryListView)** 에서 사용. 모션은 `TimelineView(.animation)` 공유 시간축 + 위상(phase) 기반 — 각 속도선이 항상 화면 전체에 균등 분배돼 우→좌로 흐름(이전 `repeatForever`+`delay` 방식의 뭉침/트럭 뒤 출현 문제 해결). `Color(hex: UInt32)` 포함. 위젯에선 미사용.
   - (`RoamingTruckView` 좌우 왕복도 `CompactIslandViews.swift`에 미사용 잔존.)
+
+### 가변 이벤트 타임라인 (고정 7단계 폐기)
+- 진행 타임라인 점 개수 = **실제 택배사 이벤트 개수**(가변). 라벨 = 원본 `description`. 이벤트만 표시(전부 지나감, 트럭은 마지막 점). 이벤트 없으면 status 기반 7단계 폴백.
+- 데이터: 서버 `GET /api/trackings` 목록이 각 택배의 `events` 전체 포함(`TrackingListItem.events`). LA는 위젯 타깃이 `TrackingEvent`를 못 보므로 **compact 필드(`eventCount`/`statusLabel`)만** 전달.
+- 인앱: 접힘 가로바·펼침 세로 타임라인 모두 `TrackingRowView`에서 events 기반. 펼침은 점마다 `description` 라벨.
+- 위젯: 잠금화면 `LockScreenStatusTimeline`(가변 점, 상한 14), DI 펼침 `ExpandedMetroTimelineView`(center=물품명+타임라인, bottom=출발날짜 ⟷ 상태라벨).
+- `ExpandedTruckPathView`(폐기된 Island Circuit 1차 디자인) 삭제됨.
+
+### 잠금화면 idle (항상 노출)
+- 좌측 트럭 + **`> BOUNCE` 버튼**(`BounceTruckIntent: LiveActivityIntent`). 탭 시 트럭 y오프셋(`truckBounce`)을 단계 갱신 → **8비트풍 스냅 바운스**(위젯 트럭에 `.animation(nil)`). `BounceGate` 액터로 진행 중 재탭 무시.
+- 배경 = `Color("bg")`(에셋), idle 카드 세로 꽉 채움.
+- **픽셀 폰트 Galmuri9**: `pixelFont(_:)` 가 `PixelFont.swift`(앱·위젯 공유)로 이동, `Font.custom("Galmuri9-Regular")`. `Fonts/Galmuri9.ttf` + 두 타깃 `UIAppFonts` 등록.
+
+### 디버그
+- DEBUG 빌드에선 오류 팝업 억제(`DeliveryListView`에서 `showError` 게이팅) — 로컬 서버 미가동 시 네트워크 오류 팝업 방지.
+
+---
+
+## 배포 / 운영 (실제)
+- **서버**: Vultr 인스턴스 `158.247.223.154`(Ubuntu, 기존 brawlytics와 공존). Waito는 **포트 3001**, pm2 `waito`, `/var/www/waito/server`(repo sparse-checkout: `server/`만). `APNS_PRODUCTION=true`.
+- **앱 ↔ 서버**: RELEASE `APIClient.baseURL = http://158.247.223.154:3001` (도메인/HTTPS 미사용 → `Info.plist` ATS `NSAllowsArbitraryLoads`). DEBUG는 로컬 IP.
+- **자동배포**: `.github/workflows/deploy.yml` — `server/**` push 시 GitHub Actions가 SSH로 Vultr 접속 → `git pull && npm ci && build && pm2 restart`. 시크릿 `VULTR_SSH_KEY`/`VULTR_HOST`.
+- **credential 만료 알림**: 만료 3일 전부터 매일 이메일(`emailService` = Resend HTTP API, `RESEND_API_KEY`). 메일에 운영 admin 갱신 링크(시크릿 포함) 버튼.
+- `.env`/`certs/*.p8`/`*.ttf 위치` 주의: `.env`·`certs/`는 gitignore — 서버엔 scp로 직접.
 
 ---
 

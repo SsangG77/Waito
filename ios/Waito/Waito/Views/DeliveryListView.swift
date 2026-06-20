@@ -64,7 +64,15 @@ struct DeliveryListView: View {
 
     var body: some View {
         listContent
-            .onChange(of: service.error) { _, newValue in showError = newValue != nil }
+            .onChange(of: service.error) { _, newValue in
+                // DEBUG 빌드에서는 오류 팝업을 띄우지 않는다(로컬 서버 미가동 등 네트워크 오류 잦음).
+                // 에러 상태/콘솔 로그는 그대로 유지되고, 사용자 대상 팝업만 억제.
+                #if DEBUG
+                showError = false
+                #else
+                showError = newValue != nil
+                #endif
+            }
             .pixelAlert(
                 title: "오류",
                 message: service.error ?? "",

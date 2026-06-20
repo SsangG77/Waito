@@ -107,12 +107,10 @@ final class TrackingService {
             if !completed.isEmpty {
                 liveTrackingNumbers.removeAll { completed.contains($0) }
                 saveLiveTrackingNumbers()
-                if liveTrackingNumbers.isEmpty {
-                    await reconcileAmbientActivity()
-                } else {
-                    await updateLiveActivity()
-                }
             }
+            // 토글된 배송 아이템이 있으면 배송 LA 우선, 없으면 ambient/종료 — 항상 단일 기준으로 조정.
+            // (완료건 유무와 무관하게 호출해야, "배송중 아이템만 토글 ON" 상태에서도 배송 LA 가 표시됨)
+            await reconcileLiveActivity()
             self.error = nil
         } catch {
             self.error = error.localizedDescription
@@ -256,24 +254,29 @@ final class TrackingService {
         await reconcileAmbientActivity()
     }
 
-    /// 앱 진입 시: 배송이 없고 ambient 가 켜져 있으면 트럭을 띄운다.
-    /// 시작 전용 — 이미 떠 있는 Activity(배송 / push-to-start 복원)는 절대 건드리지 않는다.
-    /// (그렇지 않으면 복원된 배송 Activity 를 빈 ambient 로 덮어써 데이터가 사라질 수 있다)
-    func startAmbientIfEnabled() async {
-        guard liveTrackingNumbers.isEmpty, ambientEnabled,
-              Activity<DeliveryAttributes>.activities.isEmpty else { return }
-        await startAmbientActivity()
-    }
-
-    /// 배송이 없을 때 ambient Live Activity 를 켜고/끈다.
-    /// (배송이 있으면 배송 Activity 가 우선이라 관여하지 않는다)
-    func reconcileAmbientActivity() async {
-        guard liveTrackingNumbers.isEmpty else { return }
-        if ambientEnabled {
-            await startAmbientActivity()
+    /// Live Activity 단일 조정점(SSoT).
+    /// 우선순위: **토글된 배송 아이템 > ambient(항상 노출) > 종료**.
+    /// "항상 노출"이 켜져 있어도 배송 아이템 토글이 켜져 있으면 배송 상태 LA/DI 를 우선 표시한다.
+    func reconcileLiveActivity() async {
+        if !liveTrackingNumbers.isEmpty {
+            await updateLiveActivity()    // 배송 상태 LA/DI (ambient 보다 우선)
+        } else if ambientEnabled {
+            await startAmbientActivity()  // 배송 없음 + 항상 노출 → 트럭만
         } else {
             await endLiveActivity()
         }
+    }
+
+    /// 앱 진입 시 호출. 토글된 배송 아이템이 있으면 배송 LA, 없으면 ambient 로 조정한다.
+    /// (단일 조정점에 위임 — updateLiveActivity/startAmbientActivity 모두 기존 Activity 를
+    ///  덮어쓰지 않고 갱신하므로 복원된 Activity 를 안전하게 다룬다)
+    func startAmbientIfEnabled() async {
+        await reconcileLiveActivity()
+    }
+
+    /// 설정의 "항상 노출"/구독 변경 등에서 호출. (단일 조정점에 위임)
+    func reconcileAmbientActivity() async {
+        await reconcileLiveActivity()
     }
 
     /// items 없이 트럭만 담은 ambient 콘텐츠. (DI compact/minimal 은 items 없이도 트럭을 그린다)
@@ -283,6 +286,7 @@ final class TrackingService {
 
     /// ambient Live Activity 시작/유지. 서버 푸시가 필요 없으므로 로컬 전용(pushType: nil).
     /// 이미 Activity 가 있으면 ambient(빈 items) 상태로 업데이트한다.
+    /// (바운스는 자동 재생하지 않음 — 잠금화면 "> BOUNCE" 버튼 탭 시 BounceTruckIntent 가 처리)
     private func startAmbientActivity() async {
         guard ActivityAuthorizationInfo().areActivitiesEnabled else { return }
 
@@ -323,12 +327,8 @@ final class TrackingService {
         liveTrackingNumbers.removeAll { $0 == trackingNumber }
         saveLiveTrackingNumbers()
 
-        if liveTrackingNumbers.isEmpty {
-            // 항상 노출 ON이면 종료 대신 ambient(트럭만)로 전환, 아니면 종료
-            await reconcileAmbientActivity()
-        } else {
-            await updateLiveActivity()
-        }
+        // 남은 배송 아이템이 있으면 배송 LA 유지, 없으면 항상 노출 ON 시 ambient(트럭만)로 전환·아니면 종료
+        await reconcileLiveActivity()
     }
 
     // MARK: - Private
@@ -345,7 +345,11 @@ final class TrackingService {
                 status: tracking.currentStatus,
                 carrierName: tracking.carrierName,
                 itemName: tracking.itemName,
-                estimatedDelivery: tracking.estimatedDelivery
+                estimatedDelivery: tracking.estimatedDelivery,
+                // 가변 타임라인 compact 필드 — 로컬 Activity 와 서버 push 가 동일 shape 가 되도록.
+                eventCount: tracking.events?.count,
+                statusLabel: tracking.events?.last?.description,
+                departureDate: tracking.createdAt        // 목록의 등록(출발) 날짜
             )
         }
 

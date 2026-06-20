@@ -2,15 +2,43 @@ import SwiftUI
 import WidgetKit
 import ActivityKit
 
+/// 서버/앱이 보낸 날짜 문자열("YYYY-MM-DD HH:mm:ss")을 짧게 "M/d" 로. (위젯은 문자열 파싱만)
+private func waitoShortDate(_ raw: String?) -> String {
+    guard let raw, raw.count >= 10 else { return raw ?? "" }
+    let comps = raw.prefix(10).split(separator: "-")   // ["YYYY","MM","DD"]
+    guard comps.count == 3, let m = Int(comps[1]), let d = Int(comps[2]) else { return String(raw.prefix(10)) }
+    return "\(m)/\(d)"
+}
+
 struct WaitoLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DeliveryAttributes.self) { context in
             LockScreenLiveActivityView(state: context.state)
-                .activityBackgroundTint(.black)
+                .activityBackgroundTint(Color("bg"))
         } dynamicIsland: { context in
-            DynamicIsland {
+            let state = context.state
+            return DynamicIsland {
+                // 가운데: 물품명 + 타임라인 (세로)
+                DynamicIslandExpandedRegion(.center) {
+                    ExpandedMetroTimelineView(state: state)
+                }
+                // 아래: 출발 날짜(좌)  ⟷  물품 상태 라벨(우)
                 DynamicIslandExpandedRegion(.bottom) {
-                    ExpandedMetroTimelineView(state: context.state)
+                    if let primary = state.primary {
+                        HStack {
+                            // 출발(등록) 날짜 — 목록 createdAt 을 짧게(M/d) 표시
+                            Text(waitoShortDate(primary.departureDate))
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Color.wPixelMuted)
+                                .lineLimit(1)
+                            Spacer()
+                            Text(primary.statusLabel ?? primary.status.displayName)
+                                .font(.system(size: 10, weight: .semibold))
+                                .foregroundStyle(Color.wPixelOrange)
+                                .lineLimit(1)
+                                .minimumScaleFactor(0.7)
+                        }
+                    }
                 }
             } compactLeading: {
                 let cfg = context.state.truckConfig

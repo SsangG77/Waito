@@ -51,11 +51,14 @@
 			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
 			membershipExceptions = (
 				Assets.xcassets,
+				BounceTruckIntent.swift,
+				Fonts/Galmuri9.ttf,
 				LiveActivity/DeliveryAttributes.swift,
 				Models/DeliveryStatus.swift,
 				Models/PixelTruckCatalog.swift,
 				Models/TruckConfig.swift,
 				Models/TruckPathCalculator.swift,
+				PixelFont.swift,
 				Views/TruckDrawing/CatalogTruckView.swift,
 				Views/TruckDrawing/RunningTruckScene.swift,
 				Views/TruckDrawing/TruckShapes.swift,

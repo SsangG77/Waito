@@ -27,47 +27,29 @@ struct ExpandedMetroTimelineView: View {
             size: 26
         )
         .frame(maxWidth: .infinity, alignment: .center)
-        .frame(height: 30)
+//        .frame(height: 40)
     }
 
+    /// center 영역 — 물품명(위) + 가변 타임라인(아래) 세로 배치.
+    /// (출발 날짜·상태 라벨은 bottom 영역에서 표시)
     private func mainContent(_ item: TrackingItemState) -> some View {
-        VStack(spacing: 5) {
-            HStack {
-                Text(item.itemName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                Spacer()
-                Text(item.status.isCompleted ? "배송완료 ✓" : (item.estimatedDelivery ?? ""))
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Color.wPixelGreen)
-            }
+        VStack(alignment: .leading, spacing: 6) {
+            Text(item.itemName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
 
-            trackSection(current: item.status, config: state.truckConfig)
-
-            HStack {
-                CatalogTruckView(
-                    cab: state.truckConfig.cab,
-                    truckBody: state.truckConfig.body,
-                    wheels: state.truckConfig.wheelType,
-                    size: 11
-                )
-                .frame(width: 15)
-                
-                Text(item.status.displayName)
-                    .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(Color.wPixelOrange)
-                Spacer()
-//                Text("\(item.status.order + 1)/7 완료")
-//                    .font(.system(size: 9))
-//                    .foregroundStyle(.white.opacity(0.4))
-            }
+            trackSection(current: item.status, eventCount: item.eventCount ?? 0, config: state.truckConfig)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func trackSection(current: DeliveryStatus, config: TruckConfig) -> some View {
-        let currentOrder = current.order
-        let count = allStatuses.count
+    private func trackSection(current: DeliveryStatus, eventCount: Int, config: TruckConfig) -> some View {
+        // 이벤트가 있으면 개수만큼(상한 내) 점, 전부 지나감, 트럭은 마지막 점. 없으면 status 7단계.
+        let useEvents = eventCount > 0
+        let maxDots = 14
+        let count = useEvents ? min(eventCount, maxDots) : allStatuses.count
+        let currentOrder = useEvents ? count - 1 : current.order
         let dotSize: CGFloat = 5
         let gap: CGFloat = 4
 
@@ -110,19 +92,6 @@ struct ExpandedMetroTimelineView: View {
                 }
             }
             .frame(height: dotSize)
-
-            // Labels — 각 점 중심에 정렬
-            GeometryReader { geo in
-                let unit = unitWidth(total: geo.size.width, count: count, dotSize: dotSize, gap: gap)
-                ForEach(Array(allStatuses.enumerated()), id: \.element) { idx, status in
-                    Text(status.metroLabel)
-                        .font(.system(size: 7.7))
-                        .foregroundStyle(status == current ? Color.wPixelOrange : Color.white.opacity(0.25))
-                        .frame(width: 22, alignment: .center)
-                        .position(x: unit * CGFloat(idx) + dotSize / 2, y: 5)
-                }
-            }
-            .frame(height: 10)
         }
     }
 
@@ -138,31 +107,24 @@ struct ExpandedMetroTimelineView: View {
     }
 }
 
-private extension DeliveryStatus {
-    var metroLabel: String {
-        switch self {
-        case .registered:     return "접수"
-        case .pickedUp:       return "집화"
-        case .inTransitIn:    return "상차"
-        case .inTransitOut:   return "하차"
-        case .outForDelivery: return "출발"
-        case .delivering:     return "배송중"
-        case .delivered:      return "완료"
-        }
-    }
-}
-
 // MARK: - Previews
 
 private extension DeliveryAttributes.ContentState {
-    static func make(status: DeliveryStatus, itemName: String = "맥북 프로 14인치") -> Self {
+    static func make(
+        status: DeliveryStatus,
+        itemName: String = "맥북 프로 14인치",
+        eventCount: Int? = nil,
+        statusLabel: String? = nil
+    ) -> Self {
         .init(items: [
             TrackingItemState(
                 trackingNumber: "123456789012",
                 status: status,
                 carrierName: "CJ대한통운",
                 itemName: itemName,
-                estimatedDelivery: "오늘 도착 예정"
+                estimatedDelivery: "오늘 도착 예정",
+                eventCount: eventCount,
+                statusLabel: statusLabel
             )
         ], truckConfig: .default)
     }
@@ -182,6 +144,18 @@ private extension DeliveryAttributes.ContentState {
 
 #Preview("C2 — 메트로 타임라인 | 배송완료") {
     ExpandedMetroTimelineView(state: .make(status: .delivered))
+        .frame(width: 320)
+        .background(Color.black)
+}
+
+#Preview("C2 — 이벤트 가변 5개") {
+    ExpandedMetroTimelineView(state: .make(status: .delivering, eventCount: 5, statusLabel: "옥천HUB 간선상차"))
+        .frame(width: 320)
+        .background(Color.black)
+}
+
+#Preview("C2 — 이벤트 가변 12개(긴 라벨)") {
+    ExpandedMetroTimelineView(state: .make(status: .delivering, eventCount: 12, statusLabel: "서울 강남 집배점 도착 후 배송기사 인수"))
         .frame(width: 320)
         .background(Color.black)
 }

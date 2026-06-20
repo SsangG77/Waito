@@ -77,6 +77,54 @@ struct TrackingRowView: View {
     }
     
     var horizontalProgress: some View {
+        Group {
+            // 이벤트가 있으면 "있는 그대로" 이벤트 개수만큼 점(전부 지나감 → 채움).
+            // 없으면(확인중/구버전 서버) 기존 status 기반 7단계로 폴백.
+            if let events = tracking.events, !events.isEmpty {
+                eventDotBar(count: events.count)
+            } else {
+                statusFallbackBar
+            }
+        }
+        .frame(height: 5)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 8)
+        .transition(.opacity)
+    }
+
+    /// 이벤트 개수 기반 가로 점 바 — 모든 점 채움(지나간 이벤트).
+    private func eventDotBar(count: Int) -> some View {
+        GeometryReader { geo in
+            let dotSize: CGFloat = 5
+            let gap: CGFloat = 4
+            let lineWidth = count > 1
+                ? (geo.size.width - (dotSize + gap * 2) * CGFloat(count) + gap * 2) / CGFloat(count - 1)
+                : 0
+            let activeColor = progressColor
+
+            ZStack(alignment: .leading) {
+                if count > 1 {
+                    ForEach(0..<count - 1, id: \.self) { i in
+                        let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i) + dotSize + gap
+                        Rectangle()
+                            .fill(activeColor)
+                            .frame(width: lineWidth, height: 1)
+                            .offset(x: x, y: dotSize / 2 - 0.5)
+                    }
+                }
+                ForEach(0..<count, id: \.self) { i in
+                    let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i)
+                    Rectangle()
+                        .fill(activeColor)
+                        .frame(width: dotSize, height: dotSize)
+                        .offset(x: x)
+                }
+            }
+        }
+    }
+
+    /// 이벤트 없을 때 폴백 — 기존 status 기반 고정 7단계 바.
+    private var statusFallbackBar: some View {
         GeometryReader { geo in
             let steps = 7
             let dotSize: CGFloat = 5
@@ -85,19 +133,19 @@ struct TrackingRowView: View {
             let activeColor = progressColor
 
             ZStack(alignment: .leading) {
-                ForEach(0..<steps - 1) { i in
+                ForEach(0..<steps - 1, id: \.self) { i in
                     let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i) + dotSize + gap
                     let filled = tracking.currentStatus.isCompleted || CGFloat(i + 1) / CGFloat(steps) <= tracking.currentStatus.progress
-                    
+
                     Rectangle()
                         .fill(filled ? activeColor : Color.pixelBorder)
                         .frame(width: lineWidth, height: 1)
                         .offset(x: x, y: dotSize / 2 - 0.5)
                 }
-                ForEach(0..<steps) { i in
+                ForEach(0..<steps, id: \.self) { i in
                     let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i)
                     let filled = tracking.currentStatus.isCompleted || CGFloat(i) / CGFloat(steps) < tracking.currentStatus.progress
-                    
+
                     Rectangle()
                         .fill(filled ? activeColor : Color.pixelBorder)
                         .frame(width: dotSize, height: dotSize)
@@ -105,13 +153,60 @@ struct TrackingRowView: View {
                 }
             }
         }
-        .frame(height: 5)
-        .padding(.horizontal, 14)
-        .padding(.bottom, 8)
-        .transition(.opacity)
     }
     
     var verticalProgress: some View {
+        Group {
+            if let events = tracking.events, !events.isEmpty {
+                eventTimeline(events)
+            } else {
+                statusFallbackTimeline
+            }
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 10)
+    }
+
+    /// 원본 이벤트 기반 세로 타임라인 — 라벨 = 택배사 description, 모두 지나감(채움), 마지막=현재.
+    private func eventTimeline(_ events: [TrackingEvent]) -> some View {
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
+                let isCurrent = index == events.count - 1
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(alignment: .top, spacing: 10) {
+                        Rectangle()
+                            .fill(progressColor)
+                            .frame(width: 7, height: 7)
+                            .padding(.top, 2)
+
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(event.description)
+                                .font(pixelFont(isCurrent ? 12 : 9))
+                                .foregroundStyle(isCurrent ? progressColor : Color.pixelText.opacity(0.6))
+                                .fixedSize(horizontal: false, vertical: true)
+
+                            if let sub = eventSubLabel(event) {
+                                Text(sub)
+                                    .font(pixelFont(8))
+                                    .foregroundStyle(Color.pixelMuted.opacity(0.7))
+                            }
+                        }
+                    }
+
+                    if index < events.count - 1 {
+                        Rectangle()
+                            .fill(progressColor)
+                            .frame(width: 1, height: 19)
+                            .padding(.leading, 3)
+                    }
+                }
+            }
+        }
+    }
+
+    /// 이벤트 없을 때 폴백 — 기존 status 기반 고정 7단계 세로 타임라인.
+    private var statusFallbackTimeline: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(DeliveryStatus.allCases.enumerated()), id: \.element) { index, stage in
                 let isCurrent = stage == tracking.currentStatus
@@ -141,8 +236,18 @@ struct TrackingRowView: View {
                 }
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.bottom, 10)
+    }
+
+    /// 이벤트 보조 라벨 — "시간 · 위치" (둘 다 없으면 nil)
+    private func eventSubLabel(_ event: TrackingEvent) -> String? {
+        let time = formatDate(event.eventTime)
+        let loc = event.location?.trimmingCharacters(in: .whitespaces)
+        switch (time.isEmpty, loc?.isEmpty ?? true) {
+        case (false, false): return "\(time) · \(loc!)"
+        case (false, true):  return time
+        case (true, false):  return loc
+        case (true, true):   return nil
+        }
     }
     
     var detailBtn: some View {

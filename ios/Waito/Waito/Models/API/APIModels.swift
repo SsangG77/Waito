@@ -84,6 +84,9 @@ struct TrackingListItem: Decodable, Identifiable {
     let updatedAt: String?
     let lastEventTime: String?
     let deliveredAt: String?
+    /// 원본 택배사 이벤트 전체(가변 타임라인용). 서버 목록 API 가 포함해 내려줌.
+    /// 배포 순서/구버전 안전을 위해 Optional — 누락 시 nil, 사용처에서 `?? []`.
+    let events: [TrackingEvent]?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -99,12 +102,13 @@ struct TrackingListItem: Decodable, Identifiable {
         case updatedAt = "updated_at"
         case lastEventTime = "last_event_time"
         case deliveredAt = "delivered_at"
+        case events
     }
 
     /// 한 번이라도 조회에 성공해 이벤트를 받았는지. nil 이면 "아직 데이터 없음"
     var hasTrackingData: Bool { lastEventTime != nil }
 
-    // 더미/프리뷰 생성 코드 호환을 위해 updatedAt / lastEventTime 은 기본값 nil
+    // 더미/프리뷰 생성 코드 호환을 위해 updatedAt / lastEventTime / events 은 기본값 nil
     init(
         id: Int,
         carrierId: String,
@@ -118,7 +122,8 @@ struct TrackingListItem: Decodable, Identifiable {
         deliveredAt: String?,
         memo: String? = nil,
         updatedAt: String? = nil,
-        lastEventTime: String? = nil
+        lastEventTime: String? = nil,
+        events: [TrackingEvent]? = nil
     ) {
         self.id = id
         self.carrierId = carrierId
@@ -133,6 +138,7 @@ struct TrackingListItem: Decodable, Identifiable {
         self.updatedAt = updatedAt
         self.lastEventTime = lastEventTime
         self.deliveredAt = deliveredAt
+        self.events = events
     }
 }
 

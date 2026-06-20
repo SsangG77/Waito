@@ -16,10 +16,7 @@ extension Color {
 }
 
 // MARK: - Pixel Font
-
-func pixelFont(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
-    .system(size: size, design: .monospaced).weight(weight)
-}
+// pixelFont(_:weight:) 는 PixelFont.swift 로 이동(앱·위젯 공유). 여기 정의하지 않는다.
 
 // MARK: - NotchedRectangle
 // 모서리가 90도 안쪽으로 꺾이는 배경 클립용 shape
