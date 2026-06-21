@@ -344,6 +344,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ### 디버그
 - DEBUG 빌드에선 오류 팝업 억제(`DeliveryListView`에서 `showError` 게이팅) — 로컬 서버 미가동 시 네트워크 오류 팝업 방지.
+- **테스트 운송장 `test970719`**(서버 `trackerApi.ts`/`pollingService.ts`): tracker.delivery 실제 조회 없이 더미 배송 데이터 응답. **`created_at` 기준 2시간마다 1단계 전진**(접수→집화→간선상차→간선하차→배송출발→배송중→배송완료), **배송완료 후 2시간 뒤 접수로 순환**(전체 14h 주기). 일반 폴링과 달리 전진 제약(`resolveNewStatus`)·`delivered_at` 설정 없이 `pollTestTracking` 으로 처리하고, 30분 cron 폴링에 상태 무관 항상 포함. webhook 등록도 skip. 빠른 확인은 `TEST_STEP_INTERVAL_MS` 를 임시 단축.
 
 ---
 

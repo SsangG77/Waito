@@ -1,7 +1,7 @@
 import cron from 'node-cron';
 import { getDb } from '../db/database.js';
-import { trackPackage, registerWebhook } from './trackerApi.js';
-import { resolveNewStatus } from './statusMapper.js';
+import { trackPackage, registerWebhook, TEST_TRACKING_NUMBER, TEST_STEPS, TEST_STEP_INTERVAL_MS, testStepIndex } from './trackerApi.js';
+import { resolveNewStatus, mapTrackerStatus } from './statusMapper.js';
 import { pushTrackingUpdate } from './pushService.js';
 import { isCredentialExpired } from './credentialMonitor.js';
 import { DeliveryStatus, STATUS_T_VALUES, CARRIERS } from '../types/delivery.js';
@@ -13,15 +13,22 @@ import { config } from '../config.js';
 async function pollTracking(trackingId: number): Promise<void> {
   const db = getDb();
   const tracking = db.prepare(
-    'SELECT id, carrier_id, tracking_number, current_status FROM trackings WHERE id = ?'
+    'SELECT id, carrier_id, tracking_number, current_status, created_at FROM trackings WHERE id = ?'
   ).get(trackingId) as {
     id: number;
     carrier_id: string;
     tracking_number: string;
     current_status: DeliveryStatus;
+    created_at: string;
   } | undefined;
 
   if (!tracking) return;
+
+  // 테스트 운송장은 시간 기반 순환(전진 제약/delivered_at 없이)으로 별도 처리
+  if (tracking.tracking_number === TEST_TRACKING_NUMBER) {
+    await pollTestTracking(tracking);
+    return;
+  }
 
   const carrier = CARRIERS.find(c => c.id === tracking.carrier_id);
   if (!carrier) return;
@@ -91,6 +98,58 @@ async function pollTracking(trackingId: number): Promise<void> {
 }
 
 /**
+ * 테스트 운송장(test970719) 전용 폴링 — created_at 기준 2시간마다 단계 전진, 배송완료 후 접수로 순환.
+ * 일반 폴링과 달리 전진 제약(resolveNewStatus)·delivered_at 설정을 하지 않아 뒤로(접수) 돌아갈 수 있다.
+ */
+async function pollTestTracking(tracking: {
+  id: number;
+  tracking_number: string;
+  current_status: DeliveryStatus;
+  created_at: string;
+}): Promise<void> {
+  const db = getDb();
+  // SQLite datetime('now') 은 'YYYY-MM-DD HH:MM:SS'(UTC) → ISO 로 변환해 파싱
+  const createdAtMs = new Date(tracking.created_at.replace(' ', 'T') + 'Z').getTime();
+  const step = testStepIndex(createdAtMs);
+
+  // 현재 사이클의 이벤트 보장(0..step). event_time 이 단계별 고정값이라 INSERT OR IGNORE 로 누적되지 않음.
+  for (let i = 0; i <= step; i++) {
+    const s = TEST_STEPS[i];
+    const mapped = mapTrackerStatus(s.code, s.description) ?? DeliveryStatus.Registered;
+    db.prepare(`
+      INSERT OR IGNORE INTO tracking_events (tracking_id, tracker_status, mapped_status, description, event_time, location)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(
+      tracking.id,
+      s.code,
+      mapped,
+      s.description,
+      new Date(createdAtMs + i * TEST_STEP_INTERVAL_MS).toISOString(),
+      s.location,
+    );
+  }
+
+  const cur = TEST_STEPS[step];
+  const newStatus = mapTrackerStatus(cur.code, cur.description) ?? DeliveryStatus.Registered;
+
+  if (newStatus !== tracking.current_status) {
+    db.prepare(`
+      UPDATE trackings
+      SET current_status = ?, current_t_value = ?, last_event_time = ?, updated_at = datetime('now')
+      WHERE id = ?
+    `).run(
+      newStatus,
+      STATUS_T_VALUES[newStatus],
+      new Date(createdAtMs + step * TEST_STEP_INTERVAL_MS).toISOString(),
+      tracking.id,
+    );
+    await pushTrackingUpdate(tracking.id, newStatus);
+  }
+
+  db.prepare("UPDATE trackings SET last_polled_at = datetime('now') WHERE id = ?").run(tracking.id);
+}
+
+/**
  * 배송 전 택배: 2시간마다, 배송출발 이후: 30분마다 폴링
  */
 export function startPollingScheduler(): void {
@@ -115,9 +174,9 @@ export function startPollingScheduler(): void {
     const db = getDb();
     const trackings = db.prepare(`
       SELECT id FROM trackings
-      WHERE current_status IN ('outForDelivery', 'delivering')
-        AND delivered_at IS NULL
-    `).all() as Array<{ id: number }>;
+      WHERE (current_status IN ('outForDelivery', 'delivering') AND delivered_at IS NULL)
+         OR tracking_number = ?
+    `).all(TEST_TRACKING_NUMBER) as Array<{ id: number }>;
 
     for (const t of trackings) {
       await pollTracking(t.id);
