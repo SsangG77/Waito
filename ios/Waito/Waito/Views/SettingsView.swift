@@ -8,6 +8,12 @@ struct SettingsView: View {
     @AppStorage(TrackingService.alwaysShowKey) private var alwaysShowDI = false
     @State private var showPaywall = false
 
+    // 버전 박스 5탭 → 비밀번호 팝업(디버그 언락). 이미 켜져 있으면 5탭으로 끄기.
+    @AppStorage("debug_unlocked") private var debugUnlocked = false
+    @State private var versionTapCount = 0
+    @State private var showDebugPrompt = false
+    @State private var debugPassword = ""
+
     #if DEBUG
     @AppStorage("debug_show_dummy_data") private var showDummyData = false
     #endif
@@ -26,7 +32,9 @@ struct SettingsView: View {
 
                     alwaysShowRow
 
-                    settingsRow(icon: "info.circle", title: "버전", subtitle: "1.0.0")
+                    settingsRow(icon: "info.circle", title: "버전", subtitle: "1.0.0", showChevron: false)
+                        .contentShape(Rectangle())
+                        .onTapGesture { handleVersionTap() }
 
                     #if DEBUG
                     dummyDataToggleRow
@@ -42,6 +50,9 @@ struct SettingsView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showPaywall) {
             PaywallView()
+        }
+        .overlay {
+            if showDebugPrompt { debugPromptOverlay }
         }
     }
 
@@ -105,7 +116,7 @@ struct SettingsView: View {
 
     // MARK: - 일반 행
 
-    private func settingsRow(icon: String, title: String, subtitle: String) -> some View {
+    private func settingsRow(icon: String, title: String, subtitle: String, showChevron: Bool = true) -> some View {
         HStack(spacing: 12) {
             Image(systemName: icon)
                 .font(.system(size: 14))
@@ -123,13 +134,82 @@ struct SettingsView: View {
 
             Spacer()
 
-            Text(">")
-                .font(pixelFont(10))
-                .foregroundStyle(Color.pixelMuted)
+            if showChevron {
+                Text(">")
+                    .font(pixelFont(10))
+                    .foregroundStyle(Color.pixelMuted)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 14)
         .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+    }
+
+    // MARK: - 디버그 언락 (버전 5탭 → 비밀번호 970719)
+
+    private func handleVersionTap() {
+        versionTapCount += 1
+        if versionTapCount >= 5 {
+            versionTapCount = 0
+            if debugUnlocked {
+                disableDebugUnlock()       // 이미 켜져 있으면 5탭으로 끄기(비번 불필요)
+            } else {
+                debugPassword = ""
+                showDebugPrompt = true     // 꺼져 있으면 비밀번호 팝업
+            }
+        }
+    }
+
+    private func submitDebugPassword() {
+        if debugPassword == "970719" {
+            enableDebugUnlock()
+        }
+        debugPassword = ""
+        showDebugPrompt = false
+    }
+
+    /// 디버그 언락 ON — 더미 택배 + 유료 전체 해제(항상 노출 토글 잠금 해제 포함, 릴리즈에서도)
+    private func enableDebugUnlock() {
+        debugUnlocked = true
+        UserDefaults.standard.set(true, forKey: "debug_show_dummy_data")
+        subscription.setSubscribed(true)
+        Task { await service.reconcileAmbientActivity() }
+    }
+
+    /// 디버그 언락 OFF — 더미/유료/항상노출 원복 (버전 5탭 재실행)
+    private func disableDebugUnlock() {
+        debugUnlocked = false
+        UserDefaults.standard.set(false, forKey: "debug_show_dummy_data")
+        subscription.setSubscribed(false)
+        Task { await service.reconcileAmbientActivity() }
+    }
+
+    private var debugPromptOverlay: some View {
+        ZStack {
+            Color.black.opacity(0.6)
+                .ignoresSafeArea()
+                .onTapGesture {
+                    showDebugPrompt = false
+                    debugPassword = ""
+                }
+
+            VStack(spacing: 16) {
+                Text("DEBUG MODE")
+                    .font(pixelFont(13))
+                    .foregroundStyle(Color.pixelOrange)
+                PixelTextField(label: "PASSWORD", text: $debugPassword)
+                HStack(spacing: 10) {
+                    PixelButton(title: "CANCEL") {
+                        showDebugPrompt = false
+                        debugPassword = ""
+                    }
+                    PixelButton(title: "OK") { submitDebugPassword() }
+                }
+            }
+            .padding(20)
+            .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+            .padding(.horizontal, 40)
+        }
     }
 
     // MARK: - 디버그 테스트 데이터 토글
