@@ -57,4 +57,10 @@ final class SubscriptionManager {
         isSubscribed.toggle()
         UserDefaults.standard.set(isSubscribed, forKey: Self.storageKey)
     }
+
+    /// 디버그 언락(설정 비밀번호) 등에서 구독 상태를 명시적으로 설정한다.
+    func setSubscribed(_ value: Bool) {
+        isSubscribed = value
+        UserDefaults.standard.set(value, forKey: Self.storageKey)
+    }
 }

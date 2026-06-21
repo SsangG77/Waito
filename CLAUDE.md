@@ -345,6 +345,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### 디버그
 - DEBUG 빌드에선 오류 팝업 억제(`DeliveryListView`에서 `showError` 게이팅) — 로컬 서버 미가동 시 네트워크 오류 팝업 방지.
 - **테스트 운송장 `test970719`**(서버 `trackerApi.ts`/`pollingService.ts`): tracker.delivery 실제 조회 없이 더미 배송 데이터 응답. **`created_at` 기준 2시간마다 1단계 전진**(접수→집화→간선상차→간선하차→배송출발→배송중→배송완료), **배송완료 후 2시간 뒤 접수로 순환**(전체 14h 주기). 일반 폴링과 달리 전진 제약(`resolveNewStatus`)·`delivered_at` 설정 없이 `pollTestTracking` 으로 처리하고, 30분 cron 폴링에 상태 무관 항상 포함. webhook 등록도 skip. 빠른 확인은 `TEST_STEP_INTERVAL_MS` 를 임시 단축.
+- **설정 디버그 언락(릴리즈에서도 동작)**: `SettingsView` 버전 박스 **5탭 → 비밀번호 `970719`** 입력 시 ON(`@AppStorage("debug_unlocked")`). 효과 = 더미 택배 표시(`debug_show_dummy_data=true`) + `subscription.setSubscribed(true)`(유료 트럭 부품·항상노출 토글 잠금 전체 해제). **켜진 상태에서 버전 5탭 재실행 → OFF**(원복). `#if DEBUG` 토글(TEST DATA/DEBUG SUBSCRIPTION)이 하던 일을 릴리즈에서도 가능하게 하려고 `TrackingService.dummyTrackings`/`DeliveryListView.showDummyData` 게이팅을 `#if DEBUG` 밖으로 뺌. ⚠️ **StoreKit 연동 시 디버그 언락과 실제 구독을 분리**해야 함(디버그 끄기 `setSubscribed(false)` 가 실구독을 끄면 안 됨 → 별도 플래그 OR 처리).
 
 ---
 

@@ -486,8 +486,7 @@ final class TrackingService {
 
     // MARK: - Debug
 
-    #if DEBUG
-    /// 설정의 테스트 토글이 켜졌을 때 목록에 표시할 더미 택배 데이터
+    /// (디버그 토글/설정 비밀번호 언락) 목록에 표시할 더미 택배 데이터 — 릴리즈에서도 비번으로 켤 수 있어 컴파일 포함
     static let dummyTrackings: [TrackingListItem] = [
         TrackingListItem(
             id: 1, carrierId: "cj", trackingNumber: "123456789012",
@@ -542,6 +541,7 @@ final class TrackingService {
         }
     }
 
+    #if DEBUG
     func stopDemoLiveActivity() async {
         await endLiveActivity()
     }

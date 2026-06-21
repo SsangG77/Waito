@@ -47,9 +47,8 @@ struct DeliveryListView: View {
     /// 완료 섹션 접힘 상태 (기본 접힘, 영구 저장)
     @AppStorage("completed_section_collapsed") private var completedCollapsed = true
 
-    #if DEBUG
+    // 디버그 토글(#if DEBUG UI) 또는 설정 비밀번호 언락으로 켜짐 — 릴리즈에서도 동작하도록 키를 항상 읽는다
     @AppStorage("debug_show_dummy_data") private var showDummyData = false
-    #endif
 
     // 입력 폼 상태
     @State private var newTrackingNumber = ""
@@ -123,9 +122,7 @@ struct DeliveryListView: View {
 
     /// 목록에 표시할 택배. 디버그 테스트 토글이 켜지면 더미 데이터를 보여준다.
     private var displayedTrackings: [TrackingListItem] {
-        #if DEBUG
         if showDummyData { return sortTrackings(TrackingService.dummyTrackings) }
-        #endif
         return sortTrackings(service.trackings)
     }
 
@@ -632,9 +629,7 @@ struct DeliveryListView: View {
     private func performDelete() {
         guard let tracking = pendingDeleteTracking else { return }
         pendingDeleteTracking = nil
-        #if DEBUG
         if showDummyData { return }  // 더미 표시 중에는 실제 삭제하지 않음
-        #endif
         Task { await service.deleteTracking(id: tracking.id) }
     }
 
