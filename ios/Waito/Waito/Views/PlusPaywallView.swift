@@ -325,6 +325,10 @@ private struct PaywallMarqueeRow: View {
     }
 }
 
-#Preview {
+#Preview("기본") {
     PlusPaywallView()
+}
+
+#Preview("포인트 부족 동반") {
+    PlusPaywallView(pointStatus: .init(need: 3, balance: 1))
 }
