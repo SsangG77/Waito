@@ -103,10 +103,14 @@ final class TrackingService {
 
         do {
             trackings = try await api.listTrackings(deviceToken: token)
-            // 완료된 택배는 Live Activity에서 제거
-            let completed = trackings.filter { $0.currentStatus.isCompleted }.map(\.trackingNumber)
-            if !completed.isEmpty {
-                liveTrackingNumbers.removeAll { completed.contains($0) }
+            // Live Activity 집합 정리: 현재 목록에 존재하고(=삭제된 택배 유령 제거) 미완료인 번호만 남긴다.
+            // (삭제건이 남으면 count 가 부풀려져 무료 1개 한도가 잘못 소진된다)
+            let activeNumbers = Set(
+                trackings.filter { !$0.currentStatus.isCompleted }.map(\.trackingNumber)
+            )
+            let before = liveTrackingNumbers.count
+            liveTrackingNumbers.removeAll { !activeNumbers.contains($0) }
+            if liveTrackingNumbers.count != before {
                 saveLiveTrackingNumbers()
             }
             // 토글된 배송 아이템이 있으면 배송 LA 우선, 없으면 ambient/종료 — 항상 단일 기준으로 조정.
