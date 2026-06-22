@@ -14,9 +14,16 @@ struct SettingsView: View {
     @State private var showDebugPrompt = false
     @State private var debugPassword = ""
 
-    #if DEBUG
+    // 디버그 토글 표시 조건: DEBUG 빌드이거나, 릴리즈에서 비번 언락된 경우
+    private var showDebugTools: Bool {
+        #if DEBUG
+        return true
+        #else
+        return debugUnlocked
+        #endif
+    }
+
     @AppStorage("debug_show_dummy_data") private var showDummyData = false
-    #endif
 
     var body: some View {
         VStack(spacing: 0) {
@@ -36,10 +43,10 @@ struct SettingsView: View {
                         .contentShape(Rectangle())
                         .onTapGesture { handleVersionTap() }
 
-                    #if DEBUG
-                    dummyDataToggleRow
-                    debugSubscriptionRow
-                    #endif
+                    if showDebugTools {
+                        dummyDataToggleRow
+                        debugSubscriptionRow
+                    }
                 }
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
@@ -168,10 +175,10 @@ struct SettingsView: View {
         showDebugPrompt = false
     }
 
-    /// 디버그 언락 ON — 더미 택배 + 유료 전체 해제(항상 노출 토글 잠금 해제 포함, 릴리즈에서도)
+    /// 디버그 언락 ON — TEST DATA/DEBUG SUBSCRIPTION 토글 노출 + 유료 전체 해제(항상 노출 토글 잠금 해제 포함, 릴리즈에서도).
+    /// 더미 택배 표시는 강제로 켜지 않고 사용자가 노출된 TEST DATA 토글로 직접 켠다.
     private func enableDebugUnlock() {
         debugUnlocked = true
-        UserDefaults.standard.set(true, forKey: "debug_show_dummy_data")
         subscription.setSubscribed(true)
         Task { await service.reconcileAmbientActivity() }
     }
@@ -212,9 +219,8 @@ struct SettingsView: View {
         }
     }
 
-    // MARK: - 디버그 테스트 데이터 토글
+    // MARK: - 디버그 테스트 데이터 토글 (DEBUG 빌드 또는 비번 언락 시 표시)
 
-    #if DEBUG
     private var dummyDataToggleRow: some View {
         Button {
             showDummyData.toggle()
@@ -290,7 +296,6 @@ struct SettingsView: View {
         }
         .buttonStyle(.plain)
     }
-    #endif
 }
 
 #Preview {
