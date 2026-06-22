@@ -344,7 +344,9 @@ final class TrackingService {
 
     private func buildContentState() -> DeliveryAttributes.ContentState {
         let items: [TrackingItemState] = liveTrackingNumbers.compactMap { number in
-            guard let tracking = trackings.first(where: { $0.trackingNumber == number }) else { return nil }
+            // 실제 목록에서 먼저 찾고, 없으면 더미(디버그/테스트 데이터)에서 폴백 — 더미도 LA 에 표시되게.
+            guard let tracking = trackings.first(where: { $0.trackingNumber == number })
+                ?? Self.dummyTrackings.first(where: { $0.trackingNumber == number }) else { return nil }
             return TrackingItemState(
                 trackingNumber: tracking.trackingNumber,
                 status: tracking.currentStatus,
