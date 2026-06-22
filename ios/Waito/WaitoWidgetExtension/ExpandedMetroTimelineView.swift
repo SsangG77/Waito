@@ -12,15 +12,39 @@ struct ExpandedMetroTimelineView: View {
                     .padding(.horizontal, 14)
                     .padding(.vertical, 10)
             } else {
-                idleContent   // LockScreenIdleRow 자체 패딩 사용
+                idleContent
             }
         }
-        .background(Color.black)
+        // 배경은 건드리지 않음 — DI 펼침은 시스템 기본 검정 유지
     }
 
-    /// 배송이 없을 때(항상 노출) — 잠금화면 idle 과 동일(좌측 트럭 + BOUNCE 버튼)
+    /// 배송이 없을 때(항상 노출) — 좌측 트럭 + 우측 BOUNCE 버튼만 (배경 없음)
     private var idleContent: some View {
-        LockScreenIdleRow(truckConfig: state.truckConfig, bounce: state.truckBounce ?? 0)
+        HStack(spacing: 10) {
+            CatalogTruckView(cab: state.truckConfig.cab, truckBody: state.truckConfig.body, wheels: state.truckConfig.wheelType, size: 36)
+                .offset(y: state.truckBounce ?? 0)
+                .animation(nil, value: state.truckBounce ?? 0)   // 보간 없이 스냅 → 8비트풍 바운스
+                .padding(.leading, 6)
+
+            Button(intent: BounceTruckIntent()) {
+                HStack(spacing: 8) {
+                    Text(">")
+                    Text("BOUNCE_")
+                }
+                .font(pixelFont(18))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 10)
+                .wPixelBox(border: Color.wPixelRed.opacity(0.7), bg: Color.wPixelRed, lineWidth: 2, notch: 4)
+            }
+            .buttonStyle(.plain)
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
     }
 
     /// center 영역 — 물품명(위) + 가변 타임라인(아래) 세로 배치.
