@@ -352,6 +352,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ## 배포 / 운영 (실제)
 - **서버**: Vultr 인스턴스 `158.247.223.154`(Ubuntu, 기존 brawlytics와 공존). Waito는 **포트 3001**, pm2 `waito`, `/var/www/waito/server`(repo sparse-checkout: `server/`만). `APNS_PRODUCTION=true`.
 - **앱 ↔ 서버**: RELEASE `APIClient.baseURL = http://158.247.223.154:3001` (도메인/HTTPS 미사용 → `Info.plist` ATS `NSAllowsArbitraryLoads`). DEBUG는 로컬 IP.
+  - ⚠️ **ATS 함정**: `NSAllowsArbitraryLoads` 와 `NSAllowsLocalNetworking` 을 **함께** 넣으면 iOS 10+ 에서 세분화 키(LocalNetworking)가 우선 적용되어 ArbitraryLoads 가 무시됨 → 사설 IP만 허용, **공인 IP(운영 서버) 차단**. DEBUG(사설 IP)는 통과·Release/TestFlight(공인 IP)만 네트워크 오류 나는 원인이었음. → `NSAllowsArbitraryLoads` **단독**으로 유지.
 - **자동배포**: `.github/workflows/deploy.yml` — `server/**` push 시 GitHub Actions가 SSH로 Vultr 접속 → `git pull && npm ci && build && pm2 restart`. 시크릿 `VULTR_SSH_KEY`/`VULTR_HOST`.
 - ⚠️ **브랜치 정책**: `main` 직접 푸시 금지 — push 시 자동배포가 트리거됨. 모든 작업은 **`dev` 브랜치**에 커밋·푸시하고, 검증 후 main 으로 머지(배포)한다.
 - **credential 만료 알림**: 만료 3일 전부터 매일 이메일(`emailService` = Resend HTTP API, `RESEND_API_KEY`). 메일에 운영 admin 갱신 링크(시크릿 포함) 버튼.

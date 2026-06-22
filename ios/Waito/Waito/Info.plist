@@ -2,23 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsArbitraryLoads</key>
+		<true/>
+	</dict>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Galmuri9.ttf</string>
 	</array>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
-	<key>NSSupportsLiveActivitiesFrequentUpdates</key>
-	<true/>
-	<key>NSAppTransportSecurity</key>
-	<dict>
-		<!-- 운영 서버가 공인 IP+HTTP(도메인/HTTPS 미사용)라 ATS 전체 허용.
-		     공인 IP 평문 HTTP는 NSAllowsLocalNetworking으로 불가 → NSAllowsArbitraryLoads 필요.
-		     ⚠️ App Store 심사 시 ATS 임의 허용 사유 소명 요구될 수 있음(추후 HTTPS 도메인 전환 권장). -->
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
-		<key>NSAllowsLocalNetworking</key>
-		<true/>
-	</dict>
 </dict>
 </plist>
