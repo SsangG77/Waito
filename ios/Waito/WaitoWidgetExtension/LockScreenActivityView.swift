@@ -8,19 +8,19 @@ struct LockScreenLiveActivityView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if let primary = state.primary {
-                LockScreenTrackingRow(item: primary, truckConfig: state.truckConfig)
-
-                if let secondary = state.secondary {
-                    Divider()
-                        .background(Color.white.opacity(0.15))
-                        .padding(.horizontal, 16)
-
-                    LockScreenTrackingRow(item: secondary, truckConfig: state.truckConfig)
-                }
-            } else {
+            if state.items.isEmpty {
                 // 배송 없음(항상 노출) — 잠금화면 카드는 최소 대기 상태로 표시
                 LockScreenIdleRow(truckConfig: state.truckConfig, bounce: state.truckBounce ?? 0)
+            } else {
+                // 토글된 모든 택배를 표시(유료 무제한). 행 사이 구분선.
+                ForEach(Array(state.items.enumerated()), id: \.element.trackingNumber) { index, item in
+                    if index > 0 {
+                        Divider()
+                            .background(Color.white.opacity(0.15))
+                            .padding(.horizontal, 16)
+                    }
+                    LockScreenTrackingRow(item: item, truckConfig: state.truckConfig)
+                }
             }
         }
         .frame(maxWidth: .infinity)

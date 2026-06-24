@@ -291,6 +291,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **`SubscriptionManager`**: `isSubscribed = isStoreSubscribed(entitlement) || isDebugUnlocked`. 앱시작 `start()` 로 상품로드+권한확인+트랜잭션 관찰. `purchaseMonthly()`/`restore()`/`refreshEntitlement()`. 디버그 언락은 `debug_unlocked` 키로 **실구독과 완전 분리**(디버그 끄기가 실구독 안 끔). 결합값을 `waito_is_subscribed` 키에 미러(TrackingService/위젯 재확인용).
 - **페이월 구매 동선**: `PlusPaywallView` "구독 시작하기" → `purchaseMonthly()`(Apple 결제 시트 즉시) + 복원 버튼. `PaywallView`(StoreKit `SubscriptionStoreView`)는 `PlusMarketingHero` 공유 + `containerBackground`로 다크. 두 페이월 모두 `@Environment(SubscriptionManager.self)` → 시트/커버에 **명시 재주입 필수**(자동 전파 보장 안 됨).
 - ⚠️ ASC 상품 미등록/유료앱계약 미체결이면 `monthlyProduct=nil` → 구매 버튼 무동작.
+- **페이월 UX 보강**: 구매 결과 `PurchaseOutcome`(success/cancelled/failed/unavailable) — 진짜 실패만 오류 알림(취소는 조용히). 이미 구독 중이면 CTA 대신 "이미 이용 중" 표시. 상품 로딩 전이면 CTA 비활성("상품 불러오는 중…").
+- **오퍼 코드(특가 코드, 예 `monthly_free` 첫해 무료)**: 페이월 하단 "프로모션 코드" → `.offerCodeRedemption`(Apple 공식 입력 시트, 인앱 직접 입력칸은 불가). 성공 시 `refreshEntitlement`. `import StoreKit` 필요. ⚠️ ASC "구독 프로모션"이 진행 중이어야 코드 적용됨. TestFlight/실기기에서만 테스트.
 
 - **포인트 경제**: 배송완료 1건 = 1P, 부품 1개 해제 = 3P(차감형). 탱크·기차·물탱크·건설·컨테이너는 **Plus 전용**(포인트 불가, 트럭 계열만 포인트 해제)
 - 장기 리텐션: "택배 없을 때도 켜두고 싶은 기능"(데코/시즌 스킨) + 포인트 보상
@@ -330,7 +332,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ### Live Activity 푸시 (서버 + iOS)
 - APNs 실제 전송 + push-to-start 이벤트 기반 (위 "데이터 흐름" 참조)
-- 무료 1개 / 유료 2개 추적 제한(`SubscriptionManager.liveActivityLimit`)
+- 무료 1개 / 유료 **3개** 추적 제한(`SubscriptionManager.liveActivityLimit`). 잠금화면은 토글된 전부를 `ForEach`로 표시(primary+secondary 2개 고정 아님). 한도 도달 시 무료는 Plus 페이월, 유료는 "표시 제한" 안내 팝업(`showLiveActivityLimitAlert`). ⚠️ ActivityKit ContentState 4KB·잠금화면 높이 제약상 무제한 불가 → 3개 상한.
 - **트럭 표시(위젯)**: 접힌 DI(compact leading)·잠금화면 배송 행은 **`CatalogTruckView` 트럭만** 정적 표시. **잠금화면 idle 과 펼친 DI idle(배송 없음 + 항상노출)은 동일한 `LockScreenIdleRow`(좌측 트럭 + `> BOUNCE_` 버튼) 공유** — `ExpandedMetroTimelineView.idleContent` 가 그대로 재사용.
   - ⚠️ **iOS 제약**: Live Activity(잠금화면/DI)는 시스템이 SwiftUI 애니메이션 모디파이어를 무시 → `repeatForever` 등 연속 애니메이션이 **실기기/시뮬에서 안 돎**(공식 문서 "Animating data updates in widgets and Live Activities"). 위젯에선 **오직 content state(ContentState) 변경 시에만** 화면이 갱신됨. → 위젯에선 자율 애니메이션 효과를 쓰지 않음.
     - **실기기 검증 결과(2026-06)**: idle 트럭을 "스스로 움직이게" 하려는 3가지 시도 모두 정지 확인 — ①`ProgressView(timerInterval:)`+커스텀 `ProgressViewStyle`(시스템이 `fractionCompleted` 를 커스텀 스타일에 안 흘려줌), ②`PhaseAnimator`(위젯에서 순환 안 함), ③`repeatForever`+`onAppear`(트리거 미발동). **자동 동력이 필요하면 서버 push 뿐이나 APNs Live Activity update 는 15초 throttle → walk-cycle 불가.** 결론: idle 트럭은 정적 + `> BOUNCE` 버튼(탭=state 변경)으로만 움직임.

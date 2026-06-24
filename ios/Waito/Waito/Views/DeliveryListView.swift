@@ -25,6 +25,7 @@ struct DeliveryListView: View {
     @State private var showAddForm = false
     @State private var showError = false
     @State private var showSubscriptionAlert = false
+    @State private var showLiveActivityLimitAlert = false   // 유료 상한(3개) 도달 안내
     @State private var showPaywall = false
     @State private var showNotFoundConfirm = false
     @State private var notFoundMessage = ""
@@ -79,11 +80,16 @@ struct DeliveryListView: View {
             ) { service.clearError() }
             .pixelAlert(
                 title: "Waito Plus",
-                message: "무료 사용자는 Live Activity를 1개까지 등록할 수 있어요.\nWaito Plus 구독 시 2개까지 가능합니다.",
+                message: "무료 사용자는 Live Activity를 1개까지 등록할 수 있어요.\nWaito Plus 구독 시 3개까지 가능합니다.",
                 isPresented: $showSubscriptionAlert
             ) {
                 showPaywall = true
             }
+            .pixelAlert(
+                title: "표시 제한",
+                message: "Live Activity는 최대 3개까지 켤 수 있어요.\n다른 택배의 표시를 끄고 다시 시도해주세요.",
+                isPresented: $showLiveActivityLimitAlert
+            ) {}
             .fullScreenCover(isPresented: $showPaywall) {
                 PlusPaywallView()   // 구매는 PlusPaywallView 내부에서 처리(별도 후처리 없음)
                     .environment(subscription)   // 시트는 환경 자동 전파가 보장 안 돼 명시 재주입
@@ -637,7 +643,11 @@ struct DeliveryListView: View {
             } else {
                 let limit = subscription.liveActivityLimit
                 if service.liveTrackingNumbers.count >= limit {
-                    showSubscriptionAlert = true
+                    if subscription.isSubscribed {
+                        showLiveActivityLimitAlert = true   // 유료 상한(3개) 도달 → 제한 안내
+                    } else {
+                        showSubscriptionAlert = true        // 무료 → Plus 업셀 페이월
+                    }
                 } else {
                     await service.addToLiveActivity(trackingNumber: tracking.trackingNumber)
                 }

@@ -30,6 +30,11 @@ final class SubscriptionManager {
     /// 월간 상품 / 현지화 가격(₩3,000) — App Store Connect 에서 받아옴.
     var monthlyProduct: Product? { products.first(where: { $0.id == Self.monthlyProductID }) }
     var monthlyPriceText: String? { monthlyProduct?.displayPrice }
+    /// 상품을 불러왔는지(구매 가능) — nil 이면 ASC 미등록/로딩중 → CTA 비활성.
+    var isProductAvailable: Bool { monthlyProduct != nil }
+
+    /// 구매 동선 UI 분기용 결과.
+    enum PurchaseOutcome { case success, cancelled, failed, unavailable }
 
     init() {
         isDebugUnlocked = UserDefaults.standard.bool(forKey: Self.debugUnlockKey)
@@ -58,12 +63,20 @@ final class SubscriptionManager {
         syncStoredFlag()
     }
 
-    /// 월간 구독 구매 — 성공(검증 완료) 시 true. 실제 결제(Apple 시스템 시트)는 이 안에서 발생.
-    func purchaseMonthly() async -> Bool {
-        guard let product = monthlyProduct else { return false }
-        let ok = (try? await store.purchase(product)) ?? false
-        if ok { await refreshEntitlement() }
-        return ok
+    /// 월간 구독 구매. 실제 결제(Apple 시스템 시트)는 이 안에서 발생. 결과를 UI 분기용으로 반환.
+    func purchaseMonthly() async -> PurchaseOutcome {
+        guard let product = monthlyProduct else { return .unavailable }
+        do {
+            switch try await store.purchase(product) {
+            case .success:
+                await refreshEntitlement()
+                return .success
+            case .cancelled, .pending:
+                return .cancelled   // 취소/보류 — 사용자에게 오류 알림을 띄우지 않는다
+            }
+        } catch {
+            return .failed          // 검증/네트워크 실패 → 오류 안내 필요
+        }
     }
 
     /// 구매 복원.
@@ -101,6 +114,7 @@ final class SubscriptionManager {
 
     // MARK: - Live Activity 제한 / 항상 노출
 
-    var liveActivityLimit: Int { isSubscribed ? 2 : 1 }
+    /// 무료 1개 / 유료 3개. (ActivityKit 4KB·잠금화면 높이 제약상 무제한은 위험 → 3개 상한)
+    var liveActivityLimit: Int { isSubscribed ? 3 : 1 }
     var canUseAlwaysShow: Bool { isSubscribed }
 }

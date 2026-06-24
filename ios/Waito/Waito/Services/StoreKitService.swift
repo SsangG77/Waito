@@ -6,6 +6,9 @@ import StoreKit
 struct StoreKitService {
     enum StoreKitError: Error { case failedVerification }
 
+    /// 구매 시도 결과(취소·보류와 성공을 구분). 검증·네트워크 오류는 throw.
+    enum PurchaseResult { case success, cancelled, pending }
+
     /// 구독 상품 ID 목록(현재 월간 1종). App Store Connect 에 동일 ID 로 등록돼야 한다.
     let productIDs: [String]
 
@@ -14,18 +17,20 @@ struct StoreKitService {
         try await Product.products(for: productIDs)
     }
 
-    /// 구매 시도. 성공·검증 완료 시 true, 사용자 취소/보류 시 false.
-    func purchase(_ product: Product) async throws -> Bool {
+    /// 구매 시도. 성공/취소/보류 구분. 검증·네트워크 오류는 throw.
+    func purchase(_ product: Product) async throws -> PurchaseResult {
         let result = try await product.purchase()
         switch result {
         case .success(let verification):
             let transaction = try checkVerified(verification)
             await transaction.finish()   // 거래 완료 처리(미완료 시 반복 전달됨)
-            return true
-        case .userCancelled, .pending:
-            return false
+            return .success
+        case .userCancelled:
+            return .cancelled
+        case .pending:
+            return .pending              // 가족 승인 대기 등 — 화면은 그대로 두고 알림 없이 종료
         @unknown default:
-            return false
+            return .cancelled
         }
     }
 

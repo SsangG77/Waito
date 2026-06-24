@@ -1,4 +1,5 @@
 import SwiftUI
+import StoreKit   // .offerCodeRedemption 모디파이어
 
 /// Waito Plus 업셀 모달 — 잠긴 트럭/옵션을 탭했을 때 뜨는 풀스크린 페이월.
 /// 상단 트럭 그리드 + 혜택 3종 + 가격 + 구독 CTA.
@@ -15,6 +16,8 @@ struct PlusPaywallView: View {
     struct PointStatus { let need: Int; let balance: Int }
 
     @State private var isPurchasing = false
+    @State private var showPurchaseError = false
+    @State private var showOfferCodeRedeem = false   // Apple 오퍼 코드(특가 코드) 입력 시트
 
     // 디자인 골드 팔레트
     private let gold = Color(hex: "#E8C24A")        // 가격·코인
@@ -30,19 +33,60 @@ struct PlusPaywallView: View {
 
                 Spacer(minLength: 16)
 
-                if let ps = pointStatus {
-                    pointStatusBlock(ps)
-                        .padding(.bottom, 12)
+                if subscription.isSubscribed {
+                    subscribedBlock   // 이미 구독 중 — 구매 CTA 대신 이용 중 표시
+                } else {
+                    if let ps = pointStatus {
+                        pointStatusBlock(ps)
+                            .padding(.bottom, 12)
+                    }
+                    priceBlock
+                    ctaButton
+                        .padding(.horizontal, 20)
+                        .padding(.top, 18)
+                    footer
                 }
-                priceBlock
-                ctaButton
-                    .padding(.horizontal, 20)
-                    .padding(.top, 18)
-                footer
             }
 
             closeButton
         }
+        .alert("구매를 완료하지 못했어요", isPresented: $showPurchaseError) {
+            Button("확인", role: .cancel) {}
+        } message: {
+            Text("잠시 후 다시 시도하거나, 이미 구독 중이라면 ‘구매 복원’을 눌러주세요.")
+        }
+        // 오퍼 코드(특가 코드) 입력 — Apple 시트. 성공 시 Transaction.updates 가 권한을 자동 반영하지만,
+        // 즉시 화면 갱신을 위해 닫힌 직후 한 번 더 확인하고 구독되면 닫는다.
+        .offerCodeRedemption(isPresented: $showOfferCodeRedeem) { result in
+            Task {
+                if case .success = result {
+                    await subscription.refreshEntitlement()
+                    if subscription.isSubscribed { dismiss() }
+                }
+            }
+        }
+    }
+
+    /// 이미 Waito Plus 이용 중일 때 표시(구매 CTA 대체)
+    private var subscribedBlock: some View {
+        VStack(spacing: 10) {
+            Text("이미 Waito Plus 이용 중이에요")
+                .font(pixelFont(13))
+                .foregroundStyle(gold)
+            Button { dismiss() } label: {
+                Text("확인")
+                    .font(pixelFont(14))
+                    .foregroundStyle(buttonText)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 18)
+                    .background(buttonGold)
+                    .clipShape(RoundedRectangle(cornerRadius: 14))
+            }
+            .buttonStyle(.plain)
+            .padding(.horizontal, 20)
+            .padding(.top, 8)
+        }
+        .padding(.bottom, 16)
     }
 
     // MARK: - 가격 / CTA / 푸터
@@ -83,14 +127,16 @@ struct PlusPaywallView: View {
     }
 
     private var ctaButton: some View {
-        Button {
+        // 상품 로딩 전(ASC 미등록/네트워크)에는 구매 불가 → 비활성 + 안내
+        let ready = subscription.isProductAvailable
+        return Button {
             startPurchase()
         } label: {
             Group {
                 if isPurchasing {
                     ProgressView().tint(buttonText)
                 } else {
-                    Text("구독 시작하기")
+                    Text(ready ? "구독 시작하기" : "상품 불러오는 중…")
                         .font(pixelFont(14))
                         .foregroundStyle(buttonText)
                 }
@@ -99,21 +145,27 @@ struct PlusPaywallView: View {
             .padding(.vertical, 18)
             .background(buttonGold)
             .clipShape(RoundedRectangle(cornerRadius: 14))
+            .opacity(ready ? 1 : 0.5)
         }
         .buttonStyle(.plain)
-        .disabled(isPurchasing)
+        .disabled(isPurchasing || !ready)
     }
 
-    /// 구독 시작하기 — Apple 시스템 결제 시트가 이 안에서 뜬다. 성공 시 onPurchased + 닫기.
+    /// 구독 시작하기 — Apple 시스템 결제 시트가 이 안에서 뜬다. 결과에 따라 분기.
     private func startPurchase() {
         guard !isPurchasing else { return }
         isPurchasing = true
         Task {
-            let ok = await subscription.purchaseMonthly()
+            let outcome = await subscription.purchaseMonthly()
             isPurchasing = false
-            if ok {
+            switch outcome {
+            case .success:
                 onPurchased()
                 dismiss()
+            case .failed, .unavailable:
+                showPurchaseError = true       // 진짜 실패만 알림
+            case .cancelled:
+                break                          // 사용자 취소 — 조용히 페이월 유지
             }
         }
     }
@@ -125,18 +177,33 @@ struct PlusPaywallView: View {
                 .font(pixelFont(9))
                 .foregroundStyle(Color.pixelMuted)
 
-            Button {
-                Task {
-                    await subscription.restore()
-                    if subscription.isSubscribed { dismiss() }
+            HStack(spacing: 10) {
+                Button {
+                    Task {
+                        await subscription.restore()
+                        if subscription.isSubscribed { dismiss() }
+                    }
+                } label: {
+                    Text("구매 복원")
+                        .font(pixelFont(9))
+                        .foregroundStyle(Color.pixelMuted)
+                        .underline()
                 }
-            } label: {
-                Text("구매 복원")
+                .buttonStyle(.plain)
+
+                Text("·")
                     .font(pixelFont(9))
                     .foregroundStyle(Color.pixelMuted)
-                    .underline()
+
+                // 오퍼 코드(특가 코드) — Apple 공식 입력 시트를 띄운다(인앱 직접 입력은 불가).
+                Button { showOfferCodeRedeem = true } label: {
+                    Text("프로모션 코드")
+                        .font(pixelFont(9))
+                        .foregroundStyle(Color.pixelMuted)
+                        .underline()
+                }
+                .buttonStyle(.plain)
             }
-            .buttonStyle(.plain)
         }
         .padding(.top, 14)
         .padding(.bottom, 10)
