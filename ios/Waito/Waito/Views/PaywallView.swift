@@ -9,6 +9,7 @@ private let waitoPlusProductIDs: [String] = [
 
 struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(SubscriptionManager.self) private var subscription
 
     var body: some View {
         SubscriptionStoreView(productIDs: waitoPlusProductIDs) {
@@ -17,52 +18,28 @@ struct PaywallView: View {
         .storeButton(.visible, for: .restorePurchases)
         .storeButton(.visible, for: .cancellation)
         .subscriptionStoreButtonLabel(.action)
+        // PlusPaywallView 와 동일한 어두운 배경 — 전체 높이에 bg 적용
+        .containerBackground(Color.bg, for: .subscriptionStore)
+        .preferredColorScheme(.dark)   // StoreKit 기본 컨트롤/텍스트가 어두운 배경에 맞게
         .onInAppPurchaseCompletion { _, result in
             if case .success(.success) = result {
-                // TODO: Transaction.currentEntitlements 구독 후 SubscriptionManager 동기화
-                dismiss()
+                Task {
+                    await subscription.refreshEntitlement()   // 구매 반영 → isSubscribed 갱신
+                    dismiss()
+                }
             }
         }
     }
 
+    // StoreKit SubscriptionStoreView 의 마케팅 영역 — PlusPaywallView 와 동일한 히어로(트럭 그리드+혜택).
+    // 실제 가격·구매 버튼은 이 아래에 StoreKit 이 자동으로 그린다.
     private var marketingContent: some View {
-        VStack(spacing: 16) {
-            Text("🚚")
-                .font(.system(size: 56))
-                .padding(.top, 24)
-
-            Text("WAITO PLUS")
-                .font(pixelFont(20))
-                .foregroundStyle(Color.pixelText)
-
-            Text("더 많은 택배, 더 귀여운 트럭")
-                .font(pixelFont(11))
-                .foregroundStyle(Color.pixelMuted)
-
-            VStack(alignment: .leading, spacing: 10) {
-                benefitRow(icon: "📦", text: "Live Activity 2개 동시 추적")
-                benefitRow(icon: "🎨", text: "모든 트럭 스킨 잠금 해제")
-                benefitRow(icon: "✨", text: "시즌 한정 트럭")
-            }
-            .padding(.horizontal, 24)
-            .padding(.top, 8)
-        }
-        .padding(.bottom, 16)
-        .frame(maxWidth: .infinity)
-    }
-
-    private func benefitRow(icon: String, text: String) -> some View {
-        HStack(spacing: 12) {
-            Text(icon)
-                .font(.system(size: 18))
-            Text(text)
-                .font(pixelFont(11))
-                .foregroundStyle(Color.pixelText)
-            Spacer(minLength: 0)
-        }
+        PlusMarketingHero()
+            .padding(.bottom, 8)
     }
 }
 
 #Preview {
     PaywallView()
+        .environment(SubscriptionManager())
 }

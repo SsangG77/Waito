@@ -57,6 +57,7 @@ struct SettingsView: View {
         .toolbar(.hidden, for: .navigationBar)
         .sheet(isPresented: $showPaywall) {
             PaywallView()
+                .environment(subscription)   // 시트 환경 명시 재주입
         }
         .overlay {
             if showDebugPrompt { debugPromptOverlay }
@@ -179,15 +180,15 @@ struct SettingsView: View {
     /// 더미 택배 표시는 강제로 켜지 않고 사용자가 노출된 TEST DATA 토글로 직접 켠다.
     private func enableDebugUnlock() {
         debugUnlocked = true
-        subscription.setSubscribed(true)
+        subscription.setDebugUnlocked(true)   // 실구독과 분리된 디버그 언락
         Task { await service.reconcileAmbientActivity() }
     }
 
-    /// 디버그 언락 OFF — 더미/유료/항상노출 원복 (버전 5탭 재실행)
+    /// 디버그 언락 OFF — 더미/유료/항상노출 원복 (버전 5탭 재실행). 실제 구독은 건드리지 않음.
     private func disableDebugUnlock() {
         debugUnlocked = false
         UserDefaults.standard.set(false, forKey: "debug_show_dummy_data")
-        subscription.setSubscribed(false)
+        subscription.setDebugUnlocked(false)
         Task { await service.reconcileAmbientActivity() }
     }
 
@@ -260,28 +261,28 @@ struct SettingsView: View {
 
     private var debugSubscriptionRow: some View {
         Button {
-            subscription.toggleSubscription()
+            subscription.toggleDebugUnlocked()
             Task { await service.reconcileAmbientActivity() }
         } label: {
             HStack(spacing: 12) {
-                Image(systemName: subscription.isSubscribed ? "crown.fill" : "crown")
+                Image(systemName: subscription.isDebugUnlocked ? "crown.fill" : "crown")
                     .font(.system(size: 14))
-                    .foregroundStyle(subscription.isSubscribed ? Color.pixelOrange : Color.pixelMuted)
+                    .foregroundStyle(subscription.isDebugUnlocked ? Color.pixelOrange : Color.pixelMuted)
                     .frame(width: 28)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text("DEBUG SUBSCRIPTION")
                         .font(pixelFont(11))
                         .foregroundStyle(Color.pixelText)
-                    Text(subscription.isSubscribed ? "ON — 구독 상태(모든 잠금 해제)" : "OFF — 무료")
+                    Text(subscription.isDebugUnlocked ? "ON — 디버그 언락(모든 잠금 해제)" : "OFF — 무료")
                         .font(pixelFont(9))
-                        .foregroundStyle(subscription.isSubscribed ? Color.pixelOrange : Color.pixelMuted)
+                        .foregroundStyle(subscription.isDebugUnlocked ? Color.pixelOrange : Color.pixelMuted)
                 }
 
                 Spacer()
 
-                PixelToggle(isOn: subscription.isSubscribed) {
-                    subscription.toggleSubscription()
+                PixelToggle(isOn: subscription.isDebugUnlocked) {
+                    subscription.toggleDebugUnlocked()
                     Task { await service.reconcileAmbientActivity() }
                 }
             }

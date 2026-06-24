@@ -21,6 +21,7 @@ struct WaitoApp: App {
                 .environment(trackingService)
                 .environment(subscriptionManager)
                 .preferredColorScheme(.dark)
+                .task { await subscriptionManager.start() }   // 상품 로드 + 구독 권한 확인 + 트랜잭션 관찰
         }
     }
 }

@@ -84,16 +84,13 @@ struct DeliveryListView: View {
             ) {
                 showPaywall = true
             }
-            .sheet(isPresented: $showPaywall) {
-                PaywallView()
+            .fullScreenCover(isPresented: $showPaywall) {
+                PlusPaywallView()   // 구매는 PlusPaywallView 내부에서 처리(별도 후처리 없음)
+                    .environment(subscription)   // 시트는 환경 자동 전파가 보장 안 돼 명시 재주입
             }
             .fullScreenCover(isPresented: $showFirstAddPaywall) {
-                PlusPaywallView {
-                    // TODO: 실제 StoreKit 구매 연결 (.storekit 설정 후 Product.purchase)
-                    #if DEBUG
-                    if !subscription.isSubscribed { subscription.toggleSubscription() }
-                    #endif
-                }
+                PlusPaywallView()
+                    .environment(subscription)
             }
             .pixelConfirm(
                 title: "운송장 확인",

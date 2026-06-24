@@ -134,7 +134,8 @@ Live Activity Expanded View
 ├── Services/
 │   ├── TrackingService.swift           # @Observable 상태관리 + Live Activity + push 토큰 관찰
 │   ├── APIClient.swift                 # actor, 서버 REST 호출
-│   └── SubscriptionManager.swift
+│   ├── StoreKitService.swift           # StoreKit2 접근(상품 로드/purchase/restore/entitlement) — SwiftUI 비의존
+│   └── SubscriptionManager.swift       # @Observable, 실구독(entitlement)+디버그언락 결합 → isSubscribed
 └── (WaitoWidgetExtension/)             # Live Activity 위젯 UI
 
 # AddTrackingView 는 제거됨 — 추가는 DeliveryListView 의 인라인 폼에서 처리
@@ -277,12 +278,19 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ## 수익 모델 (Pixel Pals 참고)
 
-> 가격 단일 출처 = 노션 Lean Canvas. 현재 **₩1,400/월**.
+> 가격: 코드/StoreKit 기준 **₩3,000/월**(상품 `com.sangjin.Waito.plus.monthly`). 페이월은 "하루 ₩110" 마케팅 표기 + 실제 월가격 병기. (노션 Lean Canvas 와 불일치 시 ASC 등록가 기준으로 통일 필요)
 
 | 티어 | 내용 | 가격 |
 |---|---|---|
 | 무료 | 기본 트럭 + Live Activity 1개 + 배송완료 포인트로 트럭 계열 부품 해제(3P/개) | 무료 |
-| Waito Plus | 프리미엄 스킨(탱크·기차·물탱크·건설·컨테이너) 즉시 전부 + Live Activity 2개 + 데코(항상 노출) | ₩1,400/월 |
+| Waito Plus | 프리미엄 스킨(탱크·기차·물탱크·건설·컨테이너) 즉시 전부 + Live Activity 2개 + 데코(항상 노출) | ₩3,000/월 |
+
+### StoreKit 구독 (실제 결제)
+- **상품**: 월간 자동갱신 `com.sangjin.Waito.plus.monthly`(₩3,000) — 가격은 App Store Connect 에서 설정. 로컬 테스트는 `ios/Waito/Waito.storekit`(Xcode 수동 추가 + Scheme 지정).
+- **`StoreKitService`**(StoreKit2): `loadProducts`/`purchase`(검증·finish)/`restore`(AppStore.sync)/`isEntitled`(currentEntitlements)/`observeTransactionUpdates`.
+- **`SubscriptionManager`**: `isSubscribed = isStoreSubscribed(entitlement) || isDebugUnlocked`. 앱시작 `start()` 로 상품로드+권한확인+트랜잭션 관찰. `purchaseMonthly()`/`restore()`/`refreshEntitlement()`. 디버그 언락은 `debug_unlocked` 키로 **실구독과 완전 분리**(디버그 끄기가 실구독 안 끔). 결합값을 `waito_is_subscribed` 키에 미러(TrackingService/위젯 재확인용).
+- **페이월 구매 동선**: `PlusPaywallView` "구독 시작하기" → `purchaseMonthly()`(Apple 결제 시트 즉시) + 복원 버튼. `PaywallView`(StoreKit `SubscriptionStoreView`)는 `PlusMarketingHero` 공유 + `containerBackground`로 다크. 두 페이월 모두 `@Environment(SubscriptionManager.self)` → 시트/커버에 **명시 재주입 필수**(자동 전파 보장 안 됨).
+- ⚠️ ASC 상품 미등록/유료앱계약 미체결이면 `monthlyProduct=nil` → 구매 버튼 무동작.
 
 - **포인트 경제**: 배송완료 1건 = 1P, 부품 1개 해제 = 3P(차감형). 탱크·기차·물탱크·건설·컨테이너는 **Plus 전용**(포인트 불가, 트럭 계열만 포인트 해제)
 - 장기 리텐션: "택배 없을 때도 켜두고 싶은 기능"(데코/시즌 스킨) + 포인트 보상

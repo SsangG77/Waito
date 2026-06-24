@@ -2,19 +2,22 @@ import SwiftUI
 
 /// Waito Plus 업셀 모달 — 잠긴 트럭/옵션을 탭했을 때 뜨는 풀스크린 페이월.
 /// 상단 트럭 그리드 + 혜택 3종 + 가격 + 구독 CTA.
-/// 실제 구매 연결은 `onSubscribe` 로 위임한다(현재는 호출부에서 처리).
+/// 구매는 내부에서 SubscriptionManager.purchaseMonthly() 로 처리(실제 StoreKit 결제). 성공 시 onPurchased 후처리.
 struct PlusPaywallView: View {
     @Environment(\.dismiss) private var dismiss
+    @Environment(SubscriptionManager.self) private var subscription
 
-    /// "구독 시작하기" 탭 시 실행 (실제 StoreKit 구매 연결 지점)
-    var onSubscribe: () -> Void = {}
+    /// 구매 성공(또는 디버그 구독) 직후 실행 — 예: 미리보던 트럭 조합 커밋. (구매 동작 자체는 내부 처리)
+    var onPurchased: () -> Void = {}
 
     /// 포인트 부족으로 띄운 경우 보유/부족 포인트를 함께 표시. 그 외 진입점은 nil → 미표시.
     var pointStatus: PointStatus? = nil
     struct PointStatus { let need: Int; let balance: Int }
 
+    @State private var isPurchasing = false
+
     // 디자인 골드 팔레트
-    private let gold = Color(hex: "#E8C24A")        // 타이틀·가격·코인
+    private let gold = Color(hex: "#E8C24A")        // 가격·코인
     private let buttonGold = Color(hex: "#F2CF63")  // CTA 버튼
     private let buttonText = Color(hex: "#16243B")  // CTA 글자(짙은 네이비)
 
@@ -23,12 +26,7 @@ struct PlusPaywallView: View {
             Color.bg.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                truckGrid
-
-                titleBlock
-                benefits
-                    .padding(.top, 26)
-                    .padding(.horizontal, 22)
+                PlusMarketingHero()   // 공유 마케팅 히어로(트럭 그리드 + 타이틀 + 혜택)
 
                 Spacer(minLength: 16)
 
@@ -44,6 +42,144 @@ struct PlusPaywallView: View {
             }
 
             closeButton
+        }
+    }
+
+    // MARK: - 가격 / CTA / 푸터
+
+    /// 포인트 부족 안내 — 내 포인트 + 부족분 (포인트 경로로 띄웠을 때만)
+    private func pointStatusBlock(_ ps: PointStatus) -> some View {
+        let short = max(ps.need - ps.balance, 0)
+        return HStack(spacing: 8) {
+            Image(systemName: "star.fill")
+                .font(.system(size: 11))
+                .foregroundStyle(gold)
+            Text("내 포인트 \(ps.balance)P")
+                .font(pixelFont(11))
+                .foregroundStyle(.white.opacity(0.9))
+            Text("·")
+                .font(pixelFont(11))
+                .foregroundStyle(Color.pixelMuted)
+            Text("\(short)P 부족")
+                .font(pixelFont(11))
+                .foregroundStyle(gold)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .background(Color.pixelSurface)
+        .clipShape(RoundedRectangle(cornerRadius: 10))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.pixelBorder, lineWidth: 1))
+    }
+
+    private var priceBlock: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text("₩110")
+                .font(pixelFont(30))
+                .foregroundStyle(gold)
+            Text("/ 1 day")
+                .font(pixelFont(14))
+                .foregroundStyle(.white.opacity(0.85))
+        }
+    }
+
+    private var ctaButton: some View {
+        Button {
+            startPurchase()
+        } label: {
+            Group {
+                if isPurchasing {
+                    ProgressView().tint(buttonText)
+                } else {
+                    Text("구독 시작하기")
+                        .font(pixelFont(14))
+                        .foregroundStyle(buttonText)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 18)
+            .background(buttonGold)
+            .clipShape(RoundedRectangle(cornerRadius: 14))
+        }
+        .buttonStyle(.plain)
+        .disabled(isPurchasing)
+    }
+
+    /// 구독 시작하기 — Apple 시스템 결제 시트가 이 안에서 뜬다. 성공 시 onPurchased + 닫기.
+    private func startPurchase() {
+        guard !isPurchasing else { return }
+        isPurchasing = true
+        Task {
+            let ok = await subscription.purchaseMonthly()
+            isPurchasing = false
+            if ok {
+                onPurchased()
+                dismiss()
+            }
+        }
+    }
+
+    private var footer: some View {
+        VStack(spacing: 8) {
+            // 실제 월 가격(App Store Connect)을 함께 노출 — 심사/투명성. 큰 ₩110 은 하루 단위 마케팅.
+            Text("월 \(subscription.monthlyPriceText ?? "₩3,000") 자동 갱신 · 언제든 해지")
+                .font(pixelFont(9))
+                .foregroundStyle(Color.pixelMuted)
+
+            Button {
+                Task {
+                    await subscription.restore()
+                    if subscription.isSubscribed { dismiss() }
+                }
+            } label: {
+                Text("구매 복원")
+                    .font(pixelFont(9))
+                    .foregroundStyle(Color.pixelMuted)
+                    .underline()
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.top, 14)
+        .padding(.bottom, 10)
+    }
+
+    // MARK: - 닫기 버튼
+
+    private var closeButton: some View {
+        HStack {
+            Spacer()
+            Button {
+                dismiss()
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .frame(width: 32, height: 32)
+                    .background(Color.black.opacity(0.35))
+                    .clipShape(Circle())
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, 16)
+        .padding(.top, 12)
+    }
+}
+
+// MARK: - 공유 마케팅 히어로 (트럭 그리드 + 타이틀 + 혜택)
+// PlusPaywallView 와 PaywallView(StoreKit SubscriptionStoreView 의 marketingContent) 가 공용으로 쓴다.
+// → StoreKit 페이월도 동일한 디자인을 갖고, 실제 가격·구매 버튼은 StoreKit 이 아래에 그린다.
+
+struct PlusMarketingHero: View {
+    private let gold = Color(hex: "#E8C24A")
+    private let buttonText = Color(hex: "#16243B")
+
+    var body: some View {
+        VStack(spacing: 0) {
+            truckGrid
+
+            titleBlock
+            benefits
+                .padding(.top, 26)
+                .padding(.horizontal, 22)
         }
     }
 
@@ -136,88 +272,6 @@ struct PlusPaywallView: View {
 
             Spacer(minLength: 0)
         }
-    }
-
-    // MARK: - 가격 / CTA / 푸터
-
-    /// 포인트 부족 안내 — 내 포인트 + 부족분 (포인트 경로로 띄웠을 때만)
-    private func pointStatusBlock(_ ps: PointStatus) -> some View {
-        let short = max(ps.need - ps.balance, 0)
-        return HStack(spacing: 8) {
-            Image(systemName: "star.fill")
-                .font(.system(size: 11))
-                .foregroundStyle(gold)
-            Text("내 포인트 \(ps.balance)P")
-                .font(pixelFont(11))
-                .foregroundStyle(.white.opacity(0.9))
-            Text("·")
-                .font(pixelFont(11))
-                .foregroundStyle(Color.pixelMuted)
-            Text("\(short)P 부족")
-                .font(pixelFont(11))
-                .foregroundStyle(gold)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .background(Color.pixelSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.pixelBorder, lineWidth: 1))
-    }
-
-    private var priceBlock: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("₩110")
-                .font(pixelFont(30))
-                .foregroundStyle(gold)
-            Text("/ 1 day")
-                .font(pixelFont(14))
-                .foregroundStyle(.white.opacity(0.85))
-        }
-    }
-
-    private var ctaButton: some View {
-        Button {
-            onSubscribe()
-            dismiss()
-        } label: {
-            Text("구독 시작하기")
-                .font(pixelFont(14))
-                .foregroundStyle(buttonText)
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 18)
-                .background(buttonGold)
-                .clipShape(RoundedRectangle(cornerRadius: 14))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private var footer: some View {
-        Text("언제든지 해지할 수 있어요 · 자동 갱신")
-            .font(pixelFont(9))
-            .foregroundStyle(Color.pixelMuted)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
-    }
-
-    // MARK: - 닫기 버튼
-
-    private var closeButton: some View {
-        HStack {
-            Spacer()
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.9))
-                    .frame(width: 32, height: 32)
-                    .background(Color.black.opacity(0.35))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, 16)
-        .padding(.top, 12)
     }
 
     // MARK: - 혜택 아이콘 (픽셀 스타일)
@@ -327,8 +381,10 @@ private struct PaywallMarqueeRow: View {
 
 #Preview("기본") {
     PlusPaywallView()
+        .environment(SubscriptionManager())
 }
 
 #Preview("포인트 부족 동반") {
     PlusPaywallView(pointStatus: .init(need: 3, balance: 1))
+        .environment(SubscriptionManager())
 }

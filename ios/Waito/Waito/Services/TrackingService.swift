@@ -105,8 +105,11 @@ final class TrackingService {
             trackings = try await api.listTrackings(deviceToken: token)
             // Live Activity 집합 정리: 현재 목록에 존재하고(=삭제된 택배 유령 제거) 미완료인 번호만 남긴다.
             // (삭제건이 남으면 count 가 부풀려져 무료 1개 한도가 잘못 소진된다)
+            // ⚠️ 더미(디버그/테스트) 번호도 유효로 포함 — 안 그러면 더미 토글 ON 직후 이 정리가 지워 다시 OFF 됨.
             let activeNumbers = Set(
-                trackings.filter { !$0.currentStatus.isCompleted }.map(\.trackingNumber)
+                (trackings + Self.dummyTrackings)
+                    .filter { !$0.currentStatus.isCompleted }
+                    .map(\.trackingNumber)
             )
             let before = liveTrackingNumbers.count
             liveTrackingNumbers.removeAll { !activeNumbers.contains($0) }

@@ -98,8 +98,8 @@ struct LockScreenTrackingRow: View {
             // 이벤트 개수 기반 가변 타임라인 + 마지막(현재) 점 위에 작은 트럭
             LockScreenStatusTimeline(status: item.status, eventCount: item.eventCount ?? 0, truckConfig: truckConfig)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
+        .padding(.horizontal, 18)
+        .padding(.vertical, 14)
     }
 }
 

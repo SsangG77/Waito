@@ -79,14 +79,11 @@ struct TruckCustomizeView: View {
             confirmUnlockAndSave()
         }
         .fullScreenCover(isPresented: $showSubscriptionAlert) {
-            PlusPaywallView(pointStatus: paywallPoints) {
-                // TODO: 실제 StoreKit 구매 연결 (.storekit 설정 후 Product.purchase / SubscriptionStoreView)
-                #if DEBUG
-                if !subscription.isSubscribed { subscription.toggleSubscription() }
-                #endif
-                // 구독 직후, 미리보기 중이던 조합을 저장(커밋)
+            PlusPaywallView(onPurchased: {
+                // 구매 성공 직후, 미리보기 중이던 조합을 저장(커밋)
                 if subscription.isSubscribed { store.config = draft }
-            }
+            }, pointStatus: paywallPoints)
+            .environment(subscription)   // 시트 환경 명시 재주입
         }
     }
 
