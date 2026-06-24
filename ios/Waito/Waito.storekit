@@ -1,0 +1,45 @@
+{
+  "identifier" : "WAITO_STOREKIT_CONFIG",
+  "nonRenewingSubscriptions" : [],
+  "products" : [],
+  "settings" : {
+    "_failTransactionsEnabled" : false,
+    "_locale" : "ko_KR",
+    "_storefront" : "KOR",
+    "_storeKitErrors" : []
+  },
+  "subscriptionGroups" : [
+    {
+      "id" : "21563280",
+      "localizations" : [],
+      "name" : "Waito Plus",
+      "subscriptions" : [
+        {
+          "adHocOffers" : [],
+          "codeOffers" : [],
+          "displayPrice" : "3000",
+          "familyShareable" : false,
+          "groupNumber" : 1,
+          "internalID" : "21563281",
+          "introductoryOffer" : null,
+          "localizations" : [
+            {
+              "description" : "Live Activity 2개 동시 추적 + 모든 트럭 스킨 잠금 해제",
+              "displayName" : "Waito Plus 월간",
+              "locale" : "ko_KR"
+            }
+          ],
+          "productID" : "com.sangjin.Waito.plus.monthly",
+          "recurringSubscriptionPeriod" : "P1M",
+          "referenceName" : "Waito Plus Monthly",
+          "subscriptionGroupID" : "21563280",
+          "type" : "RecurringSubscription"
+        }
+      ]
+    }
+  ],
+  "version" : {
+    "major" : 4,
+    "minor" : 0
+  }
+}

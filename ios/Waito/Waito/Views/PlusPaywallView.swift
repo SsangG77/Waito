@@ -110,7 +110,7 @@ struct PlusPaywallView: View {
         VStack(spacing: 18) {
             benefitRow(icon: gridIcon, title: "24,000가지 트럭 조합", desc: "짐칸·헤드·바퀴를 섞어 나만의 트럭")
             benefitRow(icon: bellIcon, title: "한눈에 보는 배송 알림", desc: "여러 택배 상태를 알림창에서 동시에")
-            benefitRow(icon: coinIcon, title: "하루 단 200원", desc: "커피 한 모금보다 저렴하게")
+            benefitRow(icon: coinIcon, title: "하루 단 110원", desc: "커피 한 모금보다 저렴하게")
         }
     }
 
@@ -166,7 +166,7 @@ struct PlusPaywallView: View {
 
     private var priceBlock: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Text("₩200")
+            Text("₩110")
                 .font(pixelFont(30))
                 .foregroundStyle(gold)
             Text("/ 1 day")

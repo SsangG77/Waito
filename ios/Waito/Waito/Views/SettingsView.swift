@@ -34,7 +34,7 @@ struct SettingsView: View {
                     settingsRow(
                         icon: "crown.fill",
                         title: "Waito Plus",
-                        subtitle: subscription.isSubscribed ? "구독 중" : "₩2,900/월 · ₩19,900/년"
+                        subtitle: subscription.isSubscribed ? "구독 중" : "₩3,000/월"
                     )
 
                     alwaysShowRow

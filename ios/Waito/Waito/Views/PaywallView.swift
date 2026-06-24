@@ -1,11 +1,10 @@
 import SwiftUI
 import StoreKit
 
-// TODO: App Store Connect에 실제 상품 등록 후 ID 교체
-//       현재는 플레이스홀더 — 등록 전까지 시트가 빈 상태로 표시됨
+// Waito Plus 월간 구독. 가격(₩3,000/월)은 App Store Connect 에서 설정한다(코드는 상품 ID만 참조).
+// ⚠️ App Store Connect 에 동일 ID 의 자동 갱신 구독을 등록해야 페이월에 표시됨. 로컬 테스트는 Waito.storekit 사용.
 private let waitoPlusProductIDs: [String] = [
-    "com.sangjin.Waito.plus.monthly",
-    "com.sangjin.Waito.plus.yearly"
+    "com.sangjin.Waito.plus.monthly"
 ]
 
 struct PaywallView: View {
