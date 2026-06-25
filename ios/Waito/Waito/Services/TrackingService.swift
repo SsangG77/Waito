@@ -526,35 +526,6 @@ final class TrackingService {
         ),
     ]
 
-    /// TruckCustomizeView에서 내 트럭을 Dynamic Island에 미리 띄워볼 때 사용
-    func startDemoLiveActivity() async {
-        let demoItem = TrackingItemState(
-            trackingNumber: "DEMO-0000",
-            status: .delivering,
-            carrierName: "Waito Demo",
-            itemName: "데모 택배",
-            estimatedDelivery: "오늘"
-        )
-        var config = TruckConfigStore.shared.config
-        config.runMode = .on
-        let state = DeliveryAttributes.ContentState(items: [demoItem], truckConfig: config)
-        let attributes = DeliveryAttributes(deviceId: "demo")
-        do {
-            _ = try Activity.request(
-                attributes: attributes,
-                content: .init(state: state, staleDate: nil),
-                pushType: nil
-            )
-        } catch {
-            self.error = "Live Activity 오류: \(error)"
-        }
-    }
-
-    #if DEBUG
-    func stopDemoLiveActivity() async {
-        await endLiveActivity()
-    }
-    #endif
 }
 
 // MARK: - Keychain (디바이스 토큰 등 영속 식별자 저장)

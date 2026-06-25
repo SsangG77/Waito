@@ -8,18 +8,19 @@ struct SettingsView: View {
     @AppStorage(TrackingService.alwaysShowKey) private var alwaysShowDI = false
     @State private var showPaywall = false
 
-    // 버전 박스 5탭 → 비밀번호 팝업(디버그 언락). 이미 켜져 있으면 5탭으로 끄기.
-    @AppStorage("debug_unlocked") private var debugUnlocked = false
+    // 버전 박스 5탭 → 비밀번호 팝업 → 관리자 모드 ON. 켜진 상태에서 5탭 → OFF.
+    // 관리자 모드 = 디버그 토글(TEST DATA / DEBUG SUBSCRIPTION)만 노출. 더미·구독을 자동으로 켜지 않는다.
+    @AppStorage("admin_mode") private var adminMode = false
     @State private var versionTapCount = 0
     @State private var showDebugPrompt = false
     @State private var debugPassword = ""
 
-    // 디버그 토글 표시 조건: DEBUG 빌드이거나, 릴리즈에서 비번 언락된 경우
+    // 디버그 토글 표시 조건: DEBUG 빌드이거나, 릴리즈에서 관리자 모드 ON
     private var showDebugTools: Bool {
         #if DEBUG
         return true
         #else
-        return debugUnlocked
+        return adminMode
         #endif
     }
 
@@ -159,8 +160,8 @@ struct SettingsView: View {
         versionTapCount += 1
         if versionTapCount >= 5 {
             versionTapCount = 0
-            if debugUnlocked {
-                disableDebugUnlock()       // 이미 켜져 있으면 5탭으로 끄기(비번 불필요)
+            if adminMode {
+                disableAdminMode()         // 켜져 있으면 5탭으로 끄기(비번 불필요)
             } else {
                 debugPassword = ""
                 showDebugPrompt = true     // 꺼져 있으면 비밀번호 팝업
@@ -170,25 +171,17 @@ struct SettingsView: View {
 
     private func submitDebugPassword() {
         if debugPassword == "970719" {
-            enableDebugUnlock()
+            adminMode = true   // 관리자 모드 ON — 토글만 노출. 더미·구독은 사용자가 토글로 직접 제어
         }
         debugPassword = ""
         showDebugPrompt = false
     }
 
-    /// 디버그 언락 ON — TEST DATA/DEBUG SUBSCRIPTION 토글 노출 + 유료 전체 해제(항상 노출 토글 잠금 해제 포함, 릴리즈에서도).
-    /// 더미 택배 표시는 강제로 켜지 않고 사용자가 노출된 TEST DATA 토글로 직접 켠다.
-    private func enableDebugUnlock() {
-        debugUnlocked = true
-        subscription.setDebugUnlocked(true)   // 실구독과 분리된 디버그 언락
-        Task { await service.reconcileAmbientActivity() }
-    }
-
-    /// 디버그 언락 OFF — 더미/유료/항상노출 원복 (버전 5탭 재실행). 실제 구독은 건드리지 않음.
-    private func disableDebugUnlock() {
-        debugUnlocked = false
-        UserDefaults.standard.set(false, forKey: "debug_show_dummy_data")
-        subscription.setDebugUnlocked(false)
+    /// 관리자 모드 OFF — 토글 숨김 + 토글로 켜뒀던 효과(더미/디버그 구독) 원복. 실제 구독은 건드리지 않음.
+    private func disableAdminMode() {
+        adminMode = false
+        showDummyData = false                 // 더미 표시 끔(토글이 숨겨지므로 잔존 방지)
+        subscription.setDebugUnlocked(false)  // 디버그 구독 해제
         Task { await service.reconcileAmbientActivity() }
     }
 

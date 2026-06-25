@@ -114,6 +114,8 @@ struct PixelTextField: View {
                 .foregroundStyle(disabled ? Color.pixelMuted : Color.pixelText)
                 .tint(Color.pixelOrange)
                 .disabled(disabled)
+                // 고정 줄 높이 — 빈 필드+커스텀 폰트가 포커스 시 줄 높이로 스냅되며 박스가 줄어드는 것 방지
+                .frame(height: 18)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 14)
                 .pixelBox()

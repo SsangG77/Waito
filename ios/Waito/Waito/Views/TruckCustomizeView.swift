@@ -7,9 +7,6 @@ struct TruckCustomizeView: View {
     @Bindable private var store = TruckConfigStore.shared
 
     @State private var showSubscriptionAlert = false
-    #if DEBUG
-    @State private var isDemoActive = false
-    #endif
 
     /// 미리보기용 임시 조합. 잠금 요소도 자유롭게 골라 미리 볼 수 있고,
     /// "저장하기"를 눌러야 store.config 에 커밋된다(= Live Activity/서버 갱신).
@@ -32,9 +29,6 @@ struct TruckCustomizeView: View {
                 VStack(spacing: 20) {
                     previewSection
                     pointBar
-                    #if DEBUG
-                    dynamicIslandDemoButton
-                    #endif
 
                     catalogSection(title: "CAB", items: TruckCab.allCases, selected: draft.cab) { cab in
                         CatalogTruckView(cab: cab, truckBody: draft.body, wheels: draft.wheelType, size: 56)
@@ -202,45 +196,6 @@ struct TruckCustomizeView: View {
         .padding(.bottom, 10)
         .background(Color.bg)
     }
-
-    // MARK: - Dynamic Island 데모 버튼 (DEBUG 전용 — service 의 데모 메서드가 #if DEBUG)
-
-    #if DEBUG
-    private var dynamicIslandDemoButton: some View {
-        Button {
-            Task {
-                if isDemoActive {
-                    await service.stopDemoLiveActivity()
-                    isDemoActive = false
-                } else {
-                    await service.startDemoLiveActivity()
-                    isDemoActive = true
-                }
-            }
-        } label: {
-            HStack(spacing: 8) {
-                Image(systemName: isDemoActive ? "dot.radiowaves.left.and.right" : "dot.radiowaves.left.and.right.slash")
-                    .font(.system(size: 13))
-                    .foregroundStyle(isDemoActive ? Color.pixelOrange : Color.pixelMuted)
-                Text(isDemoActive ? "DYNAMIC ISLAND ON_" : "PREVIEW ON ISLAND_")
-                    .font(pixelFont(11))
-                    .foregroundStyle(isDemoActive ? Color.pixelOrange : Color.pixelText)
-                Spacer()
-                Text(isDemoActive ? "[ON]" : "[OFF]")
-                    .font(pixelFont(9))
-                    .foregroundStyle(isDemoActive ? Color.pixelOrange : Color.pixelMuted)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 14)
-            .pixelBox(
-                border: isDemoActive ? Color.pixelOrange.opacity(0.5) : Color.pixelBorder,
-                bg: isDemoActive ? Color.pixelOrange.opacity(0.06) : Color.pixelSurface,
-                lineWidth: 1.5, notch: 4
-            )
-        }
-        .buttonStyle(.plain)
-    }
-    #endif
 
     // MARK: - 미리보기
 

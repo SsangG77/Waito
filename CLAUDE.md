@@ -332,7 +332,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ### Live Activity 푸시 (서버 + iOS)
 - APNs 실제 전송 + push-to-start 이벤트 기반 (위 "데이터 흐름" 참조)
-- 무료 1개 / 유료 **3개** 추적 제한(`SubscriptionManager.liveActivityLimit`). 잠금화면은 토글된 전부를 `ForEach`로 표시(primary+secondary 2개 고정 아님). 한도 도달 시 무료는 Plus 페이월, 유료는 "표시 제한" 안내 팝업(`showLiveActivityLimitAlert`). ⚠️ ActivityKit ContentState 4KB·잠금화면 높이 제약상 무제한 불가 → 3개 상한.
+- 무료 1개 / 유료 **2개** 추적 제한(`SubscriptionManager.liveActivityLimit`). 잠금화면은 토글된 전부를 `ForEach`로 표시(primary+secondary 고정 아님). 한도 도달 시 무료는 Plus 페이월, 유료는 "표시 제한" 안내 팝업(`showLiveActivityLimitAlert`). ⚠️ ActivityKit ContentState 4KB·잠금화면 높이 제약상 상한 둠.
 - **트럭 표시(위젯)**: 접힌 DI(compact leading)·잠금화면 배송 행은 **`CatalogTruckView` 트럭만** 정적 표시. **잠금화면 idle 과 펼친 DI idle(배송 없음 + 항상노출)은 동일한 `LockScreenIdleRow`(좌측 트럭 + `> BOUNCE_` 버튼) 공유** — `ExpandedMetroTimelineView.idleContent` 가 그대로 재사용.
   - ⚠️ **iOS 제약**: Live Activity(잠금화면/DI)는 시스템이 SwiftUI 애니메이션 모디파이어를 무시 → `repeatForever` 등 연속 애니메이션이 **실기기/시뮬에서 안 돎**(공식 문서 "Animating data updates in widgets and Live Activities"). 위젯에선 **오직 content state(ContentState) 변경 시에만** 화면이 갱신됨. → 위젯에선 자율 애니메이션 효과를 쓰지 않음.
     - **실기기 검증 결과(2026-06)**: idle 트럭을 "스스로 움직이게" 하려는 3가지 시도 모두 정지 확인 — ①`ProgressView(timerInterval:)`+커스텀 `ProgressViewStyle`(시스템이 `fractionCompleted` 를 커스텀 스타일에 안 흘려줌), ②`PhaseAnimator`(위젯에서 순환 안 함), ③`repeatForever`+`onAppear`(트리거 미발동). **자동 동력이 필요하면 서버 push 뿐이나 APNs Live Activity update 는 15초 throttle → walk-cycle 불가.** 결론: idle 트럭은 정적 + `> BOUNCE` 버튼(탭=state 변경)으로만 움직임.
@@ -355,7 +355,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### 디버그
 - DEBUG 빌드에선 오류 팝업 억제(`DeliveryListView`에서 `showError` 게이팅) — 로컬 서버 미가동 시 네트워크 오류 팝업 방지.
 - **테스트 운송장 `test970719`**(서버 `trackerApi.ts`/`pollingService.ts`): tracker.delivery 실제 조회 없이 더미 배송 데이터 응답. **`created_at` 기준 2시간마다 1단계 전진**(접수→집화→간선상차→간선하차→배송출발→배송중→배송완료), **배송완료 후 2시간 뒤 접수로 순환**(전체 14h 주기). 일반 폴링과 달리 전진 제약(`resolveNewStatus`)·`delivered_at` 설정 없이 `pollTestTracking` 으로 처리하고, 30분 cron 폴링에 상태 무관 항상 포함. webhook 등록도 skip. 빠른 확인은 `TEST_STEP_INTERVAL_MS` 를 임시 단축.
-- **설정 디버그 언락(릴리즈에서도 동작)**: `SettingsView` 버전 박스 **5탭 → 비밀번호 `970719`** 입력 시 ON(`@AppStorage("debug_unlocked")`). 효과 = 더미 택배 표시(`debug_show_dummy_data=true`) + `subscription.setSubscribed(true)`(유료 트럭 부품·항상노출 토글 잠금 전체 해제). **켜진 상태에서 버전 5탭 재실행 → OFF**(원복). `#if DEBUG` 토글(TEST DATA/DEBUG SUBSCRIPTION)이 하던 일을 릴리즈에서도 가능하게 하려고 `TrackingService.dummyTrackings`/`DeliveryListView.showDummyData` 게이팅을 `#if DEBUG` 밖으로 뺌. ⚠️ **StoreKit 연동 시 디버그 언락과 실제 구독을 분리**해야 함(디버그 끄기 `setSubscribed(false)` 가 실구독을 끄면 안 됨 → 별도 플래그 OR 처리).
+- **관리자 모드(릴리즈에서도 동작)**: `SettingsView` 버전 박스 **5탭 → 비밀번호 `970719`** 입력 시 ON(`@AppStorage("admin_mode")`). 효과 = **디버그 토글(TEST DATA / DEBUG SUBSCRIPTION)만 노출**(`showDebugTools = DEBUG || adminMode`). 더미·구독을 자동으로 켜지 않고 사용자가 토글로 직접 제어. **켜진 상태에서 버전 5탭 재실행 → OFF**: 토글 숨김 + 켜뒀던 효과 원복(`showDummyData=false`, `setDebugUnlocked(false)`). 토글 정의/게이팅(`dummyTrackings`/`showDummyData`)은 `#if DEBUG` 밖이라 릴리즈에서도 동작. ⚠️ `admin_mode`(UI 가시성)와 `debug_unlocked`(유료 해제, DEBUG SUBSCRIPTION 토글이 제어)는 **별도 키로 분리** — 실구독과도 무관(`setDebugUnlocked` 가 실구독을 끄지 않음). 항상노출은 구독 게이팅이라 DEBUG SUBSCRIPTION 을 켜야 실제 동작.
 
 ---
 

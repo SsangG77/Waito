@@ -114,7 +114,7 @@ final class SubscriptionManager {
 
     // MARK: - Live Activity 제한 / 항상 노출
 
-    /// 무료 1개 / 유료 3개. (ActivityKit 4KB·잠금화면 높이 제약상 무제한은 위험 → 3개 상한)
-    var liveActivityLimit: Int { isSubscribed ? 3 : 1 }
+    /// 무료 1개 / 유료 2개. (ActivityKit 4KB·잠금화면 높이 제약상 상한 둠)
+    var liveActivityLimit: Int { isSubscribed ? 2 : 1 }
     var canUseAlwaysShow: Bool { isSubscribed }
 }
