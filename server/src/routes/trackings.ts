@@ -25,11 +25,12 @@ router.post('/', async (req: Request, res: Response) => {
 
   const db = getDb();
 
-  // 디바이스 확인
-  const device = db.prepare('SELECT id FROM devices WHERE device_token = ?').get(deviceToken) as { id: number } | undefined;
+  // 디바이스 확인 — 없으면 즉시 생성(upsert). 클라이언트 Keychain 에 토큰이 있는데 서버 DB 가
+  // 그 토큰을 잃은 경우(재배포/서버 전환/DB 리셋)에도 "Device not registered" 없이 자가 복구된다.
+  let device = db.prepare('SELECT id FROM devices WHERE device_token = ?').get(deviceToken) as { id: number } | undefined;
   if (!device) {
-    res.status(404).json({ error: 'Device not registered. Call POST /api/devices/register first' });
-    return;
+    const inserted = db.prepare('INSERT INTO devices (device_token) VALUES (?)').run(deviceToken);
+    device = { id: inserted.lastInsertRowid as number };
   }
 
   // 중복 확인

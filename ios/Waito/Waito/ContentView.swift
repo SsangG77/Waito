@@ -23,9 +23,9 @@ struct ContentView: View {
         }
         .task {
             await service.loadCarriers()
-            if service.deviceToken == nil {
-                await service.registerDevice(token: UUID().uuidString)
-            }
+            // 항상 등록 보장 — 서버 register 는 멱등. Keychain 토큰이 있어도 서버 DB 가 그 토큰을
+            // 잃은 경우(재배포/서버 전환/DB 리셋)에도 재등록되어 desync("Device not registered")를 복구한다.
+            await service.registerDevice(token: service.deviceToken ?? UUID().uuidString)
             await service.loadTrackings()
             // 항상 노출(구독 + 토글 ON)이고 배송이 없으면 ambient 트럭을 띄운다 (무한 스트림 await 이전에 호출)
             await service.startAmbientIfEnabled()
