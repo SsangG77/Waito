@@ -56,6 +56,10 @@ struct SettingsView: View {
         .background(Color.bg)
         .navigationBarBackButtonHidden(true)
         .toolbar(.hidden, for: .navigationBar)
+        .onChange(of: showDummyData) { _, isOn in
+            // 토글 OFF 시 LA/DI 에 남은 더미 택배 즉시 제거 (disableAdminMode 경로 포함)
+            if !isOn { Task { await service.purgeDummyFromLiveActivity() } }
+        }
         .sheet(isPresented: $showPaywall) {
             PaywallView()
                 .environment(subscription)   // 시트 환경 명시 재주입

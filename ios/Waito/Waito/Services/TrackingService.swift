@@ -47,6 +47,13 @@ final class TrackingService {
     /// "항상 노출"(배송 없어도 Dynamic Island 트럭 유지) 토글 저장 키 — SettingsView @AppStorage 와 공유
     /// ⚠️ 값 변경 시 기존 사용자 설정이 초기화되므로 마이그레이션 필요
     static let alwaysShowKey = "waito_always_show_di"
+    /// 테스트(더미) 데이터 토글 저장 키 — SettingsView/DeliveryListView @AppStorage 와 공유
+    static let showDummyDataKey = "debug_show_dummy_data"
+
+    /// 현재 테스트 데이터 토글 ON 여부 (토글이 꺼지면 더미는 더 이상 유효 항목이 아님)
+    private var showDummyData: Bool {
+        UserDefaults.standard.bool(forKey: Self.showDummyDataKey)
+    }
 
     // MARK: - Init
 
@@ -105,9 +112,11 @@ final class TrackingService {
             trackings = try await api.listTrackings(deviceToken: token)
             // Live Activity 집합 정리: 현재 목록에 존재하고(=삭제된 택배 유령 제거) 미완료인 번호만 남긴다.
             // (삭제건이 남으면 count 가 부풀려져 무료 1개 한도가 잘못 소진된다)
-            // ⚠️ 더미(디버그/테스트) 번호도 유효로 포함 — 안 그러면 더미 토글 ON 직후 이 정리가 지워 다시 OFF 됨.
+            // ⚠️ 더미(디버그/테스트) 번호는 토글 ON 일 때만 유효로 포함 — 토글이 꺼지면 정리 대상이 되어
+            //    LA/DI 에 남은 더미가 제거된다. (토글 ON 직후엔 포함되어 즉시 OFF 되는 문제도 방지)
+            let validCandidates = showDummyData ? (trackings + Self.dummyTrackings) : trackings
             let activeNumbers = Set(
-                (trackings + Self.dummyTrackings)
+                validCandidates
                     .filter { !$0.currentStatus.isCompleted }
                     .map(\.trackingNumber)
             )
@@ -328,6 +337,18 @@ final class TrackingService {
         liveTrackingNumbers.append(trackingNumber)
         saveLiveTrackingNumbers()
         await updateLiveActivity()
+    }
+
+    /// 테스트 데이터 토글 OFF 시 호출 — LA/DI 에 남아있는 더미 택배 번호를 즉시 제거하고 재조정.
+    /// (loadTrackings 의 정리에도 의존하지만, 토글 끄는 즉시 반영되도록 별도 진입점을 둔다)
+    func purgeDummyFromLiveActivity() async {
+        let dummyNumbers = Set(Self.dummyTrackings.map(\.trackingNumber))
+        let before = liveTrackingNumbers.count
+        liveTrackingNumbers.removeAll { dummyNumbers.contains($0) }
+        if liveTrackingNumbers.count != before {
+            saveLiveTrackingNumbers()
+        }
+        await reconcileLiveActivity()
     }
 
     /// Live Activity에서 택배 제거

@@ -317,7 +317,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **첫 추가 업셀 페이월**: 첫 택배 추가 성공 직후 `PlusPaywallView`를 풀스크린 1회 노출. 평생 1회(`@AppStorage("has_shown_first_add_paywall")`) + 비구독자(`subscription.isSubscribed == false`) 한정(`maybeShowFirstAddPaywall()`). 콜드 첫 화면 하드 페이월 대신 "가치 경험(첫 추가) 직후" 노출 정책.
 
 ### 설정 (SettingsView)
-- (DEBUG) **테스트 데이터 토글**: 켜면 목록에 더미 택배 표시. 기존 "Dynamic Island 데모" 버튼은 제거
+- (DEBUG) **테스트 데이터 토글**: 켜면 목록에 더미 택배 표시. 기존 "Dynamic Island 데모" 버튼은 제거. **토글 OFF 시 LA/DI 에 남은 더미 정리**: `TrackingService.purgeDummyFromLiveActivity()`(SettingsView `onChange`) + `loadTrackings` 정리 로직이 더미를 토글 ON 일 때만 유효로 포함(`showDummyDataKey`) → 끄면 더미가 위젯에서 사라짐
 - **항상 노출 토글**(구독 전용): 배송이 없어도 Dynamic Island에 트럭 상시 표시. 무료는 회색 잠금+크라운, 탭 시 PaywallView. 동작 게이팅은 `TrackingService.ambientEnabled`(토글 && 구독) 이중 확인 — 배송 없을 때 ambient Live Activity(`pushType:nil`, 빈 items) 시작/종료. ⚠️ iOS 제약: Live Activity는 잠금화면 카드에도 함께 노출(DI 단독 표시 불가) → 위젯에 idle 뷰 추가. 배송 없을 때 idle 표시: **접힘** = leading 트럭 / trailing 없음, **펼침·잠금화면** = `RunningTruckView`(달리는 효과). `PixelToggle`은 `isEnabled`로 비활성 표시. (`RoamingTruckView`는 좌우 왕복 컴포넌트로 `CompactIslandViews.swift`에 남아 있으나 현재 미사용.)
 
 ### 트럭 꾸미기 (TruckCustomizeView)
@@ -372,6 +372,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ## Swift 동시성 / 빌드 설정
 
+- **최소 배포 타깃 = iOS 18.6**(앱 타깃 `IPHONEOS_DEPLOYMENT_TARGET`). 기술적 하한은 push-to-start(17.2)·`LiveActivityIntent`·`@Observable`(17) 때문에 17.2 이나, 현재 18.6 로 설정. ⚠️ 위젯 익스텐션 타깃은 프로젝트 기본값을 상속하므로 앱과 동일 하한인지 확인 필요.
 - **`SWIFT_DEFAULT_ACTOR_ISOLATION = nonisolated`** (`project.pbxproj` 4개 빌드설정). Xcode가 한때 이를 `MainActor` 로 자동 설정 → 모든 타입이 암묵적 `@MainActor` 가 되어, `actor APIClient`/위젯 `BounceTruckIntent` 가 데이터 모델(DTO·`DeliveryAttributes`)의 MainActor 격리 conformance 와 충돌(Swift 6 모드 에러). `nonisolated` 로 되돌려 해결.
 - 대신 UI 상태관리 클래스는 **`@MainActor` 명시**: `TrackingService`·`TruckConfigStore`·`SubscriptionManager`(모두 `@Observable`). 데이터 모델/DTO 는 격리 없음 → actor·위젯 어디서든 인코딩/디코딩 가능.
 - ⚠️ 새 `@Observable` 상태관리 클래스 추가 시 `@MainActor` 를 직접 붙일 것(자동 추론 없음).
