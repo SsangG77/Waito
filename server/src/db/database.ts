@@ -23,6 +23,31 @@ export function initDb(): void {
   const migration = fs.readFileSync(migrationPath, 'utf-8');
   database.exec(migration);
   runColumnMigrations(database);
+  runIndexMigrations(database);
+}
+
+// tracking_events 중복 1회 정리 — (tracking_id, event_time, description) 그룹당 최소 id만 남김.
+export const TRACKING_EVENTS_DEDUP_SQL = `
+  DELETE FROM tracking_events
+  WHERE id NOT IN (
+    SELECT MIN(id) FROM tracking_events
+    GROUP BY tracking_id, event_time, description
+  )
+`;
+
+// 같은 이벤트 재삽입을 막는 UNIQUE 인덱스. 이게 있어야 코드의 INSERT OR IGNORE 가 실제로 중복을 무시한다.
+export const TRACKING_EVENTS_UNIQUE_INDEX_SQL =
+  'CREATE UNIQUE INDEX IF NOT EXISTS idx_tracking_events_unique ' +
+  'ON tracking_events(tracking_id, event_time, description)';
+
+/**
+ * 멱등 인덱스 마이그레이션.
+ * tracking_events 에 UNIQUE 제약이 없어 INSERT OR IGNORE 가 무력화 → 폴링마다 이벤트가 중복 누적됐다.
+ * 기존 중복을 한 번 정리한 뒤 유니크 인덱스를 만들어 근본 차단한다.
+ */
+function runIndexMigrations(database: Database.Database): void {
+  database.exec(TRACKING_EVENTS_DEDUP_SQL);
+  database.exec(TRACKING_EVENTS_UNIQUE_INDEX_SQL);
 }
 
 /**

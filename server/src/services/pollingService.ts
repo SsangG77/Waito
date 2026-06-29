@@ -112,22 +112,29 @@ async function pollTestTracking(tracking: {
   const createdAtMs = new Date(tracking.created_at.replace(' ', 'T') + 'Z').getTime();
   const step = testStepIndex(createdAtMs);
 
-  // 현재 사이클의 이벤트 보장(0..step). event_time 이 단계별 고정값이라 INSERT OR IGNORE 로 누적되지 않음.
-  for (let i = 0; i <= step; i++) {
-    const s = TEST_STEPS[i];
-    const mapped = mapTrackerStatus(s.code, s.description) ?? DeliveryStatus.Registered;
-    db.prepare(`
-      INSERT OR IGNORE INTO tracking_events (tracking_id, tracker_status, mapped_status, description, event_time, location)
+  // 테스트 택배는 매 폴링마다 이벤트를 현재 사이클(0..step)로 재구성한다.
+  // 배송완료 후 다음 사이클(접수)로 순환할 때 이전 사이클 이벤트가 남으면 타임라인이 무한 누적되므로,
+  // 전체 삭제 후 현재 단계까지만 다시 삽입(= 사이클마다 초기화). 트랜잭션으로 원자적 처리.
+  const rebuildEvents = db.transaction(() => {
+    db.prepare('DELETE FROM tracking_events WHERE tracking_id = ?').run(tracking.id);
+    const insert = db.prepare(`
+      INSERT INTO tracking_events (tracking_id, tracker_status, mapped_status, description, event_time, location)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(
-      tracking.id,
-      s.code,
-      mapped,
-      s.description,
-      new Date(createdAtMs + i * TEST_STEP_INTERVAL_MS).toISOString(),
-      s.location,
-    );
-  }
+    `);
+    for (let i = 0; i <= step; i++) {
+      const s = TEST_STEPS[i];
+      const mapped = mapTrackerStatus(s.code, s.description) ?? DeliveryStatus.Registered;
+      insert.run(
+        tracking.id,
+        s.code,
+        mapped,
+        s.description,
+        new Date(createdAtMs + i * TEST_STEP_INTERVAL_MS).toISOString(),
+        s.location,
+      );
+    }
+  });
+  rebuildEvents();
 
   const cur = TEST_STEPS[step];
   const newStatus = mapTrackerStatus(cur.code, cur.description) ?? DeliveryStatus.Registered;

@@ -145,7 +145,7 @@ Live Activity Expanded View
 ```
 ├── index.ts                            # 앱 부팅(initDb, 폴링/credential 스케줄러)
 ├── config.ts                           # 환경변수(tracker credential, APNS_*)
-├── db/database.ts, migrations/001_initial.sql  # 멱등 컬럼 마이그레이션 포함
+├── db/database.ts, migrations/001_initial.sql  # 멱등 컬럼 + 인덱스 마이그레이션(tracking_events UNIQUE(tracking_id,event_time,description) — INSERT OR IGNORE 중복 차단)
 ├── routes/
 │   ├── carriers.ts                     # GET /api/carriers (CARRIERS 상수)
 │   ├── trackings.ts                    # 택배 CRUD(PUT /:id = 품명·메모 수정) + push-token 등록 + force 추가
