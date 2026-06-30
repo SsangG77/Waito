@@ -19,9 +19,10 @@ export const config = {
     keyId: process.env.APNS_KEY_ID || '',
     teamId: process.env.APNS_TEAM_ID || '',
     keyPath: process.env.APNS_KEY_PATH || './certs/AuthKey.p8',
-    // ⚠️ APNs apns-topic 은 앱 번들 ID 와 대소문자까지 정확히 일치해야 함(앱: com.sangjin.Waito).
-    // 소문자 기본값이면 topic 불일치로 LA/알림 푸시가 전부 거부(BadTopic)됨.
-    bundleId: process.env.APNS_BUNDLE_ID || 'com.sangjin.Waito',
+    // ⚠️ APNs apns-topic = 앱 번들 ID(대소문자까지 정확히). 앱: com.sangjin.Waito.
+    // 고정값으로 박는다 — env(APNS_BUNDLE_ID)로 덮어쓰지 않음.
+    // (운영 .env 에 소문자 com.sangjin.waito 가 설정돼 TopicDisallowed 로 모든 푸시가 거부된 이력 있음)
+    bundleId: 'com.sangjin.Waito',
     // 기본은 sandbox(개발). 프로덕션 APNs 사용 시 APNS_PRODUCTION=true
     production: process.env.APNS_PRODUCTION === 'true',
   },
