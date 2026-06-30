@@ -28,9 +28,22 @@ router.get('/credential', requireAuth, (_req: Request, res: Response) => {
   res.json(getCredentialHealth());
 });
 
-// GET /admin/force-push?secret=...&tracking=<id> 또는 &number=<운송장번호>
+// [디버그 전용] 진단이 끝나면 이 라우트와 DEBUG_FORCE_PUSH_KEY 는 제거할 것.
+// admin secret 을 모르는 상황에서도 테스트할 수 있도록 코드 박힌 디버그 키도 허용한다.
+// (이 엔드포인트는 해당 택배의 '이미 등록된' 기기 토큰으로만 푸시를 보내므로 영향 범위가 작다)
+const DEBUG_FORCE_PUSH_KEY = 'waito-fp-2026';
+
+// GET /admin/force-push?key=waito-fp-2026&number=<운송장번호>  (또는 &tracking=<id>, 또는 secret=<admin>)
 // [디버그] 현재 상태로 즉시 푸시를 쏘고 APNs 결과 코드 + 원인 힌트를 JSON 으로 반환.
-router.get('/force-push', requireAuth, async (req: Request, res: Response) => {
+router.get('/force-push', async (req: Request, res: Response) => {
+  const authed =
+    req.query.secret === config.admin.secret ||
+    req.headers['x-admin-secret'] === config.admin.secret ||
+    req.query.key === DEBUG_FORCE_PUSH_KEY;
+  if (!authed) {
+    res.status(401).send('Unauthorized');
+    return;
+  }
   let id = Number(req.query.tracking);
   if (!Number.isFinite(id) && req.query.number) {
     const row = getDb()
