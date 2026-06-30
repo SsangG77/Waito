@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { config, updateTrackerCredentials } from '../config.js';
 import { getCredentialHealth, resetCredentialExpired } from '../services/credentialMonitor.js';
 import { resetClient } from '../services/trackerApi.js';
+import { forcePush } from '../services/pushService.js';
+import { getDb } from '../db/database.js';
 
 const router = Router();
 
@@ -24,6 +26,23 @@ router.get('/', requireAuth, (_req: Request, res: Response) => {
 // GET /admin/credential — credential 상태 JSON
 router.get('/credential', requireAuth, (_req: Request, res: Response) => {
   res.json(getCredentialHealth());
+});
+
+// GET /admin/force-push?secret=...&tracking=<id> 또는 &number=<운송장번호>
+// [디버그] 현재 상태로 즉시 푸시를 쏘고 APNs 결과 코드 + 원인 힌트를 JSON 으로 반환.
+router.get('/force-push', requireAuth, async (req: Request, res: Response) => {
+  let id = Number(req.query.tracking);
+  if (!Number.isFinite(id) && req.query.number) {
+    const row = getDb()
+      .prepare('SELECT id FROM trackings WHERE tracking_number = ? ORDER BY id DESC LIMIT 1')
+      .get(String(req.query.number)) as { id: number } | undefined;
+    if (row) id = row.id;
+  }
+  if (!Number.isFinite(id)) {
+    res.status(400).json({ error: 'tracking(숫자 id) 또는 number(운송장번호) 쿼리가 필요합니다.' });
+    return;
+  }
+  res.json(await forcePush(id));
 });
 
 // POST /admin/credential — credential 갱신

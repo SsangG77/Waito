@@ -1,6 +1,7 @@
 import { DeliveryStatus } from '../types/delivery.js';
 import { getDb } from '../db/database.js';
-import { sendLiveActivityPush, sendAlertPush } from './apnsClient.js';
+import { sendLiveActivityPush, sendAlertPush, LIVE_ACTIVITY_TOPIC, type ApnsResult } from './apnsClient.js';
+import { config } from '../config.js';
 
 /**
  * iOS DeliveryAttributes.ContentState 와 정확히 일치해야 하는 구조.
@@ -74,7 +75,7 @@ export async function sendLiveActivityUpdate(
   items: TrackingItemState[],
   truckConfig: Record<string, unknown> | undefined,
   isEnd: boolean,
-): Promise<{ ok: boolean; reason?: string; skipped?: boolean }> {
+): Promise<ApnsResult> {
   const now = Math.floor(Date.now() / 1000);
   const aps: Record<string, unknown> = {
     timestamp: now,
@@ -101,7 +102,7 @@ export async function sendLiveActivityUpdate(
     priority: 10,
     expiration: now + 60 * 60,
   });
-  return { ok: result.ok, reason: result.reason, skipped: result.skipped };
+  return result;
 }
 
 /**
@@ -203,6 +204,120 @@ export async function pushTrackingUpdate(trackingId: number, status: DeliverySta
   if (!bannerShown && row.apns_token) {
     await sendStatusAlert(row.device_token, row.apns_token, item, status);
   }
+}
+
+/**
+ * [디버그] 강제 푸시 진단 — 현재 상태로 즉시 표준 배너 + LA update 를 쏘고 APNs 결과 코드를 반환한다.
+ * admin 게이팅 라우트에서만 호출. "알림 안 옴" 원인(설정 미비/토픽 불일치/토큰 없음/환경 불일치)을 즉시 판별.
+ */
+export interface ForcePushDiagnostic {
+  trackingId: number;
+  found: boolean;
+  currentStatus?: string;
+  production: boolean;
+  alertTopic: string;
+  liveActivityTopic: string;
+  tokens?: { liveActivityUpdate: boolean; pushToStart: boolean; apnsAlert: boolean };
+  alertResult?: ApnsResult;
+  liveActivityResult?: ApnsResult;
+  hint: string;
+}
+
+export async function forcePush(trackingId: number): Promise<ForcePushDiagnostic> {
+  const db = getDb();
+  const row = db
+    .prepare(
+      `SELECT t.current_status, t.live_activity_push_token, t.tracking_number, t.carrier_name, t.item_name,
+              d.device_token, d.push_to_start_token, d.apns_token,
+              (SELECT e.description FROM tracking_events e WHERE e.tracking_id = t.id
+                 ORDER BY e.event_time DESC LIMIT 1) AS last_event_description
+       FROM trackings t JOIN devices d ON d.id = t.device_id WHERE t.id = ?`,
+    )
+    .get(trackingId) as
+    | {
+        current_status: DeliveryStatus;
+        live_activity_push_token: string | null;
+        tracking_number: string;
+        carrier_name: string;
+        item_name: string;
+        device_token: string;
+        push_to_start_token: string | null;
+        apns_token: string | null;
+        last_event_description: string | null;
+      }
+    | undefined;
+
+  const base = {
+    trackingId,
+    production: config.apns.production,
+    alertTopic: config.apns.bundleId,
+    liveActivityTopic: LIVE_ACTIVITY_TOPIC,
+  };
+  if (!row) return { ...base, found: false, hint: '해당 trackingId 없음' };
+
+  const status = row.current_status;
+  const item: TrackingItemState = {
+    trackingNumber: row.tracking_number,
+    status,
+    carrierName: row.carrier_name,
+    itemName: row.item_name,
+    estimatedDelivery: null,
+    eventCount: 0,
+    statusLabel: row.last_event_description ?? null,
+    departureDate: null,
+  };
+
+  let alertResult: ApnsResult | undefined;
+  if (row.apns_token) {
+    const now = Math.floor(Date.now() / 1000);
+    alertResult = await sendAlertPush({
+      deviceToken: row.apns_token,
+      payload: {
+        aps: {
+          alert: { title: item.itemName || item.carrierName, body: item.statusLabel ?? STATUS_DESCRIPTIONS[status] },
+          sound: 'default',
+        },
+      },
+      priority: 10,
+      expiration: now + 60 * 60,
+    });
+  }
+
+  let liveActivityResult: ApnsResult | undefined;
+  if (row.live_activity_push_token) {
+    liveActivityResult = await sendLiveActivityUpdate(
+      row.live_activity_push_token,
+      [item],
+      undefined,
+      status === DeliveryStatus.Delivered,
+    );
+  }
+
+  const tokens = {
+    liveActivityUpdate: !!row.live_activity_push_token,
+    pushToStart: !!row.push_to_start_token,
+    apnsAlert: !!row.apns_token,
+  };
+
+  let hint: string;
+  const a = alertResult, la = liveActivityResult;
+  if (!row.apns_token && !row.live_activity_push_token && !row.push_to_start_token) {
+    hint = '토큰이 하나도 없음 → 앱이 토큰 등록을 못함(알림 권한 거부/등록 실패). 기기에서 알림 허용 + 앱 재실행 필요.';
+  } else if (a?.skipped || la?.skipped) {
+    hint = '서버 APNs 미설정(.p8/APNS_KEY_ID/TEAM_ID) → 모든 푸시 skip. certs/AuthKey.p8 + 환경변수 확인.';
+  } else if ((a && a.status === 400 && /Topic/i.test(a.reason ?? '')) || (la && la.status === 400 && /Topic/i.test(la.reason ?? ''))) {
+    hint = `BadTopic → 번들ID 불일치. apns-topic=${config.apns.bundleId} 가 앱 번들ID(com.sangjin.Waito)와 대소문자까지 일치해야 함.`;
+  } else if (a?.reason === 'BadDeviceToken' || la?.reason === 'BadDeviceToken') {
+    hint = 'BadDeviceToken → 샌드박스/운영 APNs 환경 불일치. TestFlight 은 production 토큰 → APNS_PRODUCTION=true 필요.';
+  } else if (!row.apns_token) {
+    hint = 'apns_token 미등록 → 표준 배너 불가(중간 상태 변경 알림 안 옴). 앱이 PUT /api/devices/apns-token 등록을 못한 상태.';
+  } else if (a?.ok || la?.ok) {
+    hint = 'APNs 200 OK → 서버→APNs 전달 성공. 기기에 안 뜨면 기기 알림 설정/집중모드(방해금지) 확인.';
+  } else {
+    hint = `미상 — alert=${JSON.stringify(a)}, liveActivity=${JSON.stringify(la)}`;
+  }
+
+  return { ...base, found: true, currentStatus: status, tokens, alertResult, liveActivityResult, hint };
 }
 
 /**

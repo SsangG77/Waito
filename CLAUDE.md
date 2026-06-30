@@ -151,7 +151,7 @@ Live Activity Expanded View
 │   ├── trackings.ts                    # 택배 CRUD(PUT /:id = 품명·메모 수정) + push-token 등록 + force 추가
 │   ├── devices.ts                      # 디바이스 등록 + push-to-start-token + PUT /apns-token(일반알림) + GET /me(포인트) + POST /unlock-part
 │   ├── webhooks.ts                     # tracker.delivery 콜백 → track 재조회
-│   └── admin.ts                        # credential 관리 HTML 페이지
+│   └── admin.ts                        # credential 관리 HTML + GET /admin/force-push(디버그: 강제 푸시+APNs 결과 진단)
 └── services/
     ├── trackerApi.ts                   # tracker.delivery GraphQL(track/registerWebhook)
     ├── pollingService.ts               # 폴링 + webhook keep-alive 스케줄러
