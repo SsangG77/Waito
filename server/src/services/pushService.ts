@@ -84,13 +84,14 @@ export async function sendLiveActivityUpdate(
   };
 
   if (isEnd) {
-    // 배송 완료를 사용자가 인지하도록 배너 알림을 띄우고, 최종 상태를 1시간 보여준 뒤 정리
+    // 배송 완료(도착)를 배너로 알린 뒤, LA/DI 카드는 즉시 제거한다.
+    // (dismissal-date 를 현재 시각으로 두면 시스템이 도착 푸시 수신 즉시 카드를 내림)
     aps.alert = {
       title: '배송 완료',
       body: items[0]?.statusLabel
         ?? (items[0] ? STATUS_DESCRIPTIONS[items[0].status] : STATUS_DESCRIPTIONS[DeliveryStatus.Delivered]),
     };
-    aps['dismissal-date'] = now + 60 * 60;
+    aps['dismissal-date'] = now;  // 즉시 삭제(도착 시 LA/DI 에서 바로 사라지게)
   }
   // update(중간 상태 변경)는 alert 없이 화면만 조용히 갱신 (배너 알림 없음)
 
