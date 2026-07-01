@@ -180,4 +180,50 @@ router.put('/push-to-start-token', (req: Request, res: Response) => {
   res.json({ success: true });
 });
 
+// PUT /api/devices/live-activity — 단일 Live Activity 의 갱신 토큰 + 담긴 택배 id 목록을 디바이스 단위로 동기화
+// body: { deviceToken, trackingIds?: number[], pushToken?: string, truckConfig? }
+// (iOS 가 LA 를 (재)구성하거나 pushToken 이 갱신될 때마다 호출 → 서버가 전체 items 재구성 근거로 사용)
+router.put('/live-activity', (req: Request, res: Response) => {
+  const { deviceToken, trackingIds, pushToken, truckConfig } = req.body;
+
+  if (!deviceToken || typeof deviceToken !== 'string') {
+    res.status(400).json({ error: 'deviceToken is required' });
+    return;
+  }
+  // null / 미제공(undefined) 은 모두 "이 필드는 건드리지 않음"으로 취급(COALESCE 로 기존 유지).
+  const provideIds = trackingIds !== undefined && trackingIds !== null;
+  const providePush = pushToken !== undefined && pushToken !== null;
+  if (provideIds && (!Array.isArray(trackingIds) || !trackingIds.every(n => Number.isInteger(n)))) {
+    res.status(400).json({ error: 'trackingIds must be an array of integers' });
+    return;
+  }
+  if (providePush && (typeof pushToken !== 'string' || !/^[0-9a-fA-F]+$/.test(pushToken) || pushToken.length > 200)) {
+    res.status(400).json({ error: 'pushToken must be a hex string' });
+    return;
+  }
+
+  const db = getDb();
+  const device = db.prepare('SELECT id FROM devices WHERE device_token = ?').get(deviceToken) as
+    | { id: number }
+    | undefined;
+  if (!device) {
+    res.status(404).json({ error: 'Device not registered. Call POST /api/devices/register first' });
+    return;
+  }
+
+  // 제공된 값만 갱신(미제공은 기존 유지, COALESCE)
+  const idsJson = provideIds ? JSON.stringify(trackingIds) : null;
+  const truckConfigJson = truckConfig ? JSON.stringify(truckConfig) : null;
+  db.prepare(
+    `UPDATE devices
+     SET la_tracking_ids = COALESCE(?, la_tracking_ids),
+         live_activity_push_token = COALESCE(?, live_activity_push_token),
+         truck_config = COALESCE(?, truck_config),
+         updated_at = datetime('now')
+     WHERE id = ?`,
+  ).run(idsJson, providePush ? pushToken : null, truckConfigJson, device.id);
+
+  res.json({ success: true });
+});
+
 export default router;

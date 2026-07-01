@@ -145,6 +145,26 @@ actor APIClient {
         )
     }
 
+    /// 단일 Live Activity 의 담긴 택배 id 목록(순서 보존)과 갱신 토큰을 디바이스 단위로 동기화.
+    /// 서버는 이 목록으로 상태 변경 시 전체 items 를 재구성해 하나의 LA 토큰으로 보낸다.
+    /// (목록만/토큰만 각각 nil 로 두고 부분 갱신 가능)
+    func syncLiveActivity(
+        deviceToken: String,
+        trackingIds: [Int]? = nil,
+        pushToken: String? = nil,
+        truckConfig: TruckConfig? = nil
+    ) async throws {
+        let _: SuccessResponse = try await put(
+            "/api/devices/live-activity",
+            body: LiveActivitySyncRequest(
+                deviceToken: deviceToken,
+                trackingIds: trackingIds,
+                pushToken: pushToken,
+                truckConfig: truckConfig
+            )
+        )
+    }
+
     // MARK: - Carriers
 
     func getCarriers() async throws -> [Carrier] {

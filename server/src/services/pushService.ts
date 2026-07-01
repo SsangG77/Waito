@@ -115,95 +115,128 @@ export async function sendLiveActivityUpdate(
  * 별도의 8시간 재시작 타이머를 두지 않고, "상태가 바뀌는 순간"에만 (재)시작하므로
  * 의미 없는 재시작 알림이 발생하지 않는다. (완료 상태는 굳이 되살리지 않음)
  */
-export async function pushTrackingUpdate(trackingId: number, status: DeliveryStatus): Promise<void> {
+function parseIdArray(raw: string | null): number[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((n): n is number => Number.isInteger(n)) : [];
+  } catch {
+    return [];
+  }
+}
+
+export async function pushTrackingUpdate(changedTrackingId: number, changedStatus: DeliveryStatus): Promise<void> {
   const db = getDb();
-  const row = db
+
+  // 바뀐 택배가 속한 디바이스 + 디바이스 단위 Live Activity 정보(단일 LA 토큰 + 담긴 택배 id 목록)
+  const dev = db
     .prepare(
-      `SELECT t.live_activity_push_token, t.live_activity_started_at,
-              t.tracking_number, t.carrier_name, t.item_name, t.estimated_delivery, t.created_at,
-              d.device_token, d.push_to_start_token, d.truck_config, d.apns_token,
-              (SELECT COUNT(*) FROM tracking_events e WHERE e.tracking_id = t.id) AS event_count,
+      `SELECT d.id AS device_id, d.device_token, d.push_to_start_token, d.truck_config,
+              d.apns_token, d.live_activity_push_token AS la_token, d.la_tracking_ids,
+              t.item_name AS changed_item_name, t.carrier_name AS changed_carrier,
               (SELECT e.description FROM tracking_events e WHERE e.tracking_id = t.id
-                 ORDER BY e.event_time DESC LIMIT 1) AS last_event_description
+                 ORDER BY e.event_time DESC LIMIT 1) AS changed_label
        FROM trackings t JOIN devices d ON d.id = t.device_id
        WHERE t.id = ?`,
     )
-    .get(trackingId) as
+    .get(changedTrackingId) as
     | {
-        live_activity_push_token: string | null;
-        live_activity_started_at: string | null;
-        tracking_number: string;
-        carrier_name: string;
-        item_name: string;
-        estimated_delivery: string | null;
-        created_at: string | null;
+        device_id: number;
         device_token: string;
         push_to_start_token: string | null;
         truck_config: string | null;
         apns_token: string | null;
-        event_count: number;
-        last_event_description: string | null;
+        la_token: string | null;
+        la_tracking_ids: string | null;
+        changed_item_name: string;
+        changed_carrier: string;
+        changed_label: string | null;
       }
     | undefined;
+  if (!dev) return;
 
-  if (!row) return;
+  const truckConfig = safeParseJson(dev.truck_config);
 
-  const item: TrackingItemState = {
-    trackingNumber: row.tracking_number,
-    status,
-    carrierName: row.carrier_name,
-    itemName: row.item_name,
-    estimatedDelivery: row.estimated_delivery,
-    eventCount: row.event_count ?? 0,
-    statusLabel: row.last_event_description ?? null,
-    departureDate: row.created_at ?? null,
-  };
-  const truckConfig = safeParseJson(row.truck_config);
-  const isEnd = status === DeliveryStatus.Delivered;
+  // LA 에 담긴 택배 전부를 순서대로 items 로 재구성 — 배송완료(도착)는 제외해 자동으로 사라지게 한다.
+  const itemStmt = db.prepare(
+    `SELECT tracking_number, current_status, carrier_name, item_name, estimated_delivery, created_at,
+            (SELECT COUNT(*) FROM tracking_events e WHERE e.tracking_id = trackings.id) AS event_count,
+            (SELECT e.description FROM tracking_events e WHERE e.tracking_id = trackings.id
+               ORDER BY e.event_time DESC LIMIT 1) AS last_event_description
+     FROM trackings WHERE id = ?`,
+  );
+  const items: TrackingItemState[] = [];
+  for (const id of parseIdArray(dev.la_tracking_ids)) {
+    const t = itemStmt.get(id) as
+      | {
+          tracking_number: string; current_status: DeliveryStatus; carrier_name: string;
+          item_name: string; estimated_delivery: string | null; created_at: string | null;
+          event_count: number; last_event_description: string | null;
+        }
+      | undefined;
+    if (!t) continue;
+    if (t.current_status === DeliveryStatus.Delivered) continue; // 도착 → LA 에서 제거
+    items.push({
+      trackingNumber: t.tracking_number,
+      status: t.current_status,
+      carrierName: t.carrier_name,
+      itemName: t.item_name,
+      estimatedDelivery: t.estimated_delivery,
+      eventCount: t.event_count ?? 0,
+      statusLabel: t.last_event_description ?? null,
+      departureDate: t.created_at ?? null,
+    });
+  }
 
-  // Activity 가 아직 살아있을 것으로 보이는지 (시작 후 8시간 미만)
-  const startedAt = parseSqliteUtc(row.live_activity_started_at);
-  const aliveByTime = startedAt > 0 && Date.now() - startedAt < ACTIVITY_MAX_MS;
-
-  // Live Activity 경로가 이미 배너를 띄웠는지(=중복 알림 방지용). end / push-to-start 는 배너 동반.
   let bannerShown = false;
-  // update 가 처리(성공/설정미비)되어 push-to-start 폴백이 불필요한지
   let laHandled = false;
 
-  // 1) 살아있으면 update 로 화면 갱신 (중간 상태는 무음, end 는 배너)
-  if (row.live_activity_push_token && aliveByTime) {
-    const result = await sendLiveActivityUpdate(row.live_activity_push_token, [item], truckConfig, isEnd);
-    if (result.ok) {
-      bannerShown = isEnd;   // end 만 배너, 중간 update 는 무음
-      laHandled = true;
-    } else if (result.skipped) {
-      laHandled = true;      // APNs 설정 미비 — 폴백도 어차피 skip
-    } else {
-      if (result.reason === 'Unregistered') {
-        db.prepare('UPDATE trackings SET live_activity_push_token = NULL WHERE id = ?').run(trackingId);
+  // 1) 디바이스 LA 갱신 토큰이 있으면 전체 items 로 한 번에 갱신(무음).
+  //    items 가 비면(마지막 택배까지 도착) LA 를 종료 + 즉시 dismissal → 카드 삭제(배너 동반).
+  if (dev.la_token) {
+    if (items.length > 0) {
+      const result = await sendLiveActivityUpdate(dev.la_token, items, truckConfig, false);
+      if (result.ok || result.skipped) laHandled = true;
+      else if (result.reason === 'Unregistered') {
+        db.prepare('UPDATE devices SET live_activity_push_token = NULL WHERE id = ?').run(dev.device_id);
       }
-      // update 실패(만료 등) → 아래 push-to-start 폴백으로 진행
+    } else {
+      const result = await sendLiveActivityUpdate(dev.la_token, [], truckConfig, true);
+      if (result.ok) { laHandled = true; bannerShown = true; }  // end 페이로드가 배송완료 배너 동반
+      else if (result.skipped) laHandled = true;
+      else if (result.reason === 'Unregistered') {
+        db.prepare('UPDATE devices SET live_activity_push_token = NULL WHERE id = ?').run(dev.device_id);
+      }
     }
   }
 
-  // 2) Activity 가 죽었거나 update 실패 → 이번 상태 변경을 계기로 push-to-start 로 되살림 (배너 동반)
-  if (!laHandled && !isEnd && row.push_to_start_token) {
-    const result = await sendPushToStartEvent(row.push_to_start_token, row.device_token, [item], truckConfig);
+  // 2) LA 가 없거나 갱신 실패 + 표시할 items 존재 → push-to-start 로 전체 items 로 되살림(배너 동반)
+  if (!laHandled && items.length > 0 && dev.push_to_start_token) {
+    const result = await sendPushToStartEvent(dev.push_to_start_token, dev.device_token, items, truckConfig);
     if (result.ok) {
       bannerShown = true;
-      db.prepare("UPDATE trackings SET live_activity_started_at = datetime('now') WHERE id = ?").run(trackingId);
     } else if (result.reason === 'Unregistered') {
-      console.warn(`[Push-to-Start] 토큰 무효화 (tracking ${trackingId}, Unregistered)`);
-      db.prepare('UPDATE devices SET push_to_start_token = NULL WHERE device_token = ?').run(row.device_token);
+      console.warn(`[Push-to-Start] 토큰 무효화 (device ${dev.device_id}, Unregistered)`);
+      db.prepare('UPDATE devices SET push_to_start_token = NULL WHERE id = ?').run(dev.device_id);
     } else if (!result.skipped) {
-      console.warn(`[Push-to-Start] 되살리기 실패 (tracking ${trackingId}, reason=${result.reason ?? 'unknown'})`);
+      console.warn(`[Push-to-Start] 되살리기 실패 (device ${dev.device_id}, reason=${result.reason ?? 'unknown'})`);
     }
   }
 
-  // 3) 모든 상태 변경 → 일반 알림(배너). 단 위에서 이미 배너를 띄웠으면 중복 방지로 생략.
-  //    Live Activity 미사용 택배도 이 경로로 알림을 받는다.
-  if (!bannerShown && row.apns_token) {
-    await sendStatusAlert(row.device_token, row.apns_token, item, status);
+  // 3) 바뀐 택배의 상태 변경 배너(표준 알림) — 위에서 배너를 안 띄웠고 apns_token 이 있을 때.
+  //    LA update 는 무음이라 상태 변경 알림은 이 경로가 담당(LA 미사용 택배 포함).
+  if (!bannerShown && dev.apns_token) {
+    const changedItem: TrackingItemState = {
+      trackingNumber: '',
+      status: changedStatus,
+      carrierName: dev.changed_carrier,
+      itemName: dev.changed_item_name,
+      estimatedDelivery: null,
+      eventCount: 0,
+      statusLabel: dev.changed_label ?? null,
+      departureDate: null,
+    };
+    await sendStatusAlert(dev.device_token, dev.apns_token, changedItem, changedStatus);
   }
 }
 

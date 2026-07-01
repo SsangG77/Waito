@@ -276,11 +276,15 @@ final class TrackingService {
     /// "항상 노출"이 켜져 있어도 배송 아이템 토글이 켜져 있으면 배송 상태 LA/DI 를 우선 표시한다.
     func reconcileLiveActivity() async {
         if !liveTrackingNumbers.isEmpty {
-            await updateLiveActivity()    // 배송 상태 LA/DI (ambient 보다 우선)
-        } else if ambientEnabled {
-            await startAmbientActivity()  // 배송 없음 + 항상 노출 → 트럭만
+            await updateLiveActivity()    // 배송 상태 LA/DI (ambient 보다 우선, 내부에서 서버 동기화)
         } else {
-            await endLiveActivity()
+            // LA 목록이 비었음을 서버에 반영 → 다음 상태 변경 push 가 남은 items 없이 LA 를 종료
+            await syncLiveActivityToServer()
+            if ambientEnabled {
+                await startAmbientActivity()  // 배송 없음 + 항상 노출 → 트럭만
+            } else {
+                await endLiveActivity()
+            }
         }
     }
 
@@ -390,6 +394,25 @@ final class TrackingService {
         )
     }
 
+    /// 현재 LA 에 담긴 택배들의 서버 id 목록(순서 보존, 더미/미등록 제외)
+    private func liveTrackingIds() -> [Int] {
+        liveTrackingNumbers.compactMap { number in
+            trackings.first(where: { $0.trackingNumber == number })?.id
+        }
+    }
+
+    /// LA 목록(+선택적으로 갱신 토큰)을 디바이스 단위로 서버에 동기화.
+    /// 서버는 이 목록으로 상태 변경 시 전체 items 를 재구성해 하나의 LA 토큰으로 보낸다(다중 택배 정합).
+    private func syncLiveActivityToServer(pushToken: String? = nil) async {
+        guard let deviceToken else { return }
+        try? await api.syncLiveActivity(
+            deviceToken: deviceToken,
+            trackingIds: liveTrackingIds(),
+            pushToken: pushToken,
+            truckConfig: TruckConfigStore.shared.config
+        )
+    }
+
     /// 트럭 설정 변경 시 실행 중인 모든 Live Activity에 즉시 반영
     func pushTruckConfig() async {
         var newConfig = TruckConfigStore.shared.config
@@ -403,6 +426,8 @@ final class TrackingService {
 
     private func updateLiveActivity() async {
         guard !liveTrackingNumbers.isEmpty else { return }
+        // LA 에 담긴 택배 목록을 서버에 반영(상태 변경 push 가 전체 items 를 재구성하는 근거)
+        await syncLiveActivityToServer()
         let state = buildContentState()
 
         // 이미 활성 Activity가 있으면 업데이트
@@ -434,14 +459,11 @@ final class TrackingService {
                 pushType: .token
             )
 
-            // Push token을 서버에 등록 (첫 번째 택배 ID 사용)
-            if let firstNumber = liveTrackingNumbers.first,
-               let tracking = trackings.first(where: { $0.trackingNumber == firstNumber }) {
-                Task {
-                    for await tokenData in activity.pushTokenUpdates {
-                        let token = tokenData.map { String(format: "%02x", $0) }.joined()
-                        try? await api.updatePushToken(trackingId: tracking.id, pushToken: token)
-                    }
+            // LA 갱신 토큰을 디바이스 단위로 서버에 등록 (어느 택배가 바뀌든 이 하나의 토큰으로 전체 items 갱신)
+            Task {
+                for await tokenData in activity.pushTokenUpdates {
+                    let token = tokenData.map { String(format: "%02x", $0) }.joined()
+                    await syncLiveActivityToServer(pushToken: token)
                 }
             }
         } catch {

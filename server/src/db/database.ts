@@ -65,6 +65,10 @@ function runColumnMigrations(database: Database.Database): void {
   addColumnIfMissing(database, 'devices', 'unlocked_parts', 'TEXT');
   // 표준 원격알림(일반 배너)용 APNs device token. Live Activity 토큰과 별개.
   addColumnIfMissing(database, 'devices', 'apns_token', 'TEXT');
+  // 디바이스당 단일 Live Activity 의 갱신(update) 토큰 — 어느 택배가 바뀌든 이 토큰으로 전체 items 갱신.
+  addColumnIfMissing(database, 'devices', 'live_activity_push_token', 'TEXT');
+  // 그 LA 에 현재 담긴 택배 id 목록(JSON 배열, 순서 보존). iOS 가 동기화 → 서버가 전체 items 재구성에 사용.
+  addColumnIfMissing(database, 'devices', 'la_tracking_ids', 'TEXT');
 }
 
 function addColumnIfMissing(

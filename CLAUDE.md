@@ -231,7 +231,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **APNs 토큰 인증**: `apnsClient.ts` 가 `.p8` 키로 ES256 JWT 서명(Node 내장 crypto) + HTTP/2 전송. 외부 패키지 0.
   - 키/설정 없으면 모든 푸시 graceful skip (앱은 인앱 동작). `.p8` 설정법은 Notion "p8 파일 설정" 참고.
   - sandbox/production 은 `APNS_PRODUCTION` 로 전환. `apnsClient.sendPush(generic)` → LA: push-type `liveactivity` + topic `<bundleId>.push-type.liveactivity` / 일반 알림: `sendAlertPush` push-type `alert` + topic `<bundleId>`.
-- **세 종류 토큰**: update 토큰(Activity 인스턴스당, 갱신용) / push-to-start 토큰(디바이스당, 되살리기용, iOS 17.2+) / **표준 원격알림 토큰(`devices.apns_token`, 일반 배너용)**.
+- **세 종류 토큰**: update 토큰(**디바이스당 단일 LA**, `devices.live_activity_push_token`, 갱신용) / push-to-start 토큰(디바이스당, 되살리기용, iOS 17.2+) / **표준 원격알림 토큰(`devices.apns_token`, 일반 배너용)**.
+- **다중 아이템 정합(디바이스 단위 LA)**: LA 는 디바이스당 1개 + `items` 배열. iOS 가 LA 에 담긴 택배 id 목록을 `PUT /api/devices/live-activity`(`devices.la_tracking_ids`)로 동기화하고 update 토큰도 여기서 디바이스 단위로 등록. 서버 `pushTrackingUpdate` 는 **바뀐 1개가 아니라 그 목록으로 전체 items 를 재구성**해 한 번에 갱신(배송완료=도착은 items 에서 제외 → 자동 삭제, 마지막 하나면 LA 종료). → 상태 변경 시 다른 택배가 사라지거나(③) LA 박스가 중복 생기던(④) 문제 해결.
   - 앱이 `Activity.pushToStartTokenUpdates` 관찰 → `truckConfig` 와 함께 서버 등록. 표준 토큰은 `AppDelegate.didRegisterForRemoteNotifications` → `PUT /api/devices/apns-token`(ContentView.task 의 `syncAPNsToken` 재시도 경로 병행).
 - **8시간 한도 대응**: Live Activity 는 8h 후 시스템이 종료. 별도 타이머 없이 **상태 변경 시점에** 죽었으면 push-to-start 로 되살리는 이벤트 기반.
 - **알림 정책**: 상태 변경당 **배너 정확히 1개**. LA 중간 update = 무음 / 배송완료 end = 배너 + **도착 시 LA/DI 카드 즉시 제거**(`dismissal-date` = 현재시각) / push-to-start 되살림 = 배너(Apple 강제). **그 외(LA가 배너 안 띄운 모든 경우) = 표준 일반 알림(`sendStatusAlert`)** 으로 배너 — LA 미사용 택배 포함 모든 택배가 상태 변경 시 알림 받음. `pushService` 의 `bannerShown` 플래그로 중복 방지.

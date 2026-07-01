@@ -218,6 +218,15 @@ struct PushToStartTokenRequest: Encodable {
     let truckConfig: TruckConfig?
 }
 
+/// 단일 Live Activity 의 갱신 토큰 + 담긴 택배 id 목록을 디바이스 단위로 서버에 동기화.
+/// (nil 필드는 인코딩에서 생략 → 서버가 기존 값 유지. 목록만/토큰만 각각 갱신 가능)
+struct LiveActivitySyncRequest: Encodable {
+    let deviceToken: String
+    let trackingIds: [Int]?
+    let pushToken: String?
+    let truckConfig: TruckConfig?
+}
+
 // MARK: - API Error
 
 struct APIErrorResponse: Decodable {
