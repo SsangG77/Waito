@@ -77,19 +77,12 @@ struct TrackingRowView: View {
     }
     
     var horizontalProgress: some View {
-        Group {
-            // 이벤트가 있으면 "있는 그대로" 이벤트 개수만큼 점(전부 지나감 → 채움).
-            // 없으면(확인중/구버전 서버) 기존 status 기반 7단계로 폴백.
-            if let events = tracking.events, !events.isEmpty {
-                eventDotBar(count: events.count)
-            } else {
-                statusFallbackBar
-            }
-        }
-        .frame(height: 5)
-        .padding(.horizontal, 14)
-        .padding(.bottom, 8)
-        .transition(.opacity)
+        // 접힘(간략)은 어느 택배든 고정 6단계로 과정을 표시(②). 펼치면 실제 이벤트 상태.
+        fixedStepBar
+            .frame(height: 5)
+            .padding(.horizontal, 14)
+            .padding(.bottom, 8)
+            .transition(.opacity)
     }
 
     /// 이벤트 개수 기반 가로 점 바 — 모든 점 채움(지나간 이벤트).
@@ -123,10 +116,12 @@ struct TrackingRowView: View {
         }
     }
 
-    /// 이벤트 없을 때 폴백 — 기존 status 기반 고정 7단계 바.
-    private var statusFallbackBar: some View {
+    /// 접힘(간략) 진행바 — 어느 택배든 고정 6단계(접수·집화완료·간선상차·배송출발·배송중·배송완료).
+    /// 현재 상태 인덱스까지 채움. 펼치면 실제 이벤트 타임라인(②).
+    private var fixedStepBar: some View {
         GeometryReader { geo in
-            let steps = 7
+            let steps = DeliveryStatus.collapsedStages.count   // 6
+            let curIndex = tracking.currentStatus.collapsedStepIndex
             let dotSize: CGFloat = 5
             let gap: CGFloat = 4
             let lineWidth = (geo.size.width - (dotSize + gap * 2) * CGFloat(steps) + gap * 2) / CGFloat(steps - 1)
@@ -135,19 +130,15 @@ struct TrackingRowView: View {
             ZStack(alignment: .leading) {
                 ForEach(0..<steps - 1, id: \.self) { i in
                     let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i) + dotSize + gap
-                    let filled = tracking.currentStatus.isCompleted || CGFloat(i + 1) / CGFloat(steps) <= tracking.currentStatus.progress
-
                     Rectangle()
-                        .fill(filled ? activeColor : Color.pixelBorder)
+                        .fill(i < curIndex ? activeColor : Color.pixelBorder)
                         .frame(width: lineWidth, height: 1)
                         .offset(x: x, y: dotSize / 2 - 0.5)
                 }
                 ForEach(0..<steps, id: \.self) { i in
                     let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i)
-                    let filled = tracking.currentStatus.isCompleted || CGFloat(i) / CGFloat(steps) < tracking.currentStatus.progress
-
                     Rectangle()
-                        .fill(filled ? activeColor : Color.pixelBorder)
+                        .fill(i <= curIndex ? activeColor : Color.pixelBorder)
                         .frame(width: dotSize, height: dotSize)
                         .offset(x: x)
                 }

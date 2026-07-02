@@ -88,7 +88,7 @@ struct LockScreenTrackingRow: View {
                     .lineLimit(1)
                     .layoutPriority(1)   // 물품명 우선, 긴 상태 라벨이 먼저 truncate
                 Spacer(minLength: 8)
-                Text(item.statusLabel ?? item.status.displayName)
+                Text(item.status.displayName)   // 원본 메시지 대신 간단한 단계명(예: 간선상차)
                     .font(.caption2)
                     .fontWeight(.semibold)
                     .foregroundStyle(wPixelStatusColor(item.status))

@@ -29,7 +29,7 @@ struct WaitoLiveActivity: Widget {
                                 .foregroundStyle(Color.wPixelMuted)
                                 .lineLimit(1)
                             Spacer()
-                            Text(primary.statusLabel ?? primary.status.displayName)
+                            Text(primary.status.displayName)   // DI: 원본 메시지 대신 간단한 단계명(예: 간선상차)
                                 .font(.system(size: 10, weight: .semibold))
                                 .foregroundStyle(Color.wPixelOrange)
                                 .lineLimit(1)

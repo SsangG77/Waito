@@ -343,8 +343,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### 가변 이벤트 타임라인 (고정 7단계 폐기)
 - 진행 타임라인 점 개수 = **실제 택배사 이벤트 개수**(가변). 라벨 = 원본 `description`. 이벤트만 표시(전부 지나감, 트럭은 마지막 점). 이벤트 없으면 status 기반 7단계 폴백.
 - 데이터: 서버 `GET /api/trackings` 목록이 각 택배의 `events` 전체 포함(`TrackingListItem.events`). LA는 위젯 타깃이 `TrackingEvent`를 못 보므로 **compact 필드(`eventCount`/`statusLabel`)만** 전달.
-- 인앱: 접힘 가로바·펼침 세로 타임라인 모두 `TrackingRowView`에서 events 기반. 펼침은 점마다 `description` 라벨.
-- 위젯: 잠금화면 `LockScreenStatusTimeline`(가변 점, 상한 14), DI 펼침 `ExpandedMetroTimelineView`(center=물품명+타임라인, bottom=출발날짜 ⟷ 상태라벨).
+- 인앱(`TrackingRowView`): **접힘 가로바 = 고정 6단계**(어느 택배든 접수·집화완료·간선상차·배송출발·배송중·배송완료, 간선하차는 간선상차에 병합 — `DeliveryStatus.collapsedStages`/`collapsedStepIndex`). **펼침 세로 타임라인 = 실제 events 기반**(점마다 `description` 라벨). (②) `eventDotBar` 는 접힘 변경으로 미사용됨.
+- 위젯: 잠금화면 `LockScreenStatusTimeline`(가변 점, 상한 14), DI 펼침 `ExpandedMetroTimelineView`(center=물품명+타임라인, bottom=출발날짜 ⟷ 상태라벨). **DI·잠금화면의 현재 상태 텍스트 = `status.displayName`(예: 간선상차)** — 택배사 원본 `statusLabel` 대신 간단한 단계명 표시(⑤, `WaitoLiveActivityView`/`LockScreenActivityView`).
 - `ExpandedTruckPathView`(폐기된 Island Circuit 1차 디자인) 삭제됨.
 
 ### 잠금화면 idle (항상 노출)
