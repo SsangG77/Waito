@@ -516,7 +516,10 @@ struct DeliveryListView: View {
     }
 
     private var isFormValid: Bool {
-        !newCarrierId.isEmpty && !newTrackingNumber.trimmingCharacters(in: .whitespaces).isEmpty
+        // 택배사·운송장번호·품명(이름)은 필수. 메모는 옵션.
+        !newCarrierId.isEmpty
+            && !newTrackingNumber.trimmingCharacters(in: .whitespaces).isEmpty
+            && !newItemName.trimmingCharacters(in: .whitespaces).isEmpty
     }
 
     // MARK: - Actions
