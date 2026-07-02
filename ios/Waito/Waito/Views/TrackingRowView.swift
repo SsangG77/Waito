@@ -66,7 +66,10 @@ struct TrackingRowView: View {
                         .font(pixelFont(10))
                         .foregroundStyle(Color.pixelOrange)
                 case .ok:
-                    EmptyView()
+                    // 정상 배송: 현재 단계명(간선상차 등)을 같은 자리에 표시 — DI/LA 와 동일한 status.displayName
+                    Text("· \(tracking.currentStatus.displayName)")
+                        .font(pixelFont(10))
+                        .foregroundStyle(progressColor)
                 }
             }
         }
