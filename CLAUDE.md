@@ -343,7 +343,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### 가변 이벤트 타임라인 (고정 7단계 폐기)
 - 진행 타임라인 점 개수 = **실제 택배사 이벤트 개수**(가변). 라벨 = 원본 `description`. 이벤트만 표시(전부 지나감, 트럭은 마지막 점). 이벤트 없으면 status 기반 7단계 폴백.
 - 데이터: 서버 `GET /api/trackings` 목록이 각 택배의 `events` 전체 포함(`TrackingListItem.events`). LA는 위젯 타깃이 `TrackingEvent`를 못 보므로 **compact 필드(`eventCount`/`statusLabel`)만** 전달.
-- 인앱(`TrackingRowView`): **접힘 가로바 = 고정 6단계**(어느 택배든 접수·집화완료·간선상차·배송출발·배송중·배송완료, 간선하차는 간선상차에 병합 — `DeliveryStatus.collapsedStages`/`collapsedStepIndex`). **펼침 세로 타임라인 = 실제 events 기반**(점마다 `description` 라벨). (②) `eventDotBar` 는 접힘 변경으로 미사용됨.
+- **상태 단계 = 택배사 코드 5개**(접수·집화완료·간선·배송출발·배송완료). `statusMapper` 가 tracker.delivery 코드를 **1:1 매핑**(IN_TRANSIT→간선(inTransitIn), OUT_FOR_DELIVERY→배송출발). **간선상차/하차·배송중 세분화(문구 키워드 추측)는 폐기** → enum 의 `inTransitOut`/`delivering` 은 미사용(deprecated, 호환용 유지). `DeliveryStatus.collapsedStages`(5)/`collapsedStepIndex`(inTransitOut→간선2, delivering→배송출발3).
+- 인앱(`TrackingRowView`): **접힘 가로바·폴백 타임라인 = 고정 5단계**(`collapsedStages`). **펼침 세로 타임라인 = 실제 events 기반**(점마다 원본 `description` 라벨). (②) `eventDotBar` 미사용.
 - 위젯: 잠금화면 `LockScreenStatusTimeline`(가변 점, 상한 14), DI 펼침 `ExpandedMetroTimelineView`(center=물품명+타임라인, bottom=출발날짜 ⟷ 상태라벨). **현재 상태 텍스트 = `status.displayName`(예: 간선상차)로 인앱·DI·잠금화면 전부 통일** — 인앱 목록 접힘 행은 날짜 옆(확인중/번호확인필요와 같은 자리)에, DI/LA 는 상태 라벨에 표시. 택배사 **원본 메시지는 인앱 펼침 타임라인 점 라벨에만**(⑤, `TrackingRowView.mainInfo`/`WaitoLiveActivityView`/`LockScreenActivityView`).
 - `ExpandedTruckPathView`(폐기된 Island Circuit 1차 디자인) 삭제됨.
 
@@ -355,7 +356,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ### 디버그
 - DEBUG 빌드에선 오류 팝업 억제(`DeliveryListView`에서 `showError` 게이팅) — 로컬 서버 미가동 시 네트워크 오류 팝업 방지.
-- **테스트 운송장 `test970719`**(서버 `trackerApi.ts`/`pollingService.ts`): tracker.delivery 실제 조회 없이 더미 배송 데이터 응답. **`created_at` 기준 2시간마다 1단계 전진**(접수→집화→간선상차→간선하차→배송출발→배송중→배송완료), **배송완료 후 2시간 뒤 접수로 순환**(전체 14h 주기). 일반 폴링과 달리 전진 제약(`resolveNewStatus`)·`delivered_at` 설정 없이 `pollTestTracking` 으로 처리하고, 30분 cron 폴링에 상태 무관 항상 포함. webhook 등록도 skip. 빠른 확인은 `TEST_STEP_INTERVAL_MS` 를 임시 단축.
+- **테스트 운송장 `test970719`**(서버 `trackerApi.ts`/`pollingService.ts`): tracker.delivery 실제 조회 없이 더미 배송 데이터 응답. **`created_at` 기준 2시간마다 1단계 전진**(접수→집화→간선→배송출발→배송완료, 5단계 = 택배사 코드), **배송완료 후 2시간 뒤 접수로 순환**(전체 10h 주기). 일반 폴링과 달리 전진 제약(`resolveNewStatus`)·`delivered_at` 설정 없이 `pollTestTracking` 으로 처리하고, 30분 cron 폴링에 상태 무관 항상 포함. webhook 등록도 skip. 빠른 확인은 `TEST_STEP_INTERVAL_MS` 를 임시 단축.
 - **관리자 모드(릴리즈에서도 동작)**: `SettingsView` 버전 박스 **5탭 → 비밀번호 `970719`** 입력 시 ON(`@AppStorage("admin_mode")`). 효과 = **디버그 토글(TEST DATA / DEBUG SUBSCRIPTION)만 노출**(`showDebugTools = DEBUG || adminMode`). 더미·구독을 자동으로 켜지 않고 사용자가 토글로 직접 제어. **켜진 상태에서 버전 5탭 재실행 → OFF**: 토글 숨김 + 켜뒀던 효과 원복(`showDummyData=false`, `setDebugUnlocked(false)`). 토글 정의/게이팅(`dummyTrackings`/`showDummyData`)은 `#if DEBUG` 밖이라 릴리즈에서도 동작. ⚠️ `admin_mode`(UI 가시성)와 `debug_unlocked`(유료 해제, DEBUG SUBSCRIPTION 토글이 제어)는 **별도 키로 분리** — 실구독과도 무관(`setDebugUnlocked` 가 실구독을 끄지 않음). 항상노출은 구독 게이팅이라 DEBUG SUBSCRIPTION 을 켜야 실제 동작.
 
 ---

@@ -1,21 +1,13 @@
 import { DeliveryStatus, STATUS_T_VALUES } from '../types/delivery.js';
 
-const IN_TRANSIT_KEYWORDS = {
-  inTransitIn: ['상차', '집하', '발송'],
-  inTransitOut: ['하차', '도착', '배달준비'],
-} as const;
-
-const OUT_FOR_DELIVERY_KEYWORDS = {
-  delivering: ['배송중', '배달중'],
-} as const;
-
 /**
- * tracker.delivery 상태 코드를 Waito DeliveryStatus로 매핑한다.
- * description(한국어)으로 IN_TRANSIT / OUT_FOR_DELIVERY를 세분화한다.
+ * tracker.delivery 상태 코드를 Waito DeliveryStatus로 1:1 매핑한다.
+ * (택배사 coarse 코드 그대로 — 상차/하차·배송중 세분화는 문구 추측이라 폐기)
+ * IN_TRANSIT → inTransitIn(간선), OUT_FOR_DELIVERY → outForDelivery(배송출발).
  */
 export function mapTrackerStatus(
   trackerCode: string,
-  description: string = '',
+  _description: string = '',
 ): DeliveryStatus | null {
   switch (trackerCode) {
     case 'INFORMATION_RECEIVED':
@@ -24,39 +16,16 @@ export function mapTrackerStatus(
     case 'AT_PICKUP':
       return DeliveryStatus.PickedUp;
 
-    case 'IN_TRANSIT': {
-      // 한국어 키워드 매칭으로 세분화
-      for (const keyword of IN_TRANSIT_KEYWORDS.inTransitOut) {
-        if (description.includes(keyword)) {
-          return DeliveryStatus.InTransitOut;
-        }
-      }
-      for (const keyword of IN_TRANSIT_KEYWORDS.inTransitIn) {
-        if (description.includes(keyword)) {
-          return DeliveryStatus.InTransitIn;
-        }
-      }
-      // 키워드 없으면 기본 inTransitIn
+    case 'IN_TRANSIT':
       return DeliveryStatus.InTransitIn;
-    }
 
-    case 'OUT_FOR_DELIVERY': {
-      for (const keyword of OUT_FOR_DELIVERY_KEYWORDS.delivering) {
-        if (description.includes(keyword)) {
-          return DeliveryStatus.Delivering;
-        }
-      }
+    case 'OUT_FOR_DELIVERY':
       return DeliveryStatus.OutForDelivery;
-    }
 
     case 'DELIVERED':
       return DeliveryStatus.Delivered;
 
-    case 'ATTEMPT_FAIL':
-    case 'EXCEPTION':
-    case 'UNKNOWN':
-      return null; // 현재 상태 유지
-
+    // ATTEMPT_FAIL / EXCEPTION / UNKNOWN 등 진행 아님 → 현재 상태 유지
     default:
       return null;
   }

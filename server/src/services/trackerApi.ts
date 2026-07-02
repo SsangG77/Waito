@@ -53,18 +53,16 @@ export const TEST_TRACKING_NUMBER = 'test970719';
 /** 테스트 더미 단계 진행 간격 — created_at 기준 2시간마다 1칸 전진. */
 export const TEST_STEP_INTERVAL_MS = 2 * 60 * 60 * 1000;
 
-/** 7단계(접수→집화→간선상차→간선하차→배송출발→배송중→배송완료). 배송완료 후 2시간 뒤 접수로 순환. */
+/** 5단계(접수→집화→간선→배송출발→배송완료) = 택배사 코드 그대로. 배송완료 후 2시간 뒤 접수로 순환. */
 export const TEST_STEPS: ReadonlyArray<{ code: string; description: string; location: string }> = [
-  { code: 'INFORMATION_RECEIVED', description: '접수',     location: '서울 강남' },
-  { code: 'AT_PICKUP',            description: '집화처리', location: '서울 강남' },
-  { code: 'IN_TRANSIT',           description: '간선상차', location: '옥천HUB' },
-  { code: 'IN_TRANSIT',           description: '간선하차', location: '대전허브' },
-  { code: 'OUT_FOR_DELIVERY',     description: '배송출발', location: '부산 해운대' },
-  { code: 'OUT_FOR_DELIVERY',     description: '배송중',   location: '부산 해운대' },
-  { code: 'DELIVERED',            description: '배송완료', location: '부산 해운대' },
+  { code: 'INFORMATION_RECEIVED', description: '접수',       location: '서울 강남' },
+  { code: 'AT_PICKUP',            description: '집화처리',   location: '서울 강남' },
+  { code: 'IN_TRANSIT',           description: '간선 이동중', location: '옥천HUB' },
+  { code: 'OUT_FOR_DELIVERY',     description: '배송출발',   location: '부산 해운대' },
+  { code: 'DELIVERED',            description: '배송완료',   location: '부산 해운대' },
 ];
 
-/** created_at(ms) 기준 현재 단계 인덱스 — 2시간마다 +1, 7단계 순환(배송완료 → 2h 후 접수). */
+/** created_at(ms) 기준 현재 단계 인덱스 — 2시간마다 +1, 5단계 순환(배송완료 → 2h 후 접수). */
 export function testStepIndex(createdAtMs: number, nowMs: number = Date.now()): number {
   const elapsed = Math.max(0, nowMs - createdAtMs);
   return Math.floor(elapsed / TEST_STEP_INTERVAL_MS) % TEST_STEPS.length;

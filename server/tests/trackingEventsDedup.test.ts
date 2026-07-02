@@ -75,10 +75,11 @@ describe('tracking_events 중복 누적 버그', () => {
 describe('test970719 사이클 리셋', () => {
   it('배송완료(step 6) 다음 사이클에서 step 0(접수)으로 초기화된다', () => {
     const created = 0;
-    expect(testStepIndex(created, 6 * TEST_STEP_INTERVAL_MS)).toBe(6); // 배송완료
-    expect(testStepIndex(created, 7 * TEST_STEP_INTERVAL_MS)).toBe(0); // 순환 → 접수
+    const n = TEST_STEPS.length; // 5 (택배사 코드)
+    expect(testStepIndex(created, (n - 1) * TEST_STEP_INTERVAL_MS)).toBe(n - 1); // 마지막(배송완료)
+    expect(testStepIndex(created, n * TEST_STEP_INTERVAL_MS)).toBe(0);           // 순환 → 접수
     expect(TEST_STEPS[0].description).toBe('접수');
-    expect(TEST_STEPS[6].description).toBe('배송완료');
+    expect(TEST_STEPS[n - 1].description).toBe('배송완료');
   });
 
   it('pollTestTracking 의 재구성 로직: 매 폴링마다 이벤트 수 = step+1 (누적 없음)', () => {
@@ -95,9 +96,10 @@ describe('test970719 사이클 리셋', () => {
       }
       return step;
     };
-    poll(6 * TEST_STEP_INTERVAL_MS); // 배송완료 → 7개
-    expect(count(db)).toBe(7);
-    poll(7 * TEST_STEP_INTERVAL_MS); // 다음 사이클 접수 → 1개로 리셋(누적 X)
+    const n = TEST_STEPS.length; // 5
+    poll((n - 1) * TEST_STEP_INTERVAL_MS); // 마지막 단계 → n개
+    expect(count(db)).toBe(n);
+    poll(n * TEST_STEP_INTERVAL_MS); // 다음 사이클 접수 → 1개로 리셋(누적 X)
     expect(count(db)).toBe(1);
     poll(20 * TEST_STEP_INTERVAL_MS); // 한참 뒤에도 누적 없이 현재 사이클만
     expect(count(db)).toBe(testStepIndex(created, 20 * TEST_STEP_INTERVAL_MS) + 1);

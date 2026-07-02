@@ -202,7 +202,7 @@ struct TrackingRowView: View {
     /// 이벤트 없을 때 폴백 — 기존 status 기반 고정 7단계 세로 타임라인.
     private var statusFallbackTimeline: some View {
         VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(DeliveryStatus.allCases.enumerated()), id: \.element) { index, stage in
+            ForEach(Array(DeliveryStatus.collapsedStages.enumerated()), id: \.element) { index, stage in
                 let isCurrent = stage == tracking.currentStatus
                 let isPast = stage.order < tracking.currentStatus.order
 
