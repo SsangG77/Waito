@@ -343,7 +343,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### 가변 이벤트 타임라인 (고정 7단계 폐기)
 - 진행 타임라인 점 개수 = **실제 택배사 이벤트 개수**(가변). 라벨 = 원본 `description`. 이벤트만 표시(전부 지나감, 트럭은 마지막 점). 이벤트 없으면 status 기반 7단계 폴백.
 - 데이터: 서버 `GET /api/trackings` 목록이 각 택배의 `events` 전체 포함(`TrackingListItem.events`). LA는 위젯 타깃이 `TrackingEvent`를 못 보므로 **compact 필드(`eventCount`/`statusLabel`)만** 전달.
-- **상태 단계 = 택배사 코드 5개**(접수·집화완료·간선·배송출발·배송완료). `statusMapper` 가 tracker.delivery 코드를 **1:1 매핑**(IN_TRANSIT→간선(inTransitIn), OUT_FOR_DELIVERY→배송출발). **간선상차/하차·배송중 세분화(문구 키워드 추측)는 폐기** → enum 의 `inTransitOut`/`delivering` 은 미사용(deprecated, 호환용 유지). `DeliveryStatus.collapsedStages`(5)/`collapsedStepIndex`(inTransitOut→간선2, delivering→배송출발3).
+- **상태 단계 = 택배사 코드 5개**(접수·집화완료·간선·배송출발·배송완료). `statusMapper` 가 tracker.delivery 코드를 **1:1 매핑**(IN_TRANSIT→간선(inTransitIn), OUT_FOR_DELIVERY→배송출발). **간선상차/하차·배송중 세분화(문구 키워드 추측)는 폐기** → enum 의 `inTransitOut`/`delivering` 은 미사용(deprecated, 호환용 유지). `DeliveryStatus.collapsedStages`(5)/`collapsedStepIndex`(inTransitOut→간선2, delivering→배송출발3). 게이지·트럭 위치용 `progress`는 **5단계 균등 0.1/0.3/0.5/0.7/0.9**(표시 전용, 서버 전진 판정 STATUS_T_VALUES 와 별개). ⚠️ 파일 상단 "t값 매핑" 표(0.05~0.95, 7단계)는 구 설계 기록이라 실제와 다름.
 - 인앱(`TrackingRowView`): **접힘 가로바·폴백 타임라인 = 고정 5단계**(`collapsedStages`). **펼침 세로 타임라인 = 실제 events 기반**(점마다 원본 `description` 라벨). (②) `eventDotBar` 미사용.
 - 위젯: 잠금화면 `LockScreenStatusTimeline`(가변 점, 상한 14), DI 펼침 `ExpandedMetroTimelineView`(center=물품명+타임라인, bottom=출발날짜 ⟷ 상태라벨). **현재 상태 텍스트 = `status.displayName`(예: 간선상차)로 인앱·DI·잠금화면 전부 통일** — 인앱 목록 접힘 행은 날짜 옆(확인중/번호확인필요와 같은 자리)에, DI/LA 는 상태 라벨에 표시. 택배사 **원본 메시지는 인앱 펼침 타임라인 점 라벨에만**(⑤, `TrackingRowView.mainInfo`/`WaitoLiveActivityView`/`LockScreenActivityView`).
 - `ExpandedTruckPathView`(폐기된 Island Circuit 1차 디자인) 삭제됨.

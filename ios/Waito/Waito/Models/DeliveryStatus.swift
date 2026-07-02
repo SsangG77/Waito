@@ -12,15 +12,15 @@ enum DeliveryStatus: String, Codable, CaseIterable, Hashable {
 
     // MARK: - t값 (0.0 ~ 1.0) — 트럭의 경로 위 정규화 위치
 
+    // 표시 전용 진행도(게이지·트럭 위치). 5단계(택배사 코드) 균등 배분.
+    // deprecated 인 inTransitOut/delivering 은 각각 병합 대상(간선/배송출발)과 같은 값.
     var progress: CGFloat {
         switch self {
-        case .registered:     return 0.05
-        case .pickedUp:       return 0.2
-        case .inTransitIn:    return 0.35
-        case .inTransitOut:   return 0.5
-        case .outForDelivery: return 0.65
-        case .delivering:     return 0.8
-        case .delivered:      return 0.95
+        case .registered:                  return 0.1
+        case .pickedUp:                    return 0.3
+        case .inTransitIn, .inTransitOut:  return 0.5   // 간선
+        case .outForDelivery, .delivering: return 0.7   // 배송출발
+        case .delivered:                   return 0.9
         }
     }
 
