@@ -108,6 +108,19 @@ async function pollTestTracking(tracking: {
   created_at: string;
 }): Promise<void> {
   const db = getDb();
+
+  // 앱에 실제 등록된(활성) 디바이스에만 테스트 폴링·푸시.
+  // 앱에서 지웠는데 다른 구설치/desync 디바이스에 남은 test970719 행이 계속 푸시하던 문제 방지.
+  // apns_token 은 최신 설치에만 유지되므로(등록 시 타 디바이스 토큰 NULL) 활성 여부의 기준으로 쓴다.
+  const activeDevice = db.prepare(
+    `SELECT 1 FROM devices d JOIN trackings t ON t.device_id = d.id
+     WHERE t.id = ? AND d.apns_token IS NOT NULL`,
+  ).get(tracking.id);
+  if (!activeDevice) {
+    db.prepare("UPDATE trackings SET last_polled_at = datetime('now') WHERE id = ?").run(tracking.id);
+    return;
+  }
+
   // SQLite datetime('now') 은 'YYYY-MM-DD HH:MM:SS'(UTC) → ISO 로 변환해 파싱
   const createdAtMs = new Date(tracking.created_at.replace(' ', 'T') + 'Z').getTime();
   const step = testStepIndex(createdAtMs);

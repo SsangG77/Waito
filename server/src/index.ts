@@ -1,7 +1,8 @@
 import express from 'express';
 import { config } from './config.js';
-import { initDb, closeDb } from './db/database.js';
+import { initDb, closeDb, getDb } from './db/database.js';
 import { startPollingScheduler } from './services/pollingService.js';
+import { TEST_TRACKING_NUMBER } from './services/trackerApi.js';
 import { startCredentialMonitor, getCredentialHealth } from './services/credentialMonitor.js';
 import devicesRouter from './routes/devices.js';
 import trackingsRouter from './routes/trackings.js';
@@ -32,6 +33,16 @@ app.get('/health', (_req, res) => {
 
 // Initialize
 initDb();
+
+// 유령 테스트 택배 정리 — 앱에서 지운 뒤 비활성(apns_token 없는) 구설치/desync 디바이스에 남아
+// 계속 푸시하던 test970719 행을 부팅 시 제거.
+getDb()
+  .prepare(
+    `DELETE FROM trackings WHERE tracking_number = ?
+       AND device_id IN (SELECT id FROM devices WHERE apns_token IS NULL)`,
+  )
+  .run(TEST_TRACKING_NUMBER);
+
 startCredentialMonitor();
 startPollingScheduler();
 
