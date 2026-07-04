@@ -40,13 +40,13 @@ struct WaitoLiveActivity: Widget {
                 }
                
             } compactLeading: {
-                let cfg = context.state.truckConfig
-                CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 24)
-            } compactTrailing: {
                 if let primary = context.state.primary {
                     DeliveryProgressRingView(progress: primary.status.progress, size: 20)
                         .padding(.horizontal, 3)
                 }
+            } compactTrailing: {
+                let cfg = context.state.truckConfig
+                CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 24)
             } minimal: {
                 let cfg = context.state.truckConfig
                 CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 18)

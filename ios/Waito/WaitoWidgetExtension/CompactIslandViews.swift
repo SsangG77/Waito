@@ -55,15 +55,23 @@ struct RoamingTruckView: View {
 struct DeliveryProgressRingView: View {
     let progress: CGFloat
     let size: CGFloat
+    /// 링을 이루는 픽셀 블록 개수 (둘레에 균등 배치)
+    var segments: Int = 12
 
     var body: some View {
+        // 매끈한 stroke 대신 작은 사각 블록을 둘레에 돌려 배치 → 8비트 픽셀 링.
+        let filled = min(max(Int((progress * CGFloat(segments)).rounded()), 0), segments)
+        let block = max(2.5, size * 0.2)
+        let radius = size / 2 - block / 2
+
         ZStack {
-            Circle()
-                .stroke(Color.white.opacity(0.2), lineWidth: 2.5)
-            Circle()
-                .trim(from: 0, to: progress)
-                .stroke(Color.white, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                .rotationEffect(.degrees(-90))
+            ForEach(0..<segments, id: \.self) { i in
+                Rectangle()
+                    .fill(i < filled ? Color.white : Color.white.opacity(0.2))
+                    .frame(width: block, height: block)
+                    .offset(y: -radius)
+                    .rotationEffect(.degrees(Double(i) / Double(segments) * 360))
+            }
         }
         .frame(width: size, height: size)
     }
