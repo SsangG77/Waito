@@ -3,8 +3,6 @@ import SwiftUI
 struct ExpandedMetroTimelineView: View {
     let state: DeliveryAttributes.ContentState
 
-    private let allStatuses = DeliveryStatus.allCases
-
     var body: some View {
         Group {
             if let primary = state.primary {
@@ -56,17 +54,15 @@ struct ExpandedMetroTimelineView: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
-            trackSection(current: item.status, eventCount: item.eventCount ?? 0, config: state.truckConfig)
+            trackSection(current: item.status, config: state.truckConfig)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func trackSection(current: DeliveryStatus, eventCount: Int, config: TruckConfig) -> some View {
-        // 이벤트가 있으면 개수만큼(상한 내) 점, 전부 지나감, 트럭은 마지막 점. 없으면 status 7단계.
-        let useEvents = eventCount > 0
-        let maxDots = 14
-        let count = useEvents ? min(eventCount, maxDots) : allStatuses.count
-        let currentOrder = useEvents ? count - 1 : current.order
+    private func trackSection(current: DeliveryStatus, config: TruckConfig) -> some View {
+        // 전체 배송 과정(고정 단계)을 항상 표시 — 진행된 만큼 채우고 남은 단계는 흐리게.
+        let count = DeliveryStatus.collapsedStages.count
+        let currentOrder = current.collapsedStepIndex
         let dotSize: CGFloat = 5
         let gap: CGFloat = 4
 

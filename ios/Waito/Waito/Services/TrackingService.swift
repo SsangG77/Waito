@@ -430,6 +430,12 @@ final class TrackingService {
         await syncLiveActivityToServer()
         let state = buildContentState()
 
+        // 중복 LA 정리 — 여러 개 떠 있으면 하나만 남기고 종료(단일 인스턴스 보장).
+        // 이미 쌓여버린 옛 LA(예: 접수 상태로 멈춘 것)를 앱 진입/갱신 시 청소한다.
+        if let keep = Activity<DeliveryAttributes>.activities.first {
+            await endActivities(except: keep)
+        }
+
         // 이미 활성 Activity가 있으면 업데이트
         if let activity = Activity<DeliveryAttributes>.activities.first {
             // 기존이 ambient(빈 items, 푸시 토큰 미등록)면, 서버 푸시를 받을 수 있도록
@@ -498,7 +504,17 @@ final class TrackingService {
     /// push-to-start 로 새로 시작된 Activity 의 update 토큰을 서버에 등록한다. 앱 시작 시 호출(무한 스트림).
     func observeActivityUpdates() async {
         for await activity in Activity<DeliveryAttributes>.activityUpdates {
+            // 단일 인스턴스 보장: 새 Activity(대개 push-to-start 로 되살아난 것)가 뜨면
+            // 이전 중복 Activity 들을 모두 종료 → "같은 택배가 여러 LA 로 쌓이는" 현상 방지.
+            await endActivities(except: activity)
             observeUpdateToken(for: activity)
+        }
+    }
+
+    /// keep 을 제외한 모든 활성 Activity 를 즉시 종료(중복 LA 정리).
+    private func endActivities(except keep: Activity<DeliveryAttributes>) async {
+        for activity in Activity<DeliveryAttributes>.activities where activity.id != keep.id {
+            await activity.end(nil, dismissalPolicy: .immediate)
         }
     }
 
@@ -512,15 +528,18 @@ final class TrackingService {
     }
 
     private func registerUpdateToken(_ token: String, for activity: Activity<DeliveryAttributes>) async {
-        if trackings.isEmpty { await loadTrackings() }
-        guard let number = activity.content.state.items.first?.trackingNumber,
-              let tracking = trackings.first(where: { $0.trackingNumber == number }) else {
-            #if DEBUG
-            print("[PushToStart] update 토큰 등록 보류 — content-state 운송장에 매칭되는 tracking 없음")
-            #endif
-            return
-        }
-        try? await api.updatePushToken(trackingId: tracking.id, pushToken: token)
+        // push-to-start 로 되살아난 Activity 의 update 토큰을 '디바이스 레벨'에 등록한다.
+        // 서버 pushTrackingUpdate 는 devices.live_activity_push_token 으로만 in-place update 하므로,
+        // 이 토큰을 tracking 레벨(updatePushToken)에만 등록하면 서버가 못 읽어 매 상태변경마다
+        // update 실패 → push-to-start → "같은 택배가 새 LA 로 재생성"되는 버그가 난다.
+        // la_tracking_ids 는 서버가 이미 갖고 있으므로 덮어쓰지 않는다(trackingIds: nil).
+        guard let deviceToken else { return }
+        try? await api.syncLiveActivity(
+            deviceToken: deviceToken,
+            trackingIds: nil,
+            pushToken: token,
+            truckConfig: TruckConfigStore.shared.config
+        )
     }
 
     /// 트럭 설정이 바뀌면 push-to-start 페이로드에 쓰일 서버 측 트럭 설정도 갱신한다.

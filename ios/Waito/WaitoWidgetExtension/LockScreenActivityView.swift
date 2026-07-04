@@ -95,8 +95,8 @@ struct LockScreenTrackingRow: View {
                     .lineLimit(1)
             }
 
-            // 이벤트 개수 기반 가변 타임라인 + 마지막(현재) 점 위에 작은 트럭
-            LockScreenStatusTimeline(status: item.status, eventCount: item.eventCount ?? 0, truckConfig: truckConfig)
+            // 전체 배송 과정(고정 단계) 타임라인 + 현재 단계 점 위에 작은 트럭
+            LockScreenStatusTimeline(status: item.status, truckConfig: truckConfig)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
@@ -107,22 +107,17 @@ struct LockScreenTrackingRow: View {
 
 struct LockScreenStatusTimeline: View {
     let status: DeliveryStatus
-    /// 원본 이벤트 개수(가변). 0이면 status 기반 7단계로 폴백.
-    let eventCount: Int
     let truckConfig: TruckConfig
 
     private let dotSize: CGFloat = 5
     private let gap: CGFloat = 3
     private let truckSize: CGFloat = 16
     private let truckGap: CGFloat = 3   // 트럭과 점 사이 세로 간격
-    private let maxDots = 14            // 잠금화면 폭 상한 (과다 이벤트 시 점 붕괴 방지)
 
     var body: some View {
-        // 이벤트가 있으면 개수만큼(상한 내) 점, 전부 지나감(채움), 트럭은 마지막 점.
-        // 없으면(확인중/구버전 push) status 기반 7단계 폴백.
-        let useEvents = eventCount > 0
-        let count = useEvents ? min(eventCount, maxDots) : DeliveryStatus.allCases.count
-        let currentIndex = useEvents ? count - 1 : status.order
+        // 전체 배송 과정(고정 단계)을 항상 표시 — 진행된 만큼 채우고 남은 단계는 흐리게.
+        let count = DeliveryStatus.collapsedStages.count
+        let currentIndex = status.collapsedStepIndex
 
         GeometryReader { geo in
             let denom = CGFloat(max(count - 1, 1))
@@ -137,7 +132,7 @@ struct LockScreenStatusTimeline: View {
                 if count > 1 {
                     ForEach(0..<count - 1, id: \.self) { i in
                         let x = stepW * CGFloat(i) + dotSize + gap
-                        let filled = useEvents || status.isCompleted || i < status.order
+                        let filled = i < currentIndex
                         Rectangle()
                             .fill(filled ? wPixelStatusColor(status) : Color.white.opacity(0.22))
                             .frame(width: lineWidth, height: 1)
@@ -147,7 +142,7 @@ struct LockScreenStatusTimeline: View {
                 // 점
                 ForEach(0..<count, id: \.self) { i in
                     let x = stepW * CGFloat(i)
-                    let filled = useEvents || status.isCompleted || i <= status.order
+                    let filled = i <= currentIndex
                     Rectangle()
                         .fill(filled ? wPixelStatusColor(status) : Color.white.opacity(0.25))
                         .frame(width: dotSize, height: dotSize)

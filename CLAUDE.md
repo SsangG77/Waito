@@ -235,6 +235,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **다중 아이템 정합(디바이스 단위 LA)**: LA 는 디바이스당 1개 + `items` 배열. iOS 가 LA 에 담긴 택배 id 목록을 `PUT /api/devices/live-activity`(`devices.la_tracking_ids`)로 동기화하고 update 토큰도 여기서 디바이스 단위로 등록. 서버 `pushTrackingUpdate` 는 **바뀐 1개가 아니라 그 목록으로 전체 items 를 재구성**해 한 번에 갱신(배송완료=도착은 items 에서 제외 → 자동 삭제, 마지막 하나면 LA 종료). → 상태 변경 시 다른 택배가 사라지거나(③) LA 박스가 중복 생기던(④) 문제 해결.
   - 앱이 `Activity.pushToStartTokenUpdates` 관찰 → `truckConfig` 와 함께 서버 등록. 표준 토큰은 `AppDelegate.didRegisterForRemoteNotifications` → `PUT /api/devices/apns-token`(ContentView.task 의 `syncAPNsToken` 재시도 경로 병행).
 - **8시간 한도 대응**: Live Activity 는 8h 후 시스템이 종료. 별도 타이머 없이 **상태 변경 시점에** 죽었으면 push-to-start 로 되살리는 이벤트 기반.
+  - ⚠️ push-to-start 로 **되살아난 LA 의 update 토큰은 반드시 디바이스 레벨**(`PUT /api/devices/live-activity`, `devices.live_activity_push_token`)에 등록. 서버 update 경로가 이 컬럼만 읽으므로, tracking 레벨(`trackings.live_activity_push_token`)에만 등록하면 **매 상태변경마다 push-to-start → 같은 택배가 새 LA 로 계속 재생성**됨(`registerUpdateToken` 이 `syncLiveActivity` 로 등록, `trackingIds: nil` 로 목록은 안 덮어씀).
+  - **단일 인스턴스 강제**: 새 Activity 감지(`observeActivityUpdates`)·갱신(`updateLiveActivity`) 시 나머지 중복 Activity 를 end → 쌓인 옛 LA(예: 접수로 멈춘 것) 정리.
 - **알림 정책**: 상태 변경당 **배너 정확히 1개**. LA 중간 update = 무음 / 배송완료 end = 배너 + **도착 시 LA/DI 카드 즉시 제거**(`dismissal-date` = 현재시각) / push-to-start 되살림 = 배너(Apple 강제). **그 외(LA가 배너 안 띄운 모든 경우) = 표준 일반 알림(`sendStatusAlert`)** 으로 배너 — LA 미사용 택배 포함 모든 택배가 상태 변경 시 알림 받음. `pushService` 의 `bannerShown` 플래그로 중복 방지.
   - ⚠️ 표준 원격알림은 Xcode **Push Notifications capability(aps-environment entitlement)** 필요.
 - **조회 실패(NOT_FOUND) 처리**: 등록 시 force 미지정이면 422 → 앱이 확인 다이얼로그. 등록 후 데이터 없으면 앱에서 "확인 중"(12h 경과 시 "번호 확인 필요") 회색 표시.
@@ -340,12 +342,14 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
   - **`RunningTruckView`(`RunningTruckScene.swift`)**: 트럭 바운스+속도선 "달리는" 효과 래퍼(`animated` 플래그). **인앱/프리뷰 전용**(일반 SwiftUI라 정상 재생). 현재 **목록 빈 상태(DeliveryListView)** 에서 사용. 모션은 `TimelineView(.animation)` 공유 시간축 + 위상(phase) 기반 — 각 속도선이 항상 화면 전체에 균등 분배돼 우→좌로 흐름(이전 `repeatForever`+`delay` 방식의 뭉침/트럭 뒤 출현 문제 해결). `Color(hex: UInt32)` 포함. 위젯에선 미사용.
   - (`RoamingTruckView` 좌우 왕복도 `CompactIslandViews.swift`에 미사용 잔존.)
 
-### 가변 이벤트 타임라인 (고정 7단계 폐기)
-- 진행 타임라인 점 개수 = **실제 택배사 이벤트 개수**(가변). 라벨 = 원본 `description`. 이벤트만 표시(전부 지나감, 트럭은 마지막 점). 이벤트 없으면 status 기반 7단계 폴백.
+### 배송 타임라인 (전 화면 고정 5단계 통일)
+- **모든 타임라인 = 고정 5단계 진행바**(`collapsedStages`/`collapsedStepIndex`): 전체 배송 과정을 항상 깔고 진행된 만큼만 채움(남은 단계 흐리게), 트럭은 현재 단계. DI 접힘 원형링(`status.progress`)도 동일 기준.
+- **예외 — 인앱 목록 아이템을 펼쳤을 때만** 지나온 **택배사 원본 이벤트 메시지**(세로 타임라인, 점마다 `description`) 표시.
+- (구) 위젯의 "이벤트 개수 기반 가변 점(전부 지나감)" 방식은 폐기 — "지나온 것만 보이고 남은 과정이 안 보이던" 문제 때문. `eventCount` compact 필드는 계속 채우지만 **위젯 타임라인에선 미사용**.
 - 데이터: 서버 `GET /api/trackings` 목록이 각 택배의 `events` 전체 포함(`TrackingListItem.events`). LA는 위젯 타깃이 `TrackingEvent`를 못 보므로 **compact 필드(`eventCount`/`statusLabel`)만** 전달.
 - **상태 단계 = 택배사 코드 5개**(접수·집화완료·간선·배송출발·배송완료). `statusMapper` 가 tracker.delivery 코드를 **1:1 매핑**(IN_TRANSIT→간선(inTransitIn), OUT_FOR_DELIVERY→배송출발). **간선상차/하차·배송중 세분화(문구 키워드 추측)는 폐기** → enum 의 `inTransitOut`/`delivering` 은 미사용(deprecated, 호환용 유지). `DeliveryStatus.collapsedStages`(5)/`collapsedStepIndex`(inTransitOut→간선2, delivering→배송출발3). 게이지·트럭 위치용 `progress`는 **5단계 균등 0.1/0.3/0.5/0.7/0.9**(표시 전용, 서버 전진 판정 STATUS_T_VALUES 와 별개). ⚠️ 파일 상단 "t값 매핑" 표(0.05~0.95, 7단계)는 구 설계 기록이라 실제와 다름.
 - 인앱(`TrackingRowView`): **접힘 가로바·폴백 타임라인 = 고정 5단계**(`collapsedStages`). **펼침 세로 타임라인 = 실제 events 기반**(점마다 원본 `description` 라벨). (②) `eventDotBar` 미사용.
-- 위젯: 잠금화면 `LockScreenStatusTimeline`(가변 점, 상한 14), DI 펼침 `ExpandedMetroTimelineView`(center=물품명+타임라인, bottom=출발날짜 ⟷ 상태라벨). **현재 상태 텍스트 = `status.displayName`(예: 간선상차)로 인앱·DI·잠금화면 전부 통일** — 인앱 목록 접힘 행은 날짜 옆(확인중/번호확인필요와 같은 자리)에, DI/LA 는 상태 라벨에 표시. 택배사 **원본 메시지는 인앱 펼침 타임라인 점 라벨에만**(⑤, `TrackingRowView.mainInfo`/`WaitoLiveActivityView`/`LockScreenActivityView`).
+- 위젯: 잠금화면 `LockScreenStatusTimeline`·DI 펼침 `ExpandedMetroTimelineView` 모두 **고정 5단계**(`collapsedStepIndex`). DI 펼침 center=물품명+타임라인, bottom=출발날짜 ⟷ 상태라벨. **현재 상태 텍스트 = `status.displayName`(예: 간선상차)로 인앱·DI·잠금화면 전부 통일**. 택배사 **원본 메시지는 인앱 펼침 타임라인 점 라벨에만**(`TrackingRowView`).
 - `ExpandedTruckPathView`(폐기된 Island Circuit 1차 디자인) 삭제됨.
 
 ### 잠금화면 idle (항상 노출)
