@@ -172,10 +172,31 @@ struct PlusPaywallView: View {
 
     private var footer: some View {
         VStack(spacing: 8) {
-            // 실제 월 가격(App Store Connect)을 함께 노출 — 심사/투명성. 큰 ₩110 은 하루 단위 마케팅.
-            Text("월 \(subscription.monthlyPriceText ?? "₩3,000") 자동 갱신 · 언제든 해지")
+            // 구독 필수 정보(제목·기간·가격) 명시 — App Store Guideline 3.1.2(c).
+            // 큰 ₩110 은 하루 단위 마케팅, 여기서 실제 상품명·기간·월 가격을 투명하게 표기.
+            Text("Waito Plus · 1개월 자동 갱신 · 월 \(subscription.monthlyPriceText ?? "₩3,300")")
                 .font(pixelFont(9))
                 .foregroundStyle(Color.pixelMuted)
+                .multilineTextAlignment(.center)
+
+            // 필수 링크 — 개인정보처리방침 / 이용약관(EULA). 탭 시 Safari 로 열림.
+            HStack(spacing: 10) {
+                Link(destination: WaitoLegal.privacyPolicy) {
+                    Text("개인정보처리방침")
+                        .font(pixelFont(9))
+                        .foregroundStyle(Color.pixelMuted)
+                        .underline()
+                }
+                Text("·")
+                    .font(pixelFont(9))
+                    .foregroundStyle(Color.pixelMuted)
+                Link(destination: WaitoLegal.termsOfUse) {
+                    Text("이용약관")
+                        .font(pixelFont(9))
+                        .foregroundStyle(Color.pixelMuted)
+                        .underline()
+                }
+            }
 
             HStack(spacing: 10) {
                 Button {

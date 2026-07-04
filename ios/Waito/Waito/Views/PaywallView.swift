@@ -7,6 +7,13 @@ private let waitoPlusProductIDs: [String] = [
     "com.sangjin.Waito.plus.monthly"
 ]
 
+/// 구독 결제 화면 필수 링크(App Store Guideline 3.1.2(c)) — 운영 서버가 제공하는 정적 페이지.
+/// PlusPaywallView(커스텀)·PaywallView(StoreKit) 두 페이월이 공유한다.
+enum WaitoLegal {
+    static let privacyPolicy = URL(string: "http://158.247.223.154:3001/privacy")!
+    static let termsOfUse    = URL(string: "http://158.247.223.154:3001/terms")!
+}
+
 struct PaywallView: View {
     @Environment(\.dismiss) private var dismiss
     @Environment(SubscriptionManager.self) private var subscription
@@ -18,6 +25,9 @@ struct PaywallView: View {
         .storeButton(.visible, for: .restorePurchases)
         .storeButton(.visible, for: .cancellation)
         .subscriptionStoreButtonLabel(.action)
+        // 구독 필수 링크 — StoreKit 페이월 하단에 개인정보처리방침 / 이용약관(EULA) 노출
+        .subscriptionStorePolicyDestination(url: WaitoLegal.privacyPolicy, for: .privacyPolicy)
+        .subscriptionStorePolicyDestination(url: WaitoLegal.termsOfUse, for: .termsOfService)
         // PlusPaywallView 와 동일한 어두운 배경 — 전체 높이에 bg 적용
         .containerBackground(Color.bg, for: .subscriptionStore)
         .preferredColorScheme(.dark)   // StoreKit 기본 컨트롤/텍스트가 어두운 배경에 맞게

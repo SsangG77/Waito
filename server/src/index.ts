@@ -9,6 +9,7 @@ import trackingsRouter from './routes/trackings.js';
 import carriersRouter from './routes/carriers.js';
 import webhooksRouter from './routes/webhooks.js';
 import adminRouter from './routes/admin.js';
+import legalRouter from './routes/legal.js';
 
 const app = express();
 
@@ -20,6 +21,8 @@ app.use('/api/trackings', trackingsRouter);
 app.use('/api/carriers', carriersRouter);
 app.use('/webhooks', webhooksRouter);
 app.use('/admin', adminRouter);
+// 개인정보처리방침 / 이용약관(EULA) 정적 페이지 — 앱 구독 화면·ASC 메타데이터에서 링크
+app.use('/', legalRouter);
 
 // Health check (credential 상태 포함)
 app.get('/health', (_req, res) => {
