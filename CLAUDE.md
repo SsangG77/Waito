@@ -361,7 +361,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ### 디버그
 - DEBUG 빌드에선 오류 팝업 억제(`DeliveryListView`에서 `showError` 게이팅) — 로컬 서버 미가동 시 네트워크 오류 팝업 방지.
-- **테스트 운송장 `test970719`**(서버 `trackerApi.ts`/`pollingService.ts`): tracker.delivery 실제 조회 없이 더미 배송 데이터 응답. **`created_at` 기준 2시간마다 1단계 전진**(접수→집화→간선→배송출발→배송완료, 5단계 = 택배사 코드), **배송완료 후 2시간 뒤 접수로 순환**(전체 10h 주기). 일반 폴링과 달리 전진 제약(`resolveNewStatus`)·`delivered_at` 설정 없이 `pollTestTracking` 으로 처리하고, 30분 cron 폴링에 상태 무관 항상 포함. webhook 등록도 skip. 빠른 확인은 `TEST_STEP_INTERVAL_MS` 를 임시 단축.
+- **테스트 운송장 `test970719`**(서버 `trackerApi.ts`/`pollingService.ts`): tracker.delivery 실제 조회 없이 더미 배송 데이터 응답. **`created_at` 기준 2시간마다 1단계 전진**(접수→집화→간선→배송출발→배송완료, 5단계 = 택배사 코드), **배송완료에서 멈춤(순환 없음 — `testStepIndex` 가 마지막 단계에 cap)**. 배송완료 시 `delivered_at` 설정 → 이후 폴링·푸시 제외(재등록 전까지). 30분 cron 은 `tracking_number=test970719 AND delivered_at IS NULL` 이면서 **활성 디바이스(apns_token 보유)** 인 행만 폴링(`pollTestTracking` 진입 시 재확인) — 앱에서 지운 뒤 구설치/desync 행이 계속 푸시하던 문제 방지(부팅 시 apns_token 없는 디바이스의 test 행도 정리). webhook 등록은 skip. 빠른 확인은 `TEST_STEP_INTERVAL_MS` 를 임시 단축.
 - **관리자 모드(릴리즈에서도 동작)**: `SettingsView` 버전 박스 **5탭 → 비밀번호 `970719`** 입력 시 ON(`@AppStorage("admin_mode")`). 효과 = **디버그 토글(TEST DATA / DEBUG SUBSCRIPTION)만 노출**(`showDebugTools = DEBUG || adminMode`). 더미·구독을 자동으로 켜지 않고 사용자가 토글로 직접 제어. **켜진 상태에서 버전 5탭 재실행 → OFF**: 토글 숨김 + 켜뒀던 효과 원복(`showDummyData=false`, `setDebugUnlocked(false)`). 토글 정의/게이팅(`dummyTrackings`/`showDummyData`)은 `#if DEBUG` 밖이라 릴리즈에서도 동작. ⚠️ `admin_mode`(UI 가시성)와 `debug_unlocked`(유료 해제, DEBUG SUBSCRIPTION 토글이 제어)는 **별도 키로 분리** — 실구독과도 무관(`setDebugUnlocked` 가 실구독을 끄지 않음). 항상노출은 구독 게이팅이라 DEBUG SUBSCRIPTION 을 켜야 실제 동작.
 
 ---

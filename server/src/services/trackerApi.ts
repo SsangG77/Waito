@@ -62,10 +62,10 @@ export const TEST_STEPS: ReadonlyArray<{ code: string; description: string; loca
   { code: 'DELIVERED',            description: '배송완료',   location: '부산 해운대' },
 ];
 
-/** created_at(ms) 기준 현재 단계 인덱스 — 2시간마다 +1, 5단계 순환(배송완료 → 2h 후 접수). */
+/** created_at(ms) 기준 현재 단계 인덱스 — 2시간마다 +1, 배송완료(마지막)에서 멈춤(순환 없음). 재등록 시 재시작. */
 export function testStepIndex(createdAtMs: number, nowMs: number = Date.now()): number {
   const elapsed = Math.max(0, nowMs - createdAtMs);
-  return Math.floor(elapsed / TEST_STEP_INTERVAL_MS) % TEST_STEPS.length;
+  return Math.min(Math.floor(elapsed / TEST_STEP_INTERVAL_MS), TEST_STEPS.length - 1);
 }
 
 /** 추가(POST)용 — created_at 기준 현재 단계까지의 더미 이벤트 응답. */

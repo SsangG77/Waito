@@ -166,6 +166,12 @@ async function pollTestTracking(tracking: {
     await pushTrackingUpdate(tracking.id, newStatus);
   }
 
+  // 배송완료면 delivered_at 설정 → 순환 없이 완료에서 멈추고 이후 폴링·푸시 제외(재등록 전까지).
+  if (newStatus === DeliveryStatus.Delivered) {
+    db.prepare("UPDATE trackings SET delivered_at = COALESCE(delivered_at, datetime('now')) WHERE id = ?")
+      .run(tracking.id);
+  }
+
   db.prepare("UPDATE trackings SET last_polled_at = datetime('now') WHERE id = ?").run(tracking.id);
 }
 
@@ -195,7 +201,7 @@ export function startPollingScheduler(): void {
     const trackings = db.prepare(`
       SELECT id FROM trackings
       WHERE (current_status IN ('outForDelivery', 'delivering') AND delivered_at IS NULL)
-         OR tracking_number = ?
+         OR (tracking_number = ? AND delivered_at IS NULL)
     `).all(TEST_TRACKING_NUMBER) as Array<{ id: number }>;
 
     for (const t of trackings) {
