@@ -238,6 +238,24 @@ final class TrackingService {
         }
     }
 
+    /// pull-to-refresh: 목록의 각 택배를 서버에서 실제 재조회(택배사 폴링)한 뒤,
+    /// events 포함 목록을 다시 로드해 상태를 최신값으로 반영한다.
+    /// (loadTrackings 만으로는 DB 캐시 상태만 읽혀 폴링 주기 전까지 최신이 아님)
+    func refreshAll() async {
+        guard deviceToken != nil else { return }
+        // 완료건은 종료 상태라 폴링해도 안 바뀌므로 활성 택배만 병렬 재조회
+        let ids = trackings.filter { !$0.currentStatus.isCompleted }.map(\.id)
+        await withTaskGroup(of: Void.self) { group in
+            for id in ids {
+                group.addTask { [api] in
+                    _ = try? await api.refreshTracking(id: id)
+                }
+            }
+        }
+        // 폴링으로 갱신된 상태 + 이벤트를 events 포함 목록으로 다시 로드
+        await loadTrackings()
+    }
+
     func getTrackingDetail(id: Int) async -> TrackingDetail? {
         do {
             return try await api.getTracking(id: id)

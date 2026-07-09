@@ -45,6 +45,10 @@ router.post('/', async (req: Request, res: Response) => {
   // 초기 조회 — 조회 불가(NOT_FOUND)이고 force 가 아니면 추가하지 않고 확인을 요청한다
   let initialStatus = DeliveryStatus.Registered;
   let lastEventTime: string | null = null;   // 조회 성공 시에만 채워짐 → null 이면 "아직 데이터 없음"
+  // 등록 시점에 조회된 이벤트를 그대로 저장(폴링과 동일) — 저장하지 않으면 목록이 events:[] 로 와서
+  // 앱 펼침 타임라인이 폴백(고정 5단계)으로 보이다가, 첫 폴링에 이벤트가 저장되는 순간 원본 메시지로
+  // 확 바뀌는 flip 이 생긴다. (mapped_status 는 폴링과 같이 누적 계산)
+  const initialEvents: Array<{ code: string; mapped: DeliveryStatus; description: string; time: string; location: string | null }> = [];
   try {
     const result = await trackPackage(carrier.trackerId, trackingNumber);
     if (result.track?.lastEvent) {
@@ -53,6 +57,13 @@ router.post('/', async (req: Request, res: Response) => {
     if (result.track?.events?.edges) {
       for (const edge of result.track.events.edges) {
         initialStatus = resolveNewStatus(initialStatus, edge.node.status.code, edge.node.description);
+        initialEvents.push({
+          code: edge.node.status.code,
+          mapped: initialStatus,
+          description: edge.node.description,
+          time: edge.node.time,
+          location: edge.node.location || null,
+        });
       }
     }
   } catch (error) {
@@ -83,6 +94,18 @@ router.post('/', async (req: Request, res: Response) => {
   );
 
   const trackingId = insertResult.lastInsertRowid as number;
+
+  // 등록 시점 이벤트 저장 — 폴링과 동일(INSERT OR IGNORE). 이게 없으면 펼침 타임라인이 첫 폴링
+  // 전까지 폴백(고정 5단계 라벨)으로 보이다가, 폴링 순간 과거분까지 원본 메시지로 flip 된다.
+  if (initialEvents.length > 0) {
+    const insertEvent = db.prepare(`
+      INSERT OR IGNORE INTO tracking_events (tracking_id, tracker_status, mapped_status, description, event_time, location)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `);
+    for (const ev of initialEvents) {
+      insertEvent.run(trackingId, ev.code, ev.mapped, ev.description, ev.time, ev.location);
+    }
+  }
 
   // Webhook 등록 시도
   try {

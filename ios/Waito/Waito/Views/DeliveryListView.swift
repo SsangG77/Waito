@@ -208,7 +208,7 @@ struct DeliveryListView: View {
                     .animation(.spring(response: 0.42, dampingFraction: 0.82), value: sortOrder)
                 }
             }
-            .refreshable { await service.loadTrackings() }
+            .refreshable { await service.refreshAll() }
         }
         .padding(.horizontal, 16)
         .padding(.top, 4)
