@@ -221,7 +221,7 @@ struct TrackingRowView: View {
                             )
                     }
 
-                    if index < DeliveryStatus.allCases.count - 1 {
+                    if index < DeliveryStatus.collapsedStages.count - 1 {
                         Rectangle()
                             .fill(isPast ? progressColor : Color.pixelBorder)
                             .frame(width: 1, height: 19)
