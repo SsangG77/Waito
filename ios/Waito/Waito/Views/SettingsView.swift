@@ -7,6 +7,8 @@ struct SettingsView: View {
 
     @AppStorage(TrackingService.alwaysShowKey) private var alwaysShowDI = false
     @State private var showPaywall = false
+    /// Waito Plus 행 탭 시 여는 풀스크린 페이월(구독 여부와 무관하게 노출)
+    @State private var showPlusPaywall = false
 
     // 버전 박스 5탭 → 비밀번호 팝업 → 관리자 모드 ON. 켜진 상태에서 5탭 → OFF.
     // 관리자 모드 = 디버그 토글(TEST DATA / DEBUG SUBSCRIPTION)만 노출. 더미·구독을 자동으로 켜지 않는다.
@@ -37,6 +39,9 @@ struct SettingsView: View {
                         title: "Waito Plus",
                         subtitle: subscription.isSubscribed ? "구독 중" : "₩3,000/월"
                     )
+                    .contentShape(Rectangle())
+                    .onTapGesture { showPlusPaywall = true }   // 구독 중이어도 페이월 노출(CTA만 "구독중" 비활성)
+                    .accessibilityIdentifier("settings_waito_plus_row")
 
                     alwaysShowRow
 
@@ -63,6 +68,10 @@ struct SettingsView: View {
         .sheet(isPresented: $showPaywall) {
             PaywallView()
                 .environment(subscription)   // 시트 환경 명시 재주입
+        }
+        .fullScreenCover(isPresented: $showPlusPaywall) {
+            PlusPaywallView()
+                .environment(subscription)   // 커버 환경 명시 재주입(자동 전파 보장 안 됨)
         }
         .overlay {
             if showDebugPrompt { debugPromptOverlay }

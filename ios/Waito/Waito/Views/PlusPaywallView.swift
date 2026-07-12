@@ -33,19 +33,16 @@ struct PlusPaywallView: View {
 
                 Spacer(minLength: 16)
 
-                if subscription.isSubscribed {
-                    subscribedBlock   // 이미 구독 중 — 구매 CTA 대신 이용 중 표시
-                } else {
-                    if let ps = pointStatus {
-                        pointStatusBlock(ps)
-                            .padding(.bottom, 12)
-                    }
-                    priceBlock
-                    ctaButton
-                        .padding(.horizontal, 20)
-                        .padding(.top, 18)
-                    footer
+                // 구독 중이어도 화면은 그대로 노출 — CTA 버튼만 "구독중" + 비활성으로 표시된다.
+                if let ps = pointStatus, !subscription.isSubscribed {
+                    pointStatusBlock(ps)
+                        .padding(.bottom, 12)
                 }
+                priceBlock
+                ctaButton
+                    .padding(.horizontal, 20)
+                    .padding(.top, 18)
+                footer
             }
 
             closeButton
@@ -65,28 +62,6 @@ struct PlusPaywallView: View {
                 }
             }
         }
-    }
-
-    /// 이미 Waito Plus 이용 중일 때 표시(구매 CTA 대체)
-    private var subscribedBlock: some View {
-        VStack(spacing: 10) {
-            Text("이미 Waito Plus 이용 중이에요")
-                .font(pixelFont(13))
-                .foregroundStyle(gold)
-            Button { dismiss() } label: {
-                Text("확인")
-                    .font(pixelFont(14))
-                    .foregroundStyle(buttonText)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 18)
-                    .background(buttonGold)
-                    .clipShape(RoundedRectangle(cornerRadius: 14))
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 20)
-            .padding(.top, 8)
-        }
-        .padding(.bottom, 16)
     }
 
     // MARK: - 가격 / CTA / 푸터
@@ -127,8 +102,11 @@ struct PlusPaywallView: View {
     }
 
     private var ctaButton: some View {
-        // 상품 로딩 전(ASC 미등록/네트워크)에는 구매 불가 → 비활성 + 안내
+        // 구독 중이면 "구독중" + 비활성. 아니면 원래대로 — 상품 로딩 전(ASC 미등록/네트워크)에는
+        // 구매 불가 → 비활성 + 안내, 준비되면 "구독 시작하기".
+        let subscribed = subscription.isSubscribed
         let ready = subscription.isProductAvailable
+        let enabled = !subscribed && ready && !isPurchasing
         return Button {
             startPurchase()
         } label: {
@@ -136,7 +114,7 @@ struct PlusPaywallView: View {
                 if isPurchasing {
                     ProgressView().tint(buttonText)
                 } else {
-                    Text(ready ? "구독 시작하기" : "상품 불러오는 중…")
+                    Text(subscribed ? "구독중" : (ready ? "구독 시작하기" : "상품 불러오는 중…"))
                         .font(pixelFont(14))
                         .foregroundStyle(buttonText)
                 }
@@ -145,10 +123,10 @@ struct PlusPaywallView: View {
             .padding(.vertical, 18)
             .background(buttonGold)
             .clipShape(RoundedRectangle(cornerRadius: 14))
-            .opacity(ready ? 1 : 0.5)
+            .opacity(enabled ? 1 : 0.5)
         }
         .buttonStyle(.plain)
-        .disabled(isPurchasing || !ready)
+        .disabled(!enabled)
     }
 
     /// 구독 시작하기 — Apple 시스템 결제 시트가 이 안에서 뜬다. 결과에 따라 분기.
