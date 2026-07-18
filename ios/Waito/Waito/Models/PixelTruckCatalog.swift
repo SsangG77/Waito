@@ -38,6 +38,14 @@ enum TruckCab: String, CaseIterable, Codable, Hashable {
     case constArmBreaker      = "25_Construction_ArmBreaker"
     case constArmTelehandler  = "26_Construction_ArmTelehandler"
     case constArmCherryPicker = "27_Construction_ArmCherryPicker"
+    // 🦖 공룡 머리
+    case dinoRexHead   = "28_Dino_DinoRexHead"
+    case dinoTriceHead = "29_Dino_DinoTriceHead"
+    case dinoLongNeck  = "30_Dino_DinoLongNeck"
+    // 💀 해골 머리
+    case skullHead   = "31_Skeleton_SkullHead"
+    case skullGhost  = "32_Skeleton_SkullGhost"
+    case skullPirate = "33_Skeleton_SkullPirate"
 
     var imageName: String { rawValue }
     var displayName: String { catalogDisplayName(rawValue) }
@@ -88,6 +96,14 @@ enum TruckBody: String, CaseIterable, Codable, Hashable {
     case constDumpBed        = "31_Construction_DumpBed"
     case constDozerBody      = "32_Construction_DozerBody"
     case constRollerFrame    = "33_Construction_RollerFrame"
+    // 🦖 공룡 몸통
+    case dinoStego      = "34_Dino_DinoStego"
+    case dinoEggNest    = "35_Dino_DinoEggNest"
+    case dinoSpikedTail = "36_Dino_DinoSpikedTail"
+    // 💀 해골 몸통
+    case skullRibcage  = "37_Skeleton_SkullRibcage"
+    case skullCoffin   = "38_Skeleton_SkullCoffin"
+    case skullBonePile = "39_Skeleton_SkullBonePile"
 
     var imageName: String { rawValue }
     var displayName: String { catalogDisplayName(rawValue) }
@@ -130,6 +146,13 @@ enum TruckWheelType: String, CaseIterable, Codable, Hashable {
     case constRollerDrum   = "25_ConstructionTrack_ConstRollerDrum"
     case constDozerTrack   = "26_ConstructionTrack_ConstDozerTrack"
     case const6Wheel       = "27_ConstructionTrack_Const6Wheel"
+    // 🦖 공룡 다리
+    case dinoLegs      = "28_Dino_DinoLegs"
+    case dinoRaptorRun = "29_Dino_DinoRaptorRun"
+    // 💀 해골 다리
+    case skullBoneLegs   = "30_Skeleton_SkullBoneLegs"
+    case skullSkullHubs  = "31_Skeleton_SkullSkullHubs"
+    case skullGhostHover = "32_Skeleton_SkullGhostHover"
 
     var imageName: String { rawValue }
     var displayName: String { catalogDisplayName(rawValue) }
