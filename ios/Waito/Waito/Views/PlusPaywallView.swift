@@ -42,6 +42,8 @@ struct PlusPaywallView: View {
                 ctaButton
                     .padding(.horizontal, 20)
                     .padding(.top, 18)
+                offerCodeButton
+                    .padding(.top, 12)
                 footer
             }
 
@@ -148,6 +150,17 @@ struct PlusPaywallView: View {
         }
     }
 
+    /// 오퍼 코드(특가 코드) — CTA 바로 아래 독립 줄. Apple 공식 입력 시트를 띄운다(인앱 직접 입력은 불가).
+    private var offerCodeButton: some View {
+        Button { showOfferCodeRedeem = true } label: {
+            Text("프로모션 코드")
+                .font(pixelFont(12))   // 눈에 띄도록 다른 푸터 텍스트(9)보다 3pt 크게
+                .foregroundStyle(Color.pixelMuted)
+                .underline()
+        }
+        .buttonStyle(.plain)
+    }
+
     private var footer: some View {
         VStack(spacing: 8) {
             // 구독 필수 정보(제목·기간·가격) 명시 — App Store Guideline 3.1.2(c).
@@ -176,33 +189,18 @@ struct PlusPaywallView: View {
                 }
             }
 
-            HStack(spacing: 10) {
-                Button {
-                    Task {
-                        await subscription.restore()
-                        if subscription.isSubscribed { dismiss() }
-                    }
-                } label: {
-                    Text("구매 복원")
-                        .font(pixelFont(9))
-                        .foregroundStyle(Color.pixelMuted)
-                        .underline()
+            Button {
+                Task {
+                    await subscription.restore()
+                    if subscription.isSubscribed { dismiss() }
                 }
-                .buttonStyle(.plain)
-
-                Text("·")
+            } label: {
+                Text("구매 복원")
                     .font(pixelFont(9))
                     .foregroundStyle(Color.pixelMuted)
-
-                // 오퍼 코드(특가 코드) — Apple 공식 입력 시트를 띄운다(인앱 직접 입력은 불가).
-                Button { showOfferCodeRedeem = true } label: {
-                    Text("프로모션 코드")
-                        .font(pixelFont(9))
-                        .foregroundStyle(Color.pixelMuted)
-                        .underline()
-                }
-                .buttonStyle(.plain)
+                    .underline()
             }
+            .buttonStyle(.plain)
         }
         .padding(.top, 14)
         .padding(.bottom, 10)
