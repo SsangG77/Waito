@@ -54,23 +54,27 @@ struct DynamicIslandTruckOverlay: View {
 
     var body: some View {
         GeometryReader { geo in
-            let originX = (geo.size.width - Self.pillWidth) / 2
-            let originY = (geo.safeAreaInsets.top - islandYInset) / 2
-            let cfg = TruckConfigStore.shared.config
+            // 다이나믹 아일랜드 기기에서만 캡슐+트럭 표시. Apple 공식 판별 API 가 없어 상단 safe area
+            // inset 으로 판별(DI=세로 59pt / 노치=44~50 / 홈버튼=20 → 임계 51). 노치·홈버튼 기기에선 숨김.
+            if geo.safeAreaInsets.top > 51 {
+                let originX = (geo.size.width - Self.pillWidth) / 2
+                let originY = (geo.safeAreaInsets.top - islandYInset) / 2
+                let cfg = TruckConfigStore.shared.config
 
-            Capsule()
-                .fill(Color.black)
-                .frame(width: Self.pillWidth, height: Self.pillHeight)
-                .position(x: geo.size.width / 2, y: originY + Self.pillHeight / 2)
+                Capsule()
+                    .fill(Color.black)
+                    .frame(width: Self.pillWidth, height: Self.pillHeight)
+                    .position(x: geo.size.width / 2, y: originY + Self.pillHeight / 2)
 
-            TimelineView(.animation) { context in
-                let pose = truckPose(at: context.date)
-                CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: truckSize)
-                    .scaleEffect(x: pose.isReversed ? -1 : 1, y: 1)
-                    .position(
-                        x: originX + pose.x,
-                        y: originY - truckOffset
-                    )
+                TimelineView(.animation) { context in
+                    let pose = truckPose(at: context.date)
+                    CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: truckSize)
+                        .scaleEffect(x: pose.isReversed ? -1 : 1, y: 1)
+                        .position(
+                            x: originX + pose.x,
+                            y: originY - truckOffset
+                        )
+                }
             }
         }
         .ignoresSafeArea()
