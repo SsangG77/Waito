@@ -325,11 +325,11 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **항상 노출 토글**(구독 전용): 배송이 없어도 Dynamic Island에 트럭 상시 표시. 무료는 회색 잠금+크라운, 탭 시 PaywallView. 동작 게이팅은 `TrackingService.ambientEnabled`(토글 && 구독) 이중 확인 — 배송 없을 때 ambient Live Activity(`pushType:nil`, 빈 items) 시작/종료. ⚠️ iOS 제약: Live Activity는 잠금화면 카드에도 함께 노출(DI 단독 표시 불가) → 위젯에 idle 뷰 추가. 배송 없을 때 idle 표시: **접힘** = leading 트럭 / trailing 없음, **펼침·잠금화면** = `RunningTruckView`(달리는 효과). `PixelToggle`은 `isEnabled`로 비활성 표시. (`RoamingTruckView`는 좌우 왕복 컴포넌트로 `CompactIslandViews.swift`에 남아 있으나 현재 미사용.)
 
 ### 트럭 꾸미기 (TruckCustomizeView)
-- **픽셀 카탈로그(이미지 기반)**: cab 27 / body 33 / wheel 27 — 4계열(🚚트럭·🪖탱크·🚆기차·🏗️건설) 자유 조합 ≈ 24,057가지. `CatalogTruckView`가 `Image(에셋명)`으로 렌더(에셋: `Assets.xcassets/PixelCatalog/{Cabs,Bodies,Wheels}`, SVG). **enum rawValue = 에셋 imageset 이름과 1:1** → 이름 누락/불일치 시 트럭이 빈 화면이 됨(주의).
+- **픽셀 카탈로그(이미지 기반)**: cab 33 / body 39 / wheel 32 — 6계열(🚚트럭·🪖탱크·🚆기차·🏗️건설·🦖공룡·💀해골) 자유 조합 ≈ 41,184가지. `CatalogTruckView`가 `Image(에셋명)`으로 렌더(에셋: `Assets.xcassets/PixelCatalog/{Cabs,Bodies,Wheels}`, SVG). **enum rawValue = 에셋 imageset 이름과 1:1** → 이름 누락/불일치 시 트럭이 빈 화면이 됨(주의).
 - **부품 등급(`PartTier`, PixelTruckCatalog)**: 3단계.
   - **무료**: 각 enum `freeCases`(헤드2/바디3/바퀴2)
   - **포인트 해제(`pointUnlockable`, 비용 `pointUnlockCost`=3)**: 트럭 계열 추가 부품만(에셋명 2번째 토큰 `TruckHead`/`Truck`/`Wheels`). 배송완료 포인트로 해제.
-  - **Plus 전용(`plusOnly`, 포인트로도 불가)**: 탱크·기차·물탱크(탱크로리)·건설·컨테이너(`TankGun/Tank/TankTrack/Train/LiquidTank/Construction/ConstructionTrack/Container`)
+  - **Plus 전용(`plusOnly`, 포인트로도 불가)**: 탱크·기차·물탱크(탱크로리)·건설·컨테이너·공룡·해골(`TankGun/Tank/TankTrack/Train/LiquidTank/Construction/ConstructionTrack/Container/Dino/Skeleton`) — 판정은 화이트리스트가 아니라 "`pointUnlockableFamilies`(TruckHead/Truck/Wheels) 외 전부"라 새 계열은 자동 Plus 전용(서버 `devices.ts` 동일 로직)
 - **포인트 경제**: 배송완료 1건=1포인트(디바이스별, 서버 `devices.delivered_count`). 부품 1개 해제=3포인트(서버 `devices.unlocked_parts` JSON). 잔액 = 누적−해제수×3. `TrackingService.pointBalance/isUnlocked/loadDeviceProgress/unlockPart`. delivered 전환 +1은 `pollingService`, 해제 검증(Plus계열 403/잔액 400)은 `devices.ts` POST `/unlock-part`. ⚠️ 디바이스 단위(키체인 토큰) — 기기 간 동기화는 2차 로그인.
 - **My Truck 게이팅**: 셀 잠금 = 무료/구독이면 없음, `pointUnlockable` 미해제면 "3P"(코인), `plusOnly`면 크라운. 저장 시 `handleSave` — Plus전용 끼면 페이월, 포인트대상이면 `PixelConfirm`로 N×3P 차감 후 커밋. **포인트 부족 시 중간 안내 없이 바로 `PlusPaywallView` 직행** — 페이월 가격 위에 보유/부족 포인트 표시(`PlusPaywallView.pointStatus`, 옵셔널이라 잠금탭·첫추가 업셀 등 다른 진입점은 미표시).
 - cab/body/wheel 조합 → `TruckConfigStore`(UserDefaults). 변경 시 실행 중 Activity 갱신(`pushTruckConfig`) + 서버 push-to-start 설정 갱신(`refreshPushToStartConfig`)
