@@ -50,10 +50,10 @@ export function resetClient(): void {
 /** 개발/테스트용 운송장번호 — tracker.delivery 실제 조회 없이 더미 배송 데이터를 응답한다. */
 export const TEST_TRACKING_NUMBER = 'test970719';
 
-/** 테스트 더미 단계 진행 간격 — created_at 기준 2시간마다 1칸 전진. */
-export const TEST_STEP_INTERVAL_MS = 2 * 60 * 60 * 1000;
+/** 테스트 더미 단계 진행 간격 — created_at 기준 1시간마다 1칸 전진. */
+export const TEST_STEP_INTERVAL_MS = 1 * 60 * 60 * 1000;
 
-/** 5단계(접수→집화→간선→배송출발→배송완료) = 택배사 코드 그대로. 배송완료 후 2시간 뒤 접수로 순환. */
+/** 5단계(접수→집화→간선→배송출발→배송완료) = 택배사 코드 그대로. 배송완료(마지막)에서 멈춤. */
 export const TEST_STEPS: ReadonlyArray<{ code: string; description: string; location: string }> = [
   { code: 'INFORMATION_RECEIVED', description: '접수',       location: '서울 강남' },
   { code: 'AT_PICKUP',            description: '집화처리',   location: '서울 강남' },
@@ -62,7 +62,7 @@ export const TEST_STEPS: ReadonlyArray<{ code: string; description: string; loca
   { code: 'DELIVERED',            description: '배송완료',   location: '부산 해운대' },
 ];
 
-/** created_at(ms) 기준 현재 단계 인덱스 — 2시간마다 +1, 배송완료(마지막)에서 멈춤(순환 없음). 재등록 시 재시작. */
+/** created_at(ms) 기준 현재 단계 인덱스 — TEST_STEP_INTERVAL_MS 마다 +1, 배송완료(마지막)에서 멈춤(순환 없음). 재등록 시 재시작. */
 export function testStepIndex(createdAtMs: number, nowMs: number = Date.now()): number {
   const elapsed = Math.max(0, nowMs - createdAtMs);
   return Math.min(Math.floor(elapsed / TEST_STEP_INTERVAL_MS), TEST_STEPS.length - 1);

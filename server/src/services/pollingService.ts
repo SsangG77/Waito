@@ -98,7 +98,7 @@ async function pollTracking(trackingId: number): Promise<void> {
 }
 
 /**
- * 테스트 운송장(test970719) 전용 폴링 — created_at 기준 2시간마다 단계 전진, 배송완료 후 접수로 순환.
+ * 테스트 운송장(test970719) 전용 폴링 — created_at 기준 TEST_STEP_INTERVAL_MS(1시간)마다 단계 전진, 배송완료에서 멈춤.
  * 일반 폴링과 달리 전진 제약(resolveNewStatus)·delivered_at 설정을 하지 않아 뒤로(접수) 돌아갈 수 있다.
  */
 async function pollTestTracking(tracking: {
