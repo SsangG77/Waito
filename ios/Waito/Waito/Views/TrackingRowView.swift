@@ -16,6 +16,8 @@ struct TrackingRowView: View {
     @State private var isExpanded = false
     /// 추가 직후 강조 바운스 스케일
     @State private var bounceScale: CGFloat = 1
+    /// 추가 직후 슬라이드 힌트를 이미 재생했는지 (스크롤 재등장 시 반복 방지)
+    @State private var didPlayAddHint = false
 
     // 왼쪽 슬라이드 → 삭제 버튼 노출
     @State private var offsetX: CGFloat = 0
@@ -289,18 +291,37 @@ struct TrackingRowView: View {
             }
         }
         .onChange(of: justAddedId) { _, newValue in
-            if newValue == tracking.id { playAddBounce() }
+            if newValue == tracking.id { playAddHintOnce() }
         }
         .onAppear {
-            if justAddedId == tracking.id { playAddBounce() }
+            if justAddedId == tracking.id { playAddHintOnce() }
         }
     }
 
-    /// 추가 직후 한 번 통통 튀는 강조
-    private func playAddBounce() {
+    /// 추가 직후 1회만 힌트 재생 (onChange·onAppear 중복 호출/스크롤 재등장 방지)
+    private func playAddHintOnce() {
+        guard !didPlayAddHint else { return }
+        didPlayAddHint = true
+        playAddHint()
+    }
+
+    /// 추가 직후: 통통 바운스로 인지 → 삭제/편집 버튼을 슬라이드로 잠깐 노출했다 원위치.
+    /// 슬라이드 액션(왼쪽으로 밀면 삭제·편집)이 있다는 걸 자연스럽게 알려주는 온보딩 힌트.
+    private func playAddHint() {
         bounceScale = 0.92
         withAnimation(.spring(response: 0.45, dampingFraction: 0.45)) {
             bounceScale = 1
+        }
+        Task { @MainActor in
+            try? await Task.sleep(nanoseconds: 500_000_000)   // 바운스 뒤 이어서 슬라이드 시작
+            withAnimation(.spring(response: 0.5, dampingFraction: 0.72)) {
+                offsetX = openOffset                          // 삭제/편집 버튼 노출
+            }
+            try? await Task.sleep(nanoseconds: 850_000_000)   // 버튼을 눈에 담을 시간
+            // 힌트 도중 사용자가 다른 행을 열지 않았을 때만 닫는다(사용자 조작 존중)
+            if openRowId != tracking.id {
+                withAnimation(slideSpring) { offsetX = 0 }
+            }
         }
     }
 

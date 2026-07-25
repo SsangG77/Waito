@@ -49,7 +49,13 @@ struct WaitoLiveActivity: Widget {
                 CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 24)
             } minimal: {
                 let cfg = context.state.truckConfig
-                CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 18)
+                // 다른 앱과 공존해 작은 원으로 밀렸을 때: 중앙 트럭 + 주변 얇은 진행 링.
+                // (배송 없음 idle 이면 진행률이 없으니 트럭만)
+                if let primary = context.state.primary {
+                    MinimalTruckRingView(progress: primary.status.progress, config: cfg)
+                } else {
+                    CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 18)
+                }
             }
         }
     }

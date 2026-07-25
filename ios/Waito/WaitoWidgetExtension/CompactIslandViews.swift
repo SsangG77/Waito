@@ -77,6 +77,30 @@ struct DeliveryProgressRingView: View {
     }
 }
 
+// MARK: - Minimal 링 (다른 앱과 공존해 작은 원일 때) — 중앙 트럭 + 주변 얇은 진행 게이지
+
+/// DI minimal 표시용. 얇은 원형 stroke 게이지(둘레) 안쪽 중앙에 트럭을 얹는다.
+/// (compactLeading 의 픽셀 블록 링과 달리 좁은 원에 맞춰 매끈한 얇은 선으로 표현)
+struct MinimalTruckRingView: View {
+    let progress: CGFloat
+    let config: TruckConfig
+    var size: CGFloat = 22
+    var lineWidth: CGFloat = 2
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(Color.white.opacity(0.2), lineWidth: lineWidth)          // 남은 구간(트랙)
+            Circle()
+                .trim(from: 0, to: max(0, min(progress, 1)))
+                .stroke(Color.white, style: StrokeStyle(lineWidth: lineWidth, lineCap: .round))
+                .rotationEffect(.degrees(-90))                                    // 12시 시작, 시계방향
+            CatalogTruckView(cab: config.cab, truckBody: config.body, wheels: config.wheelType, size: size * 0.6)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 // MARK: - 두 번째 택배 행 (Dynamic Island 하단)
 
 struct SecondaryTrackingRow: View {
