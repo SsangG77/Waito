@@ -18,6 +18,8 @@ struct TrackingRowView: View {
     @State private var bounceScale: CGFloat = 1
     /// 추가 직후 슬라이드 힌트를 이미 재생했는지 (스크롤 재등장 시 반복 방지)
     @State private var didPlayAddHint = false
+    /// 슬라이드 힌트는 앱 생애 최초 1회(첫 택배)만 — 두 번째 추가는 페이월이 뜨므로 겹치지 않게.
+    @AppStorage("has_shown_slide_hint") private var hasShownSlideHint = false
 
     // 왼쪽 슬라이드 → 삭제 버튼 노출
     @State private var offsetX: CGFloat = 0
@@ -298,10 +300,11 @@ struct TrackingRowView: View {
         }
     }
 
-    /// 추가 직후 1회만 힌트 재생 (onChange·onAppear 중복 호출/스크롤 재등장 방지)
+    /// 추가 직후 1회만 힌트 재생 (onChange·onAppear 중복/스크롤 재등장 방지 + 앱 생애 최초 1회)
     private func playAddHintOnce() {
-        guard !didPlayAddHint else { return }
+        guard !didPlayAddHint, !hasShownSlideHint else { return }
         didPlayAddHint = true
+        hasShownSlideHint = true
         playAddHint()
     }
 

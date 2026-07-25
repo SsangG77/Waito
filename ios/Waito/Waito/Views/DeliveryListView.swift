@@ -29,10 +29,12 @@ struct DeliveryListView: View {
     @State private var showPaywall = false
     @State private var showNotFoundConfirm = false
     @State private var notFoundMessage = ""
-    /// 첫 택배 추가 직후 띄우는 업셀 페이월
+    /// 두 번째 택배 추가 시 띄우는 업셀 페이월
     @State private var showFirstAddPaywall = false
-    /// 첫 추가 페이월을 이미 보여줬는지 (평생 1회)
+    /// 업셀 페이월을 이미 보여줬는지 (평생 1회)
     @AppStorage("has_shown_first_add_paywall") private var hasShownFirstAddPaywall = false
+    /// 지금까지 성공한 택배 추가 횟수(누적) — 두 번째 추가 시 페이월 트리거용(삭제/재등록에 무관)
+    @AppStorage("tracking_add_count") private var trackingAddCount = 0
     /// 삭제 확인 대상 / 표시 여부
     @State private var pendingDeleteTracking: TrackingListItem?
     @State private var showDeleteConfirm = false
@@ -546,8 +548,9 @@ struct DeliveryListView: View {
                     showAddForm = false
                 }
                 resetForm()
-                highlightNewRow(id: id)        // 새 행 한 번 바운스
-                maybeShowFirstAddPaywall()
+                highlightNewRow(id: id)        // 새 행 한 번 바운스 + (첫 추가면) 슬라이드 힌트
+                trackingAddCount += 1
+                maybeShowSecondAddPaywall()     // 두 번째 추가부터 업셀(첫 추가는 힌트만 → 겹침 방지)
             case .notFound(let message):
                 // 조회 불가 — 확인 다이얼로그를 띄우고, 확인 시 force 로 재시도
                 notFoundMessage = message
@@ -603,9 +606,11 @@ struct DeliveryListView: View {
         }
     }
 
-    /// 첫 택배 추가 직후 한 번만 업셀 페이월을 띄운다(비구독자 한정).
-    private func maybeShowFirstAddPaywall() {
+    /// 두 번째 택배 추가 시 한 번만 업셀 페이월을 띄운다(비구독자 한정).
+    /// 첫 추가는 슬라이드 힌트만 노출 → 페이월과 겹치지 않게 두 번째 추가부터.
+    private func maybeShowSecondAddPaywall() {
         guard !hasShownFirstAddPaywall, !subscription.isSubscribed else { return }
+        guard trackingAddCount >= 2 else { return }
         hasShownFirstAddPaywall = true
         showFirstAddPaywall = true
     }
