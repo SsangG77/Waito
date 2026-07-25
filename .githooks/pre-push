@@ -1,0 +1,31 @@
+#!/bin/bash
+# main 으로 push 할 때 MARKETING_VERSION 이 origin/main 보다 높은지 강제 검증.
+# 안 올랐으면 push 차단 → "scripts/bump-version.sh" 로 patch 올린 뒤 다시 push.
+# (dev 등 다른 브랜치 push 는 검증하지 않는다)
+PBX="ios/Waito/Waito.xcodeproj/project.pbxproj"
+
+read_ver() { git show "$1:$PBX" 2>/dev/null | grep -m1 -o 'MARKETING_VERSION = [0-9][0-9.]*' | grep -o '[0-9][0-9.]*'; }
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  [ "$remote_ref" = "refs/heads/main" ] || continue
+  [ "$local_sha" = "0000000000000000000000000000000000000000" ] && continue   # 브랜치 삭제 push
+
+  new=$(read_ver "$local_sha")
+  old=$(read_ver "origin/main")
+
+  if [ -z "$new" ]; then
+    echo "❌ pre-push 차단: $PBX 에서 MARKETING_VERSION 을 찾지 못했습니다." >&2
+    exit 1
+  fi
+  # origin/main 이 없으면(최초 push) 통과
+  [ -z "$old" ] && continue
+
+  highest=$(printf '%s\n%s\n' "$old" "$new" | sort -V | tail -1)
+  if [ "$new" = "$old" ] || [ "$highest" != "$new" ]; then
+    echo "❌ pre-push 차단: main 은 버전 상향이 필수입니다 (origin/main=$old, 현재=$new)." >&2
+    echo "   → scripts/bump-version.sh 실행 후 커밋하고 다시 push 하세요." >&2
+    exit 1
+  fi
+  echo "✅ pre-push: 버전 상향 확인 ($old → $new)"
+done
+exit 0

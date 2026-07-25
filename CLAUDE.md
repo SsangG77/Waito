@@ -372,6 +372,9 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
   - ⚠️ **ATS 함정**: `NSAllowsArbitraryLoads` 와 `NSAllowsLocalNetworking` 을 **함께** 넣으면 iOS 10+ 에서 세분화 키(LocalNetworking)가 우선 적용되어 ArbitraryLoads 가 무시됨 → 사설 IP만 허용, **공인 IP(운영 서버) 차단**. DEBUG(사설 IP)는 통과·Release/TestFlight(공인 IP)만 네트워크 오류 나는 원인이었음. → `NSAllowsArbitraryLoads` **단독**으로 유지.
 - **자동배포**: `.github/workflows/deploy.yml` — `server/**` push 시 GitHub Actions가 SSH로 Vultr 접속 → `git pull && npm ci && build && pm2 restart`. 시크릿 `VULTR_SSH_KEY`/`VULTR_HOST`.
 - ⚠️ **브랜치 정책**: `main` 직접 푸시 금지 — push 시 자동배포가 트리거됨. 모든 작업은 **`dev` 브랜치**에 커밋·푸시하고, 검증 후 main 으로 머지(배포)한다.
+- ⚠️ **버전 상향 필수 (main 머지 시)**: main 으로 머지·푸시하기 전에 **반드시 `scripts/bump-version.sh` 실행**해 MARKETING_VERSION patch(0.0.1)를 올린다(앱+위젯 4곳 동시). Xcode Cloud 가 매 빌드를 App Store Connect 에 올리므로, 버전이 안 오르면 트레인 마감(ITMS-90062/90186)으로 제출 실패한다.
+  - **강제 장치**: `.githooks/pre-push`(리포 버전관리, `git config core.hooksPath .githooks` 로 활성) 가 **main push 시 origin/main 보다 버전이 높은지 검증**해 안 올랐으면 push 를 차단한다. 새 환경/클론에서는 `git config core.hooksPath .githooks` 를 한 번 실행해 훅을 켠다.
+  - 표준 머지 순서: `dev` 에서 `scripts/bump-version.sh` → 버전 커밋 → main 체크아웃 → merge dev → push(훅 통과) → dev 복귀.
 - **credential 만료 알림**: 만료 3일 전부터 매일 이메일(`emailService` = Resend HTTP API, `RESEND_API_KEY`). 메일에 운영 admin 갱신 링크(시크릿 포함) 버튼.
 - `.env`/`certs/*.p8`/`*.ttf 위치` 주의: `.env`·`certs/`는 gitignore — 서버엔 scp로 직접.
 
