@@ -45,67 +45,105 @@ struct ExpandedMetroTimelineView: View {
         .padding(.vertical, 8)
     }
 
-    /// center 영역 — 물품명(위) + 가변 타임라인(아래) 세로 배치.
-    /// (출발 날짜·상태 라벨은 bottom 영역에서 표시)
+    /// center 영역 — 좌 20% 유저 커스텀 트럭 크게 / 우측 위→아래: 물품명 → 가로 타임라인(+라벨)
+    /// → 하단 가로줄(배송상태 크게 · 날짜). bottom 영역은 더 이상 사용하지 않는다.
     private func mainContent(_ item: TrackingItemState) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(item.itemName)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(.white)
-                .lineLimit(1)
+        HStack(spacing: 12) {
+            // 좌: 커스텀 트럭 — 폭 약 20%. 커스터마이즈 가시성 피드백 반영(크게 전시).
+            CatalogTruckView(cab: state.truckConfig.cab, truckBody: state.truckConfig.body, wheels: state.truckConfig.wheelType, size: 50)
+                .frame(width: 58)
 
-            trackSection(current: item.status, config: state.truckConfig)
+            VStack(alignment: .leading, spacing: 7) {
+                Text(item.itemName)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+
+                stageBar(current: item.status)
+                stageLabels(current: item.status)
+
+                // 하단 가로줄 — 배송상태(좌·날짜보다 30% 크게) + 날짜(우)
+                HStack(alignment: .firstTextBaseline) {
+                    Text(item.status.displayName)
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(Color.wPixelOrange)
+                        .lineLimit(1)
+                    Spacer(minLength: 6)
+                    Text(shortDate(item.departureDate))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Color.wPixelMuted)
+                        .lineLimit(1)
+                }
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    private func trackSection(current: DeliveryStatus, config: TruckConfig) -> some View {
-        // 전체 배송 과정(고정 단계)을 항상 표시 — 진행된 만큼 채우고 남은 단계는 흐리게.
+    /// 가로 픽셀 스텝바 — 고정 5단계, 진행된 만큼 채우고 남은 단계는 흐리게
+    private func stageBar(current: DeliveryStatus) -> some View {
         let count = DeliveryStatus.collapsedStages.count
         let currentOrder = current.collapsedStepIndex
         let dotSize: CGFloat = 5
         let gap: CGFloat = 4
 
-        return VStack(spacing: 3) {
-            // Truck row — positioned above active dot center
-            GeometryReader { geo in
-                let unit = unitWidth(total: geo.size.width, count: count, dotSize: dotSize, gap: gap)
-                let xCenter = unit * CGFloat(currentOrder) + dotSize / 2
-                CatalogTruckView(cab: config.cab, truckBody: config.body, wheels: config.wheelType, size: 13)
-                    .frame(width: 15)
-                    .position(x: xCenter, y: 7)
-                    .animation(.spring(duration: 0.8), value: currentOrder)
-            }
-            .frame(height: 14)
+        return GeometryReader { geo in
+            let total = geo.size.width
+            let unit = unitWidth(total: total, count: count, dotSize: dotSize, gap: gap)
+            let lineW = max(0, unit - dotSize - gap * 2)
 
-            // Pixel stepper bar — 사각 점 + 가는 선, 양쪽에 gap
-            GeometryReader { geo in
-                let total = geo.size.width
-                let unit = unitWidth(total: total, count: count, dotSize: dotSize, gap: gap)
-                let lineW = max(0, unit - dotSize - gap * 2)
-
-                ZStack(alignment: .leading) {
-                    // Lines
-                    ForEach(0..<count - 1, id: \.self) { i in
-                        let x = unit * CGFloat(i) + dotSize + gap
-                        let filled = i < currentOrder
-                        Rectangle()
-                            .fill(filled ? Color.wPixelOrange.opacity(0.7) : Color.white.opacity(0.15))
-                            .frame(width: lineW, height: 1)
-                            .offset(x: x, y: dotSize / 2 - 0.5)
-                    }
-                    // Dots
-                    ForEach(0..<count, id: \.self) { i in
-                        let x = unit * CGFloat(i)
-                        Rectangle()
-                            .fill(dotColor(index: i, currentOrder: currentOrder))
-                            .frame(width: dotSize, height: dotSize)
-                            .offset(x: x)
-                    }
+            ZStack(alignment: .leading) {
+                // Lines
+                ForEach(0..<count - 1, id: \.self) { i in
+                    let x = unit * CGFloat(i) + dotSize + gap
+                    let filled = i < currentOrder
+                    Rectangle()
+                        .fill(filled ? Color.wPixelOrange.opacity(0.7) : Color.white.opacity(0.15))
+                        .frame(width: lineW, height: 1)
+                        .offset(x: x, y: dotSize / 2 - 0.5)
+                }
+                // Dots
+                ForEach(0..<count, id: \.self) { i in
+                    let x = unit * CGFloat(i)
+                    Rectangle()
+                        .fill(dotColor(index: i, currentOrder: currentOrder))
+                        .frame(width: dotSize, height: dotSize)
+                        .offset(x: x)
                 }
             }
-            .frame(height: dotSize)
         }
+        .frame(height: dotSize)
+    }
+
+    /// 스텝바 아래 단계 라벨 — 각 점 중심에 정렬, 현재 단계만 오렌지·굵게
+    private func stageLabels(current: DeliveryStatus) -> some View {
+        let stages = DeliveryStatus.collapsedStages
+        let currentOrder = current.collapsedStepIndex
+        let dotSize: CGFloat = 5
+        let gap: CGFloat = 4
+
+        return GeometryReader { geo in
+            let unit = unitWidth(total: geo.size.width, count: stages.count, dotSize: dotSize, gap: gap)
+            ForEach(Array(stages.enumerated()), id: \.offset) { i, stage in
+                Text(stage.displayName)
+                    .font(.system(size: 8, weight: i == currentOrder ? .bold : .regular))
+                    .foregroundStyle(labelColor(index: i, currentOrder: currentOrder))
+                    .fixedSize()
+                    .position(x: unit * CGFloat(i) + dotSize / 2, y: 5)
+            }
+        }
+        .frame(height: 10)
+    }
+
+    private func labelColor(index: Int, currentOrder: Int) -> Color {
+        if index == currentOrder { return Color.wPixelOrange }
+        if index < currentOrder { return Color.wPixelMuted }
+        return Color.white.opacity(0.25)
+    }
+
+    /// "2026-08-01 ..." → "2026.08.01" (위젯은 문자열 파싱만)
+    private func shortDate(_ raw: String?) -> String {
+        guard let raw, raw.count >= 10 else { return raw ?? "" }
+        return raw.prefix(10).replacingOccurrences(of: "-", with: ".")
     }
 
     private func unitWidth(total: CGFloat, count: Int, dotSize: CGFloat, gap: CGFloat) -> CGFloat {

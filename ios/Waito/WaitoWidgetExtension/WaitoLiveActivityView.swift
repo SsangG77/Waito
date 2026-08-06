@@ -2,12 +2,6 @@ import SwiftUI
 import WidgetKit
 import ActivityKit
 
-/// 서버/앱이 보낸 날짜 문자열("YYYY-MM-DD HH:mm:ss")을 "YYYY.MM.DD" 로. (위젯은 문자열 파싱만)
-private func waitoShortDate(_ raw: String?) -> String {
-    guard let raw, raw.count >= 10 else { return raw ?? "" }
-    return raw.prefix(10).replacingOccurrences(of: "-", with: ".")   // "2026-06-17 ..." → "2026.06.17"
-}
-
 struct WaitoLiveActivity: Widget {
     var body: some WidgetConfiguration {
         ActivityConfiguration(for: DeliveryAttributes.self) { context in
@@ -16,29 +10,11 @@ struct WaitoLiveActivity: Widget {
         } dynamicIsland: { context in
             let state = context.state
             return DynamicIsland {
-                // 가운데: 물품명 + 타임라인 (세로)
+                // 가운데: 좌 트럭 20% + 우측(물품명 → 가로 타임라인 → 상태·날짜)
+                // 상태·날짜가 center 안으로 들어가 bottom 영역은 사용하지 않는다.
                 DynamicIslandExpandedRegion(.center) {
                     ExpandedMetroTimelineView(state: state)
                 }
-                // 아래: 출발 날짜(좌)  ⟷  물품 상태 라벨(우)
-                DynamicIslandExpandedRegion(.bottom) {
-                    if let primary = state.primary {
-                        HStack {
-                            Text(waitoShortDate(primary.departureDate))
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Color.wPixelMuted)
-                                .lineLimit(1)
-                            Spacer()
-                            Text(primary.status.displayName)   // DI: 원본 메시지 대신 간단한 단계명(예: 간선상차)
-                                .font(.system(size: 10, weight: .semibold))
-                                .foregroundStyle(Color.wPixelOrange)
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.7)
-                        }
-                        .padding(.horizontal, 10)
-                    }
-                }
-               
             } compactLeading: {
                 if let primary = context.state.primary {
                     DeliveryProgressRingView(progress: primary.status.progress, size: 20)

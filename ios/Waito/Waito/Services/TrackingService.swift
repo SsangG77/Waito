@@ -353,6 +353,20 @@ final class TrackingService {
         liveTrackingNumbers.contains(trackingNumber)
     }
 
+    /// LA 표시 순위 — 1이면 접힌 DI 대표(+잠금화면), 2 이상이면 잠금화면만. 미포함이면 nil.
+    func liveActivityRank(trackingNumber: String) -> Int? {
+        liveTrackingNumbers.firstIndex(of: trackingNumber).map { $0 + 1 }
+    }
+
+    /// 두 번째(잠금화면 전용) 택배를 첫 번째(DI 대표)로 승격 — 순서 맨 앞으로 이동 후 LA 갱신
+    func promoteToLiveActivityPrimary(trackingNumber: String) async {
+        guard let index = liveTrackingNumbers.firstIndex(of: trackingNumber), index > 0 else { return }
+        liveTrackingNumbers.remove(at: index)
+        liveTrackingNumbers.insert(trackingNumber, at: 0)
+        saveLiveTrackingNumbers()
+        await updateLiveActivity()
+    }
+
     /// Live Activity에 택배 추가
     func addToLiveActivity(trackingNumber: String) async {
         guard !liveTrackingNumbers.contains(trackingNumber) else { return }

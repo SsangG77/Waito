@@ -1,4 +1,5 @@
 import SwiftUI
+import PhotosUI   // 캡처 인식 등록용 사진 픽커
 
 // MARK: - 정렬 기준
 
@@ -64,6 +65,12 @@ struct DeliveryListView: View {
     /// 방금 추가돼 한 번 바운스로 강조할 행 id
     @State private var justAddedId: Int?
 
+    // 캡처(스크린샷) 인식 등록 — 폼 상단 캡처 버튼 → 픽커 → OCR → 폼 프리필
+    @State private var showCapturePicker = false
+    @State private var capturePhotoItem: PhotosPickerItem?
+    @State private var isParsingCapture = false
+    @State private var showCaptureNoInfo = false
+
     var body: some View {
         listContent
             .onChange(of: service.error) { _, newValue in
@@ -118,11 +125,79 @@ struct DeliveryListView: View {
             ) {
                 performDelete()
             }
+            .photosPicker(isPresented: $showCapturePicker, selection: $capturePhotoItem, matching: .images)
+            .onChange(of: capturePhotoItem) { _, newItem in
+                guard let newItem else { return }
+                parseCapture(newItem)
+            }
+            .pixelAlert(
+                title: "정보 없음",
+                message: "사진에서 택배 정보를 찾지 못했어요.\n운송장 번호를 직접 입력해주세요.",
+                isPresented: $showCaptureNoInfo
+            ) {
+                openAddForm()
+            }
+            .overlay {
+                if isParsingCapture {
+                    ZStack {
+                        Color.black.opacity(0.5).ignoresSafeArea()
+                        VStack(spacing: 12) {
+                            ProgressView().tint(Color.pixelOrange)
+                            Text("캡처에서 택배 정보를 읽는 중…")
+                                .font(pixelFont(11))
+                                .foregroundStyle(Color.pixelText)
+                        }
+                        .padding(24)
+                        .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 8)
+                    }
+                }
+            }
             .task {
                 if service.carriers.isEmpty {
                     await service.loadCarriers()
                 }
             }
+    }
+
+    // MARK: - 캡처 인식 등록
+
+    /// ADD 버튼 탭 — 폼 토글 (캡처 유도는 폼 상단 버튼이 담당)
+    private func handleAddTapped() {
+        openRowId = nil  // 열려 있던 삭제 버튼 닫기
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            showAddForm.toggle()
+            if !showAddForm { resetForm() }
+        }
+    }
+
+    /// 입력 폼 열기 (직접 입력 / 캡처 인식 실패 폴백 공용)
+    private func openAddForm() {
+        withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
+            showAddForm = true
+        }
+    }
+
+    /// 선택한 캡처 이미지 → 온디바이스 OCR → 있는 정보만 폼에 채우고 폼 열기
+    private func parseCapture(_ item: PhotosPickerItem) {
+        isParsingCapture = true
+        Task {
+            let data = try? await item.loadTransferable(type: Data.self)
+            var info = CapturedTrackingInfo()
+            if let data {
+                info = await CaptureTrackingParser.parse(imageData: data)
+            }
+            capturePhotoItem = nil
+            isParsingCapture = false
+
+            if info.hasAnyInfo {
+                if let number = info.trackingNumber { newTrackingNumber = number }
+                if let carrier = info.carrierId { newCarrierId = carrier }
+                if let name = info.itemName { newItemName = name }
+                openAddForm()
+            } else {
+                showCaptureNoInfo = true
+            }
+        }
     }
 
     /// 목록에 표시할 택배. 디버그 테스트 토글이 켜지면 더미 데이터를 보여준다.
@@ -226,7 +301,11 @@ struct DeliveryListView: View {
             onDelete: { requestDelete(tracking) },
             onEdit: { startEditing(tracking) },
             openRowId: $openRowId,
-            justAddedId: justAddedId
+            justAddedId: justAddedId,
+            liveActivityRank: service.liveActivityRank(trackingNumber: tracking.trackingNumber),
+            onPromoteToPrimary: {
+                Task { await service.promoteToLiveActivityPrimary(trackingNumber: tracking.trackingNumber) }
+            }
         )
     }
 
@@ -409,11 +488,7 @@ struct DeliveryListView: View {
 
     private var compactAddButton: some View {
         Button {
-            openRowId = nil  // 열려 있던 삭제 버튼 닫기
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                showAddForm.toggle()
-                if !showAddForm { resetForm() }
-            }
+            handleAddTapped()
         } label: {
             Text(showAddForm ? "v" : "+")
                 .font(pixelFont(14))
@@ -449,11 +524,7 @@ struct DeliveryListView: View {
 
     private var addButton: some View {
         Button {
-            openRowId = nil  // 열려 있던 삭제 버튼 닫기
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) {
-                showAddForm.toggle()
-                if !showAddForm { resetForm() }
-            }
+            handleAddTapped()
         } label: {
             HStack(spacing: 8) {
                 Text(showAddForm ? "v" : ">")
@@ -483,6 +554,8 @@ struct DeliveryListView: View {
                 PixelTextField(label: "TRACKING NO.", text: $newTrackingNumber, disabled: true)
                 PixelTextField(label: "CARRIER", text: .constant(editingCarrierName), disabled: true)
             } else {
+                // 캡처 우선 유도 — 폼 최상단, 수동 입력보다 시각적 1순위
+                captureButton
                 PixelTextField(label: "TRACKING NO.", text: $newTrackingNumber)
                 carrierPicker
             }
@@ -497,6 +570,32 @@ struct DeliveryListView: View {
         }
         .padding(14)
         .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+    }
+
+    /// 캡처(카톡·문자 스크린샷)로 자동 입력 — 온디바이스 OCR, 폼 필드 프리필
+    private var captureButton: some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Button {
+                showCapturePicker = true
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "camera.viewfinder")
+                        .font(.system(size: 13))
+                    Text("캡처 사진으로 자동 입력")
+                        .font(pixelFont(11))
+                }
+                .foregroundStyle(Color.pixelText)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 12)
+                .pixelBox(border: Color.pixelOrange.opacity(0.7), bg: Color.pixelOrange.opacity(0.12), lineWidth: 1.5, notch: 4)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("add_capture_button")
+
+            Text("카톡·문자 배송 알림 캡처를 올리면 자동으로 채워드려요")
+                .font(pixelFont(8))
+                .foregroundStyle(Color.pixelMuted)
+        }
     }
 
     /// 편집 모드에서 읽기전용으로 보여줄 택배사 이름

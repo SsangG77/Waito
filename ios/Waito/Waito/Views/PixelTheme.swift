@@ -459,6 +459,7 @@ extension View {
         confirmTitle: String = "추가",
         cancelTitle: String = "취소",
         isPresented: Binding<Bool>,
+        onCancel: @escaping () -> Void = {},
         onConfirm: @escaping () -> Void = {}
     ) -> some View {
         ZStack {
@@ -473,7 +474,10 @@ extension View {
                         onConfirm()
                         isPresented.wrappedValue = false
                     },
-                    onCancel: { isPresented.wrappedValue = false }
+                    onCancel: {
+                        onCancel()
+                        isPresented.wrappedValue = false
+                    }
                 )
                 .transition(.opacity.combined(with: .scale(scale: 0.95)))
                 .animation(.spring(response: 0.3, dampingFraction: 0.8), value: isPresented.wrappedValue)

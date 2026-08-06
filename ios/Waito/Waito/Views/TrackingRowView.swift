@@ -12,6 +12,10 @@ struct TrackingRowView: View {
     @Binding var openRowId: Int?
     /// 방금 추가돼 한 번 바운스로 강조할 행 id (이 행과 같으면 바운스)
     var justAddedId: Int? = nil
+    /// LA 표시 순위 — 1 = 접힌 DI 대표(+잠금화면), 2 = 잠금화면만. 미표시면 nil.
+    var liveActivityRank: Int? = nil
+    /// ② 뱃지 탭 → 이 택배를 DI 대표(①)로 승격
+    var onPromoteToPrimary: () -> Void = {}
 
     @State private var isExpanded = false
     /// 추가 직후 강조 바운스 스케일
@@ -80,7 +84,36 @@ struct TrackingRowView: View {
     }
     
     var liveActivityBtn: some View {
-        PixelToggle(isOn: isLiveActive, onToggle: onToggleLiveActivity)
+        VStack(alignment: .trailing, spacing: 5) {
+            PixelToggle(isOn: isLiveActive, onToggle: onToggleLiveActivity)
+
+            // 어디에 표시되는지 명시(피드백: "2개 기준 불명확") — ①=DI 대표, ②=잠금화면만.
+            // ② 탭 시 ①로 승격해 순서도 사용자가 제어.
+            if isLiveActive, let rank = liveActivityRank {
+                rankBadge(rank)
+            }
+        }
+    }
+
+    /// LA 표시 위치 뱃지 — ① DI·잠금 / ② 잠금(탭=승격)
+    private func rankBadge(_ rank: Int) -> some View {
+        let isPrimary = rank == 1
+        return Button {
+            if !isPrimary { onPromoteToPrimary() }
+        } label: {
+            Text(isPrimary ? "① DI·잠금" : "② 잠금")
+                .font(pixelFont(7))
+                .foregroundStyle(isPrimary ? Color.pixelOrange : Color.pixelMuted)
+                .padding(.horizontal, 5)
+                .padding(.vertical, 3)
+                .overlay(
+                    Rectangle()
+                        .stroke(isPrimary ? Color.pixelOrange.opacity(0.5) : Color.pixelBorder, lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .disabled(isPrimary)
+        .accessibilityIdentifier("row_la_rank_badge")
     }
     
     var horizontalProgress: some View {
