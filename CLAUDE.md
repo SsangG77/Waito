@@ -8,7 +8,37 @@
 
 ---
 
+## 명령어 (Commands)
+
+### 서버 (`server/`)
+```bash
+npm run dev      # tsx watch src/index.ts (로컬 개발)
+npm run build    # tsc + migrations 복사 → dist/
+npm start        # node dist/index.js (운영)
+npm test         # vitest run
+```
+- 포트: 기본 `PORT=3000`, **운영 Vultr 는 3001**(`.env` 로 지정).
+- DB: `server/waito.db` (better-sqlite3, `process.cwd()` 기준 — 반드시 `server/` 에서 실행).
+- 시크릿: `server/.env` (gitignore). 필요한 키 목록은 `server/.env.example`. APNs `.p8` 는 `server/certs/` (gitignore, 서버엔 scp).
+
+### iOS (`ios/Waito/Waito.xcodeproj`)
+- scheme: `Waito` (앱), `WaitoWidgetExtension` (Live Activity 위젯)
+- 빌드·실행·스크린샷은 **XcodeBuildMCP** 사용(`session_show_defaults` → `build_run_sim`). `xcodebuild` 직접 호출 지양.
+- 로컬 StoreKit 테스트: `ios/Waito/Waito.storekit` 을 Xcode 에서 수동 추가 + Scheme 에 지정.
+- 버전 상향: `scripts/bump-version.sh` (patch +0.0.1, 앱+위젯 4곳 동시).
+
+### 폴더 구조 주의
+이 프로젝트는 전역 iOS 규칙의 `Features/<Feature>/...` 구조가 **아니다** — 앱 규모가 작아
+`Views/` · `ViewModels 없음(@Observable Service 가 상태 보유)` · `Services/` · `Models/` 평면 구조.
+신규 화면도 이 평면 구조를 따르고, 레이어 금지 패턴(View 에서 네트워크·JSON 직접 호출 금지)만 지킨다.
+
+---
+
 ## 핵심 기술 원리
+
+> ⚠️ 아래 "착시 효과"는 **초기 컨셉**이다. 실제 출시 구현은 테두리 순회가 아니라
+> **접힌 DI = 진행링 + 트럭 / 펼침·잠금화면 = 고정 5단계 타임라인**(아래 "배송 타임라인" 참조).
+> 경로 계산기(`Models/TruckPathCalculator.swift`)는 현재 **어디서도 호출되지 않는 잔존 코드**.
 
 ### Dynamic Island 착시 효과 (Pixel Pals 방식)
 - Dynamic Island의 검정 하드웨어 컷아웃 + Live Activity의 검정(#000000) 배경이 시각적으로 합쳐지는 착시를 이용
@@ -27,9 +57,24 @@
 
 ---
 
-## 트럭 경로 설계
+## 배송 단계 → progress (실제, `Models/DeliveryStatus.swift`)
 
-### Dynamic Island 외곽선을 시계방향 경로로 정의
+**표시는 고정 5단계**(`collapsedStages`). enum 케이스는 7개지만 `inTransitOut`·`delivering` 은
+deprecated(하위호환용)라 앞 단계와 같은 값으로 접힌다.
+
+| 표시 단계 | enum case | progress | collapsedStepIndex |
+|---|---|---|---|
+| 접수 | `registered` | 0.1 | 0 |
+| 집화완료 | `pickedUp` | 0.3 | 1 |
+| 간선 | `inTransitIn` (+`inTransitOut`) | 0.5 | 2 |
+| 배송출발 | `outForDelivery` (+`delivering`) | 0.7 | 3 |
+| 배송완료 | `delivered` | 0.9 | 4 |
+
+- `progress` 는 **게이지·진행링 표시 전용**(5단계 균등). 서버의 전진 판정(`STATUS_T_VALUES`)과 별개.
+- 회전각은 enum 프로퍼티가 아니다 — 경로 각도는 `TruckPathCalculator`(현재 미사용)에만 있음.
+
+<details>
+<summary>초기 컨셉: DI 외곽선 순회 경로 (미사용 — <code>TruckPathCalculator</code>)</summary>
 
 ```
         ④ 상단 직선
@@ -41,36 +86,10 @@
         ⑧ 하단 직선
 ```
 
-### t값 (0.0 ~ 1.0) 정규화
-- t = 0.0 : 하단 왼쪽 시작
-- t = 0.25 : 왼쪽 상단 꼭짓점
-- t = 0.5 : 상단 오른쪽
-- t = 0.75 : 오른쪽 하단
-- t = 1.0 : 하단 중앙 (배송 완료, 귀환)
+시계방향 t(0~1) 정규화 + 구간별 회전각(하단 180° / 좌측 270° / 상단 0° / 우측 90°, 곡선은 선형 보간).
+호출부가 없어 화면에는 반영되지 않는다.
 
-### 배송 단계 → t값 매핑
-
-| 배송 단계 | t값 | 트럭 방향 |
-|---|---|---|
-| 접수 | 0.05 | ↗ |
-| 집화 완료 | 0.2 | ↑ |
-| 간선 상차 | 0.35 | → |
-| 간선 하차 | 0.5 | → |
-| 배송 출발 | 0.65 | ↓ |
-| 배송 중 | 0.8 | ↓ |
-| 배송 완료 | 0.95 | ← (집으로 귀환) |
-
-### 트럭 아이콘 회전각
-
-| 구간 | 회전각 |
-|---|---|
-| 하단 직선 | 180° |
-| 좌측 직선 | 270° |
-| 상단 직선 | 0° |
-| 우측 직선 | 90° |
-| 곡선 구간 | 진입각~탈출각 선형 보간 |
-
-- 곡선 구간에서 ±15° 기울어짐 추가 (귀여움 포인트)
+</details>
 
 ---
 
@@ -120,7 +139,7 @@ Live Activity Expanded View
 │   ├── DeliveryListView.swift          # 택배 목록 + 인라인 추가 폼 + 정렬바 + 액션 버튼
 │   ├── TrackingRowView.swift           # 택배 행(가로 진행바/타임라인, 슬라이드 삭제, 확인중 표시)
 │   ├── PixelTheme.swift                # 픽셀 공용 컴포넌트(PixelBox/TextField/Button/Toggle/Dropdown/Alert/Confirm)
-│   ├── PixelNavBar.swift, SettingsView.swift
+│   ├── PixelNavBar.swift, SettingsView.swift, PixelExampleView.swift(컴포넌트 데모)
 │   ├── PaywallView.swift               # StoreKit SubscriptionStoreView(상품 미등록 시 Unavailable)
 │   ├── PlusPaywallView.swift           # 커스텀 풀스크린 페이월(트럭 그리드+혜택+CTA), 잠금 항목 탭 시
 │   ├── TruckCustomizeView.swift        # 트럭 꾸미기(잠금 탭 → PlusPaywallView)
@@ -129,13 +148,15 @@ Live Activity Expanded View
 ├── Models/
 │   ├── DeliveryStatus.swift            # 배송 단계 enum(String raw) + t값/회전각
 │   ├── TruckConfig.swift, TruckConfigStore.swift
-│   ├── PixelTruckCatalog.swift         # cab27/body33/wheel27 enum, rawValue=에셋 imageset명, requiresPlus 화이트리스트
+│   ├── PixelTruckCatalog.swift         # cab33/body39/wheel32 enum, rawValue=에셋 imageset명, PartTier(free/pointUnlockable/plusOnly)
+│   ├── SubscriptionManager.swift       # @Observable, 실구독(entitlement)+디버그언락 결합 → isSubscribed
+│   ├── TruckPathCalculator.swift       # (미사용) DI 외곽선 경로·회전각 계산 — 초기 컨셉 잔존
 │   └── API/APIModels.swift             # Carrier, TrackingListItem, 요청/응답 DTO
 ├── Services/
 │   ├── TrackingService.swift           # @Observable 상태관리 + Live Activity + push 토큰 관찰
 │   ├── APIClient.swift                 # actor, 서버 REST 호출
 │   ├── StoreKitService.swift           # StoreKit2 접근(상품 로드/purchase/restore/entitlement) — SwiftUI 비의존
-│   └── SubscriptionManager.swift       # @Observable, 실구독(entitlement)+디버그언락 결합 → isSubscribed
+│   └── CaptureTrackingParser.swift     # 배송알림 스크린샷 OCR(Vision, 온디바이스) → 운송장/택배사/품명 추출
 └── (WaitoWidgetExtension/)             # Live Activity 위젯 UI
 
 # AddTrackingView 는 제거됨 — 추가는 DeliveryListView 의 인라인 폼에서 처리
@@ -151,6 +172,7 @@ Live Activity Expanded View
 │   ├── trackings.ts                    # 택배 CRUD(PUT /:id = 품명·메모 수정) + push-token 등록 + force 추가
 │   ├── devices.ts                      # 디바이스 등록 + push-to-start-token + PUT /apns-token(일반알림) + GET /me(포인트) + POST /unlock-part
 │   ├── webhooks.ts                     # tracker.delivery 콜백 → track 재조회
+│   ├── legal.ts                        # GET /privacy · /terms (App Store 3.1.2(c) 필수 페이지)
 │   └── admin.ts                        # credential 관리 HTML + GET /admin/force-push(디버그: 강제 푸시+APNs 결과 진단)
 └── services/
     ├── trackerApi.ts                   # tracker.delivery GraphQL(track/registerWebhook)
@@ -158,6 +180,7 @@ Live Activity Expanded View
     ├── pushService.ts                  # Live Activity update/end + push-to-start
     ├── apnsClient.ts                   # APNs HTTP/2 + ES256 JWT (Node 내장 crypto/http2)
     ├── statusMapper.ts, credentialMonitor.ts
+    └── emailService.ts                  # Resend HTTP API — credential 만료 알림 메일
 ```
 
 ---
@@ -308,6 +331,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### 목록 화면 (DeliveryListView / TrackingRowView)
 - **택배사 선택**: 시스템 Menu 대신 픽셀 스타일 펼침 드롭다운(`PixelDropdown`)
 - **추가 폼**: 인라인 폼(AddTrackingView 제거). 조회 실패(NOT_FOUND) 시 "그래도 추가" 확인 다이얼로그(`PixelConfirm`) → `force` 재요청
+- **캡처로 추가(OCR)**: 배송 알림 스크린샷을 `PhotosPicker` 로 고르면 `CaptureTrackingParser`(Apple Vision, **온디바이스·서버 전송 없음**)가 운송장번호·택배사·품명을 뽑아 추가 폼에 prefill. 아무것도 못 찾으면 안내 팝업(`showCaptureNoInfo`).
 - **정렬**: 도착임박순(기본) / 최근 업데이트순 / 등록순 — 칩으로 선택, `@AppStorage` 영구 저장
 - **완료 섹션 구분**: 배송완료(`currentStatus.isCompleted`) 항목은 리스트 아래 **"완료 N" 섹션**으로 분리(`activeTrackings`/`completedTrackings`, 각 그룹 안에서 현재 정렬 적용). 헤더 탭으로 접기/펼치기(`@AppStorage("completed_section_collapsed")`, 기본 접힘). 완료 없으면 섹션 숨김.
 - **행 슬라이드 → 삭제/수정**: 왼쪽 슬라이드 → "> DEL_"(빨강)·"> EDIT_"(오렌지) **2버튼 세로 분할**(각 절반 높이, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), 바깥 탭/ADD 누르면 닫힘.
@@ -348,7 +372,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **예외 — 인앱 목록 아이템을 펼쳤을 때만** 지나온 **택배사 원본 이벤트 메시지**(세로 타임라인, 점마다 `description`) 표시.
 - (구) 위젯의 "이벤트 개수 기반 가변 점(전부 지나감)" 방식은 폐기 — "지나온 것만 보이고 남은 과정이 안 보이던" 문제 때문. `eventCount` compact 필드는 계속 채우지만 **위젯 타임라인에선 미사용**.
 - 데이터: 서버 `GET /api/trackings` 목록이 각 택배의 `events` 전체 포함(`TrackingListItem.events`). LA는 위젯 타깃이 `TrackingEvent`를 못 보므로 **compact 필드(`eventCount`/`statusLabel`)만** 전달.
-- **상태 단계 = 택배사 코드 5개**(접수·집화완료·간선·배송출발·배송완료). `statusMapper` 가 tracker.delivery 코드를 **1:1 매핑**(IN_TRANSIT→간선(inTransitIn), OUT_FOR_DELIVERY→배송출발). **간선상차/하차·배송중 세분화(문구 키워드 추측)는 폐기** → enum 의 `inTransitOut`/`delivering` 은 미사용(deprecated, 호환용 유지). `DeliveryStatus.collapsedStages`(5)/`collapsedStepIndex`(inTransitOut→간선2, delivering→배송출발3). 게이지·트럭 위치용 `progress`는 **5단계 균등 0.1/0.3/0.5/0.7/0.9**(표시 전용, 서버 전진 판정 STATUS_T_VALUES 와 별개). ⚠️ 파일 상단 "t값 매핑" 표(0.05~0.95, 7단계)는 구 설계 기록이라 실제와 다름.
+- **상태 단계 = 택배사 코드 5개**(접수·집화완료·간선·배송출발·배송완료). `statusMapper` 가 tracker.delivery 코드를 **1:1 매핑**(IN_TRANSIT→간선(inTransitIn), OUT_FOR_DELIVERY→배송출발). **간선상차/하차·배송중 세분화(문구 키워드 추측)는 폐기** → enum 의 `inTransitOut`/`delivering` 은 미사용(deprecated, 호환용 유지). `DeliveryStatus.collapsedStages`(5)/`collapsedStepIndex`(inTransitOut→간선2, delivering→배송출발3). 게이지·트럭 위치용 `progress`는 **5단계 균등 0.1/0.3/0.5/0.7/0.9**(표시 전용, 서버 전진 판정 STATUS_T_VALUES 와 별개 — 파일 상단 표 참조).
 - 인앱(`TrackingRowView`): **접힘 가로바·폴백 타임라인 = 고정 5단계**(`collapsedStages`). **펼침 세로 타임라인 = 실제 events 기반**(점마다 원본 `description` 라벨). (②) `eventDotBar` 미사용.
 - 위젯: 잠금화면 `LockScreenStatusTimeline`·DI 펼침 `ExpandedMetroTimelineView` 모두 **고정 5단계**(`collapsedStepIndex`). DI 펼침 center=물품명+타임라인, bottom=출발날짜 ⟷ 상태라벨. **현재 상태 텍스트 = `status.displayName`(예: 간선상차)로 인앱·DI·잠금화면 전부 통일**. 택배사 **원본 메시지는 인앱 펼침 타임라인 점 라벨에만**(`TrackingRowView`).
 - `ExpandedTruckPathView`(폐기된 Island Circuit 1차 디자인) 삭제됨.
@@ -418,14 +442,15 @@ Key routing rules:
 - Bugs, errors, "why is this broken", 500 errors → invoke investigate
 - Ship, deploy, push, create PR → invoke ship
 - QA, test the site, find bugs → invoke qa
-- Browser testing, screenshot, page interaction, headless browser, navigate URL → invoke gstack
+- Browser testing, screenshot, page interaction, headless browser, navigate URL → invoke browse
+- 화면(SwiftUI) 구현·수정 루프 → invoke build-screen
 - Code review, check my diff → invoke review
 - Update docs after shipping → invoke document-release
 - Weekly retro → invoke retro
 - Design system, brand → invoke design-consultation
 - Visual audit, design polish → invoke design-review
 - Architecture review → invoke plan-eng-review
-- Save progress, checkpoint, resume → invoke checkpoint
+- Save progress, checkpoint, resume → invoke context-save / context-restore
 - Code quality, health check → invoke health
 - 노션 프로젝트에 할일/태스크 등록 → invoke project-task-add
   - 한국어 트리거(아래 표현이면 직접 답하지 말고 무조건 project-task-add 호출):
