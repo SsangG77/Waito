@@ -32,9 +32,8 @@ actor APIClient {
     static let shared = APIClient()
 
     // 운영 서버: Vultr 인스턴스에 공인 IP+HTTP 직접 접속(도메인/HTTPS 미사용, ATS 전체 허용 전제)
-    // brawlytics가 3000 사용 중 → Waito는 3001
     #if DEBUG
-    private let baseURL = "http://192.168.31.189:3000"
+    private let baseURL = "http://192.168.31.112:3000"
     #else
     private let baseURL = "http://158.247.223.154:3001"
     #endif

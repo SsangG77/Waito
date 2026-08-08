@@ -229,16 +229,29 @@ struct TrackingRowView: View {
 
                 HStack(alignment: .top, spacing: 10) {
                     // 레일: 점 + 아래로 늘어나 다음 점까지 잇는 세로선(두 노드 사이 중앙)
+                    // 마지막(현재) 노드는 네모점 대신 커스텀 트럭 — 접힘 바·위젯과 동일 컨셉
                     VStack(spacing: 0) {
-                        Rectangle()
-                            .fill(progressColor)
-                            .frame(width: 7, height: 7)
-                        if !isLast {
+                        if isLast {
+                            let cfg = TruckConfigStore.shared.config
+                            // 점 슬롯(7×7)은 레이아웃용 자리만 차지, 트럭은 오버레이로 실제 26pt 로 그림.
+                            // (CatalogTruckView 는 높이 제안에 눌려 축소되므로 명시 frame 필수)
+                            Color.clear
+                                .frame(width: 7, height: 7)
+                                .overlay(alignment: .leading) {
+                                    CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 26)
+                                        .frame(width: 26, height: 20)
+                                }
+                        } else {
+                            Rectangle()
+                                .fill(progressColor)
+                                .frame(width: 7, height: 7)
                             Rectangle()
                                 .fill(progressColor)
                                 .frame(width: 1)
-                                .frame(maxHeight: .infinity)
-                                .padding(.vertical, 4)   // 점-선 간격 = 접힘 가로바 gap(4)과 동일
+                                .frame(minHeight: 20, maxHeight: .infinity)
+                                .padding(.top, 4)   // 점-선 간격 = 접힘 가로바 gap(4)과 동일
+                                // 다음 노드가 트럭이면 넘친 높이만큼 더 띄워 선이 트럭에 안 붙게
+                                .padding(.bottom, index == events.count - 2 ? 8 : 4)
                         }
                     }
                     .frame(width: 7)
@@ -262,6 +275,7 @@ struct TrackingRowView: View {
                                 .foregroundStyle(Color.pixelMuted.opacity(0.6))
                         }
                     }
+                    .padding(.leading, isLast ? 19 : 0)  // 트럭(26)이 점 슬롯(7)보다 넓은 만큼 밀어 간격 유지
                     .padding(.bottom, isLast ? 0 : 22)   // 노드 간격
                 }
             }
@@ -272,22 +286,36 @@ struct TrackingRowView: View {
     private var statusFallbackTimeline: some View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(DeliveryStatus.collapsedStages.enumerated()), id: \.element) { index, stage in
-                let isCurrent = stage == tracking.currentStatus
-                let isPast = stage.order < tracking.currentStatus.order
+                let curIndex = tracking.currentStatus.collapsedStepIndex
+                let isCurrent = index == curIndex
+                let isPast = index < curIndex
                 let isLast = index == DeliveryStatus.collapsedStages.count - 1
 
                 HStack(alignment: .top, spacing: 10) {
-                    // 레일: 점 + 두 노드 사이를 잇는 세로선
+                    // 레일: 점 + 두 노드 사이를 잇는 세로선. 현재 노드 = 커스텀 트럭.
                     VStack(spacing: 0) {
-                        Rectangle()
-                            .fill((isPast || isCurrent) ? progressColor : Color.pixelBorder)
-                            .frame(width: 7, height: 7)
+                        if isCurrent {
+                            let cfg = TruckConfigStore.shared.config
+                            // 점 슬롯(7×7)은 레이아웃용 자리만 차지, 트럭은 오버레이로 실제 26pt 로 그림.
+                            Color.clear
+                                .frame(width: 7, height: 7)
+                                .overlay(alignment: .leading) {
+                                    CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: 26)
+                                        .frame(width: 26, height: 20)
+                                }
+                        } else {
+                            Rectangle()
+                                .fill(isPast ? progressColor : Color.pixelBorder)
+                                .frame(width: 7, height: 7)
+                        }
                         if !isLast {
                             Rectangle()
                                 .fill(isPast ? progressColor : Color.pixelBorder)
                                 .frame(width: 1)
-                                .frame(maxHeight: .infinity)
-                                .padding(.vertical, 4)   // 점-선 간격 = 접힘 가로바 gap(4)과 동일
+                                .frame(minHeight: 20, maxHeight: .infinity)
+                                // 트럭(현재 노드)이 위/아래에 있으면 넘친 높이만큼 더 띄움
+                                .padding(.top, isCurrent ? 10 : 4)
+                                .padding(.bottom, index + 1 == curIndex ? 10 : 4)
                         }
                     }
                     .frame(width: 7)
@@ -299,6 +327,7 @@ struct TrackingRowView: View {
                             : isPast   ? Color.pixelText.opacity(0.6)
                             :            Color.pixelMuted.opacity(0.4)
                         )
+                        .padding(.leading, isCurrent ? 19 : 0)  // 트럭(26)이 점 슬롯(7)보다 넓은 만큼 밀어 간격 유지
                         .padding(.bottom, isLast ? 0 : 22)   // 노드 간격
                 }
             }
