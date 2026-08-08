@@ -20,6 +20,9 @@ const TRACK_QUERY = gql`
               code
             }
             description
+            location {
+              name
+            }
           }
         }
       }
@@ -79,7 +82,7 @@ function buildTestTrackResponse(createdAtMs: number): TrackerDeliveryResponse {
         time: new Date(createdAtMs + i * TEST_STEP_INTERVAL_MS).toISOString(),
         status: { code: s.code },
         description: s.description,
-        location: s.location,
+        location: { name: s.location },
       },
     });
   }

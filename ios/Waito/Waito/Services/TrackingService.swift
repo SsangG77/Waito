@@ -596,7 +596,14 @@ final class TrackingService {
             itemName: "맥북 프로 14인치", currentStatus: .delivering,
             currentTValue: 0.8, carrierName: "CJ대한통운",
             estimatedDelivery: "오늘", createdAt: "2026-04-10T09:00:00Z", deliveredAt: nil,
-            lastEventTime: "2026-04-11T10:00:00Z"
+            lastEventTime: "2026-04-11T10:00:00Z",
+            events: [
+                TrackingEvent(id: 101, trackerStatus: "INFORMATION_RECEIVED", mappedStatus: "registered", description: "접수", eventTime: "2026-04-10T09:00:00Z", location: "서울 강남"),
+                TrackingEvent(id: 102, trackerStatus: "AT_PICKUP", mappedStatus: "pickedUp", description: "집화완료", eventTime: "2026-04-10T14:10:00Z", location: "서울 강남터미널"),
+                TrackingEvent(id: 103, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "간선상차", eventTime: "2026-04-10T21:30:00Z", location: "옥천HUB"),
+                TrackingEvent(id: 104, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "간선하차", eventTime: "2026-04-11T05:00:00Z", location: "부산북부터미널"),
+                TrackingEvent(id: 105, trackerStatus: "OUT_FOR_DELIVERY", mappedStatus: "outForDelivery", description: "배송출발", eventTime: "2026-04-11T09:40:00Z", location: "부산 해운대 집배점"),
+            ]
         ),
         TrackingListItem(
             id: 2, carrierId: "hanjin", trackingNumber: "987654321098",
@@ -610,7 +617,14 @@ final class TrackingService {
             itemName: "Nike 에어맥스", currentStatus: .delivered,
             currentTValue: 0.95, carrierName: "롯데택배",
             estimatedDelivery: nil, createdAt: "2026-04-07T11:00:00Z",
-            deliveredAt: "2026-04-11T14:22:00Z", lastEventTime: "2026-04-11T14:22:00Z"
+            deliveredAt: "2026-04-11T14:22:00Z", lastEventTime: "2026-04-11T14:22:00Z",
+            events: [
+                TrackingEvent(id: 301, trackerStatus: "INFORMATION_RECEIVED", mappedStatus: "registered", description: "접수", eventTime: "2026-04-07T11:00:00Z", location: "인천 남동"),
+                TrackingEvent(id: 302, trackerStatus: "AT_PICKUP", mappedStatus: "pickedUp", description: "집화완료", eventTime: "2026-04-07T18:00:00Z", location: "인천 남동터미널"),
+                TrackingEvent(id: 303, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "간선상차", eventTime: "2026-04-08T02:00:00Z", location: "대전HUB"),
+                TrackingEvent(id: 304, trackerStatus: "OUT_FOR_DELIVERY", mappedStatus: "outForDelivery", description: "배송출발", eventTime: "2026-04-11T09:00:00Z", location: "대전 유성 집배점"),
+                TrackingEvent(id: 305, trackerStatus: "DELIVERED", mappedStatus: "delivered", description: "배송완료 (문 앞)", eventTime: "2026-04-11T14:22:00Z", location: "대전 유성구"),
+            ]
         ),
         TrackingListItem(
             id: 4, carrierId: "post", trackingNumber: "111222333444",

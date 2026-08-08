@@ -62,7 +62,7 @@ router.post('/', async (req: Request, res: Response) => {
           mapped: initialStatus,
           description: edge.node.description,
           time: edge.node.time,
-          location: edge.node.location || null,
+          location: edge.node.location?.name || null,
         });
       }
     }

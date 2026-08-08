@@ -1,5 +1,6 @@
 import SwiftUI
 import PhotosUI   // 캡처 인식 등록용 사진 픽커
+import UIKit      // 클립보드(UIPasteboard) 자동 인식
 
 // MARK: - 정렬 기준
 
@@ -67,6 +68,9 @@ struct DeliveryListView: View {
 
     // 캡처(스크린샷) 인식 등록 — 폼 상단 캡처 버튼 → 픽커 → OCR → 폼 프리필
     @State private var showCapturePicker = false
+    // 클립보드 자동 인식 — 앱 진입 시 복사된 텍스트에 운송장이 있으면 ADD 자동 오픈
+    @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("last_clipboard_change_count") private var lastClipboardChangeCount = 0
     @State private var capturePhotoItem: PhotosPickerItem?
     @State private var isParsingCapture = false
     @State private var showCaptureNoInfo = false
@@ -156,7 +160,58 @@ struct DeliveryListView: View {
                 if service.carriers.isEmpty {
                     await service.loadCarriers()
                 }
+                checkClipboardForTracking()   // 콜드 진입 시 1회
+                checkPendingSharedCapture()   // 공유시트로 받은 이미지 소비
             }
+            .onChange(of: scenePhase) { _, phase in
+                if phase == .active {
+                    checkClipboardForTracking()   // 포그라운드 복귀 시
+                    checkPendingSharedCapture()   // 공유 익스텐션이 앱을 연 경우
+                }
+            }
+    }
+
+    /// 공유시트(Share Extension)가 App Group 컨테이너에 남긴 이미지를 OCR 해 폼에 프리필.
+    /// 익스텐션은 이미지만 저장 — OCR/파싱은 여기서 기존 파서 재사용. 1회 소비 후 파일 삭제.
+    private func checkPendingSharedCapture() {
+        guard !showAddForm, editingTrackingId == nil else { return }
+        guard let container = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: "group.com.sangjin.Waito") else { return }
+        let fileURL = container.appendingPathComponent("shared_capture.dat")
+        guard let data = try? Data(contentsOf: fileURL) else { return }
+        try? FileManager.default.removeItem(at: fileURL)   // 재진입 시 중복 방지
+
+        isParsingCapture = true
+        Task {
+            let info = await CaptureTrackingParser.parse(imageData: data)
+            isParsingCapture = false
+            if info.hasAnyInfo {
+                if let number = info.trackingNumber { newTrackingNumber = number }
+                if let carrier = info.carrierId { newCarrierId = carrier }
+                if let name = info.itemName { newItemName = name }
+                openAddForm()
+            } else {
+                showCaptureNoInfo = true
+            }
+        }
+    }
+
+    /// 클립보드에 복사된 텍스트(카톡·문자 배송 알림 등)에 운송장이 있으면 ADD 폼 자동 오픈+프리필.
+    /// changeCount 로 "새 클립보드일 때만" 1회 처리(반복 오픈 방지). 운송장이 있을 때만 열어 오탐 방지.
+    private func checkClipboardForTracking() {
+        guard !showAddForm, editingTrackingId == nil else { return }   // 폼 사용 중이면 방해 안 함
+        let pb = UIPasteboard.general
+        guard pb.changeCount != lastClipboardChangeCount else { return }
+        lastClipboardChangeCount = pb.changeCount
+        guard pb.hasStrings, let text = pb.string, !text.isEmpty else { return }
+
+        let info = CaptureTrackingParser.parse(text: text)
+        guard info.trackingNumber != nil else { return }   // 운송장 없으면 아무 텍스트에도 안 열림
+
+        if let number = info.trackingNumber { newTrackingNumber = number }
+        if let carrier = info.carrierId { newCarrierId = carrier }
+        if let name = info.itemName { newItemName = name }
+        openAddForm()
     }
 
     // MARK: - 캡처 인식 등록
