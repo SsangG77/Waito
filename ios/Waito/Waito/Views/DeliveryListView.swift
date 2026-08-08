@@ -165,41 +165,74 @@ struct DeliveryListView: View {
             }
             .onChange(of: scenePhase) { _, phase in
                 if phase == .active {
-                    checkClipboardForTracking()   // 포그라운드 복귀 시
-                    checkPendingSharedCapture()   // 공유 익스텐션이 앱을 연 경우
+                    // 백그라운드 복귀 직후엔 클립보드 접근(붙여넣기 권한 프롬프트)이 씹히고
+                    // 공유 익스텐션의 파일 쓰기가 끝나기 전일 수 있어 잠깐 늦춰 실행.
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
+                        checkPendingSharedCapture()
+                        checkClipboardForTracking()
+                    }
+                }
+            }
+            // 공유 익스텐션이 waito://capture 로 앱을 연 직접 신호 — scenePhase 와 무관하게 확실히 소비
+            .onOpenURL { url in
+                guard url.scheme == "waito" else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                    checkPendingSharedCapture()
                 }
             }
     }
 
-    /// 공유시트(Share Extension)가 App Group 컨테이너에 남긴 이미지를 OCR 해 폼에 프리필.
-    /// 익스텐션은 이미지만 저장 — OCR/파싱은 여기서 기존 파서 재사용. 1회 소비 후 파일 삭제.
-    private func checkPendingSharedCapture() {
-        guard !showAddForm, editingTrackingId == nil else { return }
-        guard let container = FileManager.default
-            .containerURL(forSecurityApplicationGroupIdentifier: "group.com.sangjin.Waito") else { return }
-        let fileURL = container.appendingPathComponent("shared_capture.dat")
-        guard let data = try? Data(contentsOf: fileURL) else { return }
-        try? FileManager.default.removeItem(at: fileURL)   // 재진입 시 중복 방지
+    /// 자동 프리필 허용 조건 — 편집 중이면 금지, ADD 폼이 열려 있어도 비어 있으면 허용
+    /// (백그라운드에서 폼만 열어둔 채 복귀하는 케이스에서 프리필이 막히던 문제 해결)
+    private var canAutofill: Bool {
+        editingTrackingId == nil
+            && (!showAddForm || (newTrackingNumber.isEmpty && newItemName.isEmpty))
+    }
 
-        isParsingCapture = true
-        Task {
-            let info = await CaptureTrackingParser.parse(imageData: data)
-            isParsingCapture = false
-            if info.hasAnyInfo {
-                if let number = info.trackingNumber { newTrackingNumber = number }
-                if let carrier = info.carrierId { newCarrierId = carrier }
-                if let name = info.itemName { newItemName = name }
-                openAddForm()
-            } else {
-                showCaptureNoInfo = true
+    /// 공유시트(Share Extension)가 App Group 에 남긴 이미지/텍스트를 소비해 폼에 프리필.
+    /// 이미지 = 컨테이너 파일(OCR), 텍스트 = suite UserDefaults(라인 파서). 1회 소비 후 삭제.
+    private func checkPendingSharedCapture() {
+        guard canAutofill else { return }
+        let groupID = "group.com.sangjin.Waito"
+
+        // 1) 공유된 이미지 → OCR
+        if let container = FileManager.default
+            .containerURL(forSecurityApplicationGroupIdentifier: groupID),
+           let data = try? Data(contentsOf: container.appendingPathComponent("shared_capture.dat")) {
+            try? FileManager.default.removeItem(at: container.appendingPathComponent("shared_capture.dat"))
+            isParsingCapture = true
+            Task {
+                let info = await CaptureTrackingParser.parse(imageData: data)
+                isParsingCapture = false
+                applyCapturedInfo(info, fallbackAlert: true)
             }
+            return
+        }
+
+        // 2) 공유된 텍스트(문자·카톡 텍스트 공유) → 라인 파서
+        if let defaults = UserDefaults(suiteName: groupID),
+           let text = defaults.string(forKey: "shared_text") {
+            defaults.removeObject(forKey: "shared_text")
+            applyCapturedInfo(CaptureTrackingParser.parse(text: text), fallbackAlert: true)
+        }
+    }
+
+    /// 추출 결과를 폼에 채우고 열기 — 정보가 없으면(공유 경로만) 안내 팝업
+    private func applyCapturedInfo(_ info: CapturedTrackingInfo, fallbackAlert: Bool) {
+        if info.hasAnyInfo {
+            if let number = info.trackingNumber { newTrackingNumber = number }
+            if let carrier = info.carrierId { newCarrierId = carrier }
+            if let name = info.itemName { newItemName = name }
+            openAddForm()
+        } else if fallbackAlert {
+            showCaptureNoInfo = true
         }
     }
 
     /// 클립보드에 복사된 텍스트(카톡·문자 배송 알림 등)에 운송장이 있으면 ADD 폼 자동 오픈+프리필.
     /// changeCount 로 "새 클립보드일 때만" 1회 처리(반복 오픈 방지). 운송장이 있을 때만 열어 오탐 방지.
     private func checkClipboardForTracking() {
-        guard !showAddForm, editingTrackingId == nil else { return }   // 폼 사용 중이면 방해 안 함
+        guard canAutofill else { return }   // 편집 중이면 방해 안 함
         let pb = UIPasteboard.general
         guard pb.changeCount != lastClipboardChangeCount else { return }
         lastClipboardChangeCount = pb.changeCount
@@ -207,11 +240,7 @@ struct DeliveryListView: View {
 
         let info = CaptureTrackingParser.parse(text: text)
         guard info.trackingNumber != nil else { return }   // 운송장 없으면 아무 텍스트에도 안 열림
-
-        if let number = info.trackingNumber { newTrackingNumber = number }
-        if let carrier = info.carrierId { newCarrierId = carrier }
-        if let name = info.itemName { newItemName = name }
-        openAddForm()
+        applyCapturedInfo(info, fallbackAlert: false)
     }
 
     // MARK: - 캡처 인식 등록

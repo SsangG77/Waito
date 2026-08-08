@@ -117,9 +117,8 @@ struct TrackingRowView: View {
     }
     
     var horizontalProgress: some View {
-        // 접힘(간략)은 어느 택배든 고정 6단계로 과정을 표시(②). 펼치면 실제 이벤트 상태.
+        // 접힘(간략)은 어느 택배든 고정 단계로 과정을 표시(②). 현재 노드 = 커스텀 트럭.
         fixedStepBar
-            .frame(height: 5)
             .padding(.horizontal, 14)
             .padding(.bottom, 8)
             .transition(.opacity)
@@ -156,34 +155,55 @@ struct TrackingRowView: View {
         }
     }
 
-    /// 접힘(간략) 진행바 — 어느 택배든 고정 6단계(접수·집화완료·간선상차·배송출발·배송중·배송완료).
-    /// 현재 상태 인덱스까지 채움. 펼치면 실제 이벤트 타임라인(②).
+    /// 접힘(간략) 진행바 — 어느 택배든 고정 5단계(접수·집화완료·간선·배송출발·배송완료).
+    /// 현재 단계 노드는 네모점 대신 유저 커스텀 트럭 — 위젯(DI 펼침·잠금화면)과 동일 디자인.
     private var fixedStepBar: some View {
-        GeometryReader { geo in
-            let steps = DeliveryStatus.collapsedStages.count   // 6
+        let dotSize: CGFloat = 5
+        let gap: CGFloat = 4
+        let truckSize: CGFloat = 26
+        let cfg = TruckConfigStore.shared.config
+
+        return GeometryReader { geo in
+            let steps = DeliveryStatus.collapsedStages.count
             let curIndex = tracking.currentStatus.collapsedStepIndex
-            let dotSize: CGFloat = 5
-            let gap: CGFloat = 4
             let lineWidth = (geo.size.width - (dotSize + gap * 2) * CGFloat(steps) + gap * 2) / CGFloat(steps - 1)
+            let stepW = dotSize + gap * 2 + lineWidth
+            let lineY = truckSize / 2   // 라인·점은 세로 중앙 — 트럭 중심이 점 위치와 일치
             let activeColor = progressColor
 
-            ZStack(alignment: .leading) {
+            // 트럭 실제 위치(가장자리 클램프 반영) 기준으로 인접 라인을 잘라 간격 유지.
+            // 간격 = 점-라인 gap 의 1.5배. 클램프로 트럭이 밀려도 라인이 트럭에 붙지 않는다.
+            let cx = stepW * CGFloat(curIndex) + dotSize / 2
+            let truckX = min(max(cx, truckSize / 2), geo.size.width - truckSize / 2)
+            let truckGapH = gap * 1.5
+
+            ZStack(alignment: .topLeading) {
                 ForEach(0..<steps - 1, id: \.self) { i in
-                    let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i) + dotSize + gap
+                    let defaultStart = stepW * CGFloat(i) + dotSize + gap
+                    let defaultEnd = defaultStart + lineWidth
+                    let start = i == curIndex ? max(defaultStart, truckX + truckSize / 2 + truckGapH) : defaultStart
+                    let end = (i + 1) == curIndex ? min(defaultEnd, truckX - truckSize / 2 - truckGapH) : defaultEnd
                     Rectangle()
                         .fill(i < curIndex ? activeColor : Color.pixelBorder)
-                        .frame(width: lineWidth, height: 1)
-                        .offset(x: x, y: dotSize / 2 - 0.5)
+                        .frame(width: max(0, end - start), height: 1)
+                        .offset(x: start, y: lineY - 0.5)
                 }
+                // 점 — 현재 단계는 트럭이 대신하므로 생략
                 ForEach(0..<steps, id: \.self) { i in
-                    let x = (dotSize + gap * 2 + lineWidth) * CGFloat(i)
-                    Rectangle()
-                        .fill(i <= curIndex ? activeColor : Color.pixelBorder)
-                        .frame(width: dotSize, height: dotSize)
-                        .offset(x: x)
+                    if i != curIndex {
+                        let x = stepW * CGFloat(i)
+                        Rectangle()
+                            .fill(i < curIndex ? activeColor : Color.pixelBorder)
+                            .frame(width: dotSize, height: dotSize)
+                            .offset(x: x, y: lineY - dotSize / 2)
+                    }
                 }
+                // 현재 단계 노드 = 커스텀 트럭
+                CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: truckSize)
+                    .position(x: truckX, y: lineY - 3)   // 라인 위에 살짝 떠 있게
             }
         }
+        .frame(height: truckSize)
     }
     
     var verticalProgress: some View {
@@ -203,42 +223,46 @@ struct TrackingRowView: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
                 let isCurrent = index == events.count - 1
+                let isLast = index == events.count - 1
                 let loc = event.location?.trimmingCharacters(in: .whitespaces)
                 let time = formatDate(event.eventTime)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .top, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    // 레일: 점 + 아래로 늘어나 다음 점까지 잇는 세로선(두 노드 사이 중앙)
+                    VStack(spacing: 0) {
                         Rectangle()
                             .fill(progressColor)
                             .frame(width: 7, height: 7)
-                            .padding(.top, 2)
-
-                        // 원본 메시지 → 위치 → 시간, 세로 정렬
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text(event.description)
-                                .font(pixelFont(isCurrent ? 12 : 9))
-                                .foregroundStyle(isCurrent ? progressColor : Color.pixelText.opacity(0.6))
-                                .fixedSize(horizontal: false, vertical: true)
-
-                            if let loc, !loc.isEmpty {
-                                Text(loc)
-                                    .font(pixelFont(8))
-                                    .foregroundStyle(Color.pixelMuted.opacity(0.85))
-                            }
-                            if !time.isEmpty {
-                                Text(time)
-                                    .font(pixelFont(8))
-                                    .foregroundStyle(Color.pixelMuted.opacity(0.6))
-                            }
+                        if !isLast {
+                            Rectangle()
+                                .fill(progressColor)
+                                .frame(width: 1)
+                                .frame(maxHeight: .infinity)
+                                .padding(.vertical, 4)   // 점-선 간격 = 접힘 가로바 gap(4)과 동일
                         }
                     }
+                    .frame(width: 7)
+                    .padding(.top, 2)
 
-                    if index < events.count - 1 {
-                        Rectangle()
-                            .fill(progressColor)
-                            .frame(width: 1, height: 30)   // 노드 간격 넓게
-                            .padding(.leading, 3)
+                    // 원본 메시지 → 위치 → 시간, 세로 정렬
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(event.description)
+                            .font(pixelFont(isCurrent ? 12 : 9))
+                            .foregroundStyle(isCurrent ? progressColor : Color.pixelText.opacity(0.6))
+                            .fixedSize(horizontal: false, vertical: true)
+
+                        if let loc, !loc.isEmpty {
+                            Text(loc)
+                                .font(pixelFont(8))
+                                .foregroundStyle(Color.pixelMuted.opacity(0.85))
+                        }
+                        if !time.isEmpty {
+                            Text(time)
+                                .font(pixelFont(8))
+                                .foregroundStyle(Color.pixelMuted.opacity(0.6))
+                        }
                     }
+                    .padding(.bottom, isLast ? 0 : 22)   // 노드 간격
                 }
             }
         }
@@ -250,28 +274,32 @@ struct TrackingRowView: View {
             ForEach(Array(DeliveryStatus.collapsedStages.enumerated()), id: \.element) { index, stage in
                 let isCurrent = stage == tracking.currentStatus
                 let isPast = stage.order < tracking.currentStatus.order
+                let isLast = index == DeliveryStatus.collapsedStages.count - 1
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(alignment: .center, spacing: 10) {
+                HStack(alignment: .top, spacing: 10) {
+                    // 레일: 점 + 두 노드 사이를 잇는 세로선
+                    VStack(spacing: 0) {
                         Rectangle()
                             .fill((isPast || isCurrent) ? progressColor : Color.pixelBorder)
                             .frame(width: 7, height: 7)
-
-                        Text(stage.displayName)
-                            .font(pixelFont(isCurrent ? 12 : 9))
-                            .foregroundStyle(
-                                isCurrent ? progressColor
-                                : isPast   ? Color.pixelText.opacity(0.6)
-                                :            Color.pixelMuted.opacity(0.4)
-                            )
+                        if !isLast {
+                            Rectangle()
+                                .fill(isPast ? progressColor : Color.pixelBorder)
+                                .frame(width: 1)
+                                .frame(maxHeight: .infinity)
+                                .padding(.vertical, 4)   // 점-선 간격 = 접힘 가로바 gap(4)과 동일
+                        }
                     }
+                    .frame(width: 7)
 
-                    if index < DeliveryStatus.collapsedStages.count - 1 {
-                        Rectangle()
-                            .fill(isPast ? progressColor : Color.pixelBorder)
-                            .frame(width: 1, height: 19)
-                            .padding(.leading, 3)
-                    }
+                    Text(stage.displayName)
+                        .font(pixelFont(isCurrent ? 12 : 9))
+                        .foregroundStyle(
+                            isCurrent ? progressColor
+                            : isPast   ? Color.pixelText.opacity(0.6)
+                            :            Color.pixelMuted.opacity(0.4)
+                        )
+                        .padding(.bottom, isLast ? 0 : 22)   // 노드 간격
                 }
             }
         }
