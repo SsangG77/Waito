@@ -5,6 +5,15 @@
 	<!-- 수출 규정 준수: 표준/면제 암호화만 사용 → TestFlight/심사에서 매번 묻지 않도록 NO 명시 -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>waito</string>
+			</array>
+		</dict>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>

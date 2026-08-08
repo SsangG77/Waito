@@ -59,7 +59,7 @@ async function pollTracking(trackingId: number): Promise<void> {
         newStatus,
         event.description,
         event.time,
-        event.location || null,
+        event.location?.name || null,
       );
     }
 

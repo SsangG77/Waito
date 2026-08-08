@@ -203,6 +203,8 @@ struct TrackingRowView: View {
         VStack(alignment: .leading, spacing: 0) {
             ForEach(Array(events.enumerated()), id: \.element.id) { index, event in
                 let isCurrent = index == events.count - 1
+                let loc = event.location?.trimmingCharacters(in: .whitespaces)
+                let time = formatDate(event.eventTime)
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(alignment: .top, spacing: 10) {
@@ -211,16 +213,22 @@ struct TrackingRowView: View {
                             .frame(width: 7, height: 7)
                             .padding(.top, 2)
 
-                        VStack(alignment: .leading, spacing: 1) {
+                        // 원본 메시지 → 위치 → 시간, 세로 정렬
+                        VStack(alignment: .leading, spacing: 3) {
                             Text(event.description)
                                 .font(pixelFont(isCurrent ? 12 : 9))
                                 .foregroundStyle(isCurrent ? progressColor : Color.pixelText.opacity(0.6))
                                 .fixedSize(horizontal: false, vertical: true)
 
-                            if let sub = eventSubLabel(event) {
-                                Text(sub)
+                            if let loc, !loc.isEmpty {
+                                Text(loc)
                                     .font(pixelFont(8))
-                                    .foregroundStyle(Color.pixelMuted.opacity(0.7))
+                                    .foregroundStyle(Color.pixelMuted.opacity(0.85))
+                            }
+                            if !time.isEmpty {
+                                Text(time)
+                                    .font(pixelFont(8))
+                                    .foregroundStyle(Color.pixelMuted.opacity(0.6))
                             }
                         }
                     }
@@ -228,7 +236,7 @@ struct TrackingRowView: View {
                     if index < events.count - 1 {
                         Rectangle()
                             .fill(progressColor)
-                            .frame(width: 1, height: 19)
+                            .frame(width: 1, height: 30)   // 노드 간격 넓게
                             .padding(.leading, 3)
                     }
                 }
@@ -269,18 +277,6 @@ struct TrackingRowView: View {
         }
     }
 
-    /// 이벤트 보조 라벨 — "시간 · 위치" (둘 다 없으면 nil)
-    private func eventSubLabel(_ event: TrackingEvent) -> String? {
-        let time = formatDate(event.eventTime)
-        let loc = event.location?.trimmingCharacters(in: .whitespaces)
-        switch (time.isEmpty, loc?.isEmpty ?? true) {
-        case (false, false): return "\(time) · \(loc!)"
-        case (false, true):  return time
-        case (true, false):  return loc
-        case (true, true):   return nil
-        }
-    }
-    
     var detailBtn: some View {
         HStack {
             Spacer()

@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		EDC69A002F694200002FF663 /* WaitoWidgetExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = EDC69A032F694200002FF663 /* WaitoWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		F1DB7CAE302666BF00B745D6 /* WaitoShareExtension.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = F1DB7CA4302666BF00B745D6 /* WaitoShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -17,6 +18,13 @@
 			proxyType = 1;
 			remoteGlobalIDString = EDC69A072F694200002FF663;
 			remoteInfo = WaitoWidgetExtension;
+		};
+		F1DB7CAC302666BF00B745D6 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EDC6997D2F6941DF002FF663 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = F1DB7CA3302666BF00B745D6;
+			remoteInfo = WaitoShareExtension;
 		};
 /* End PBXContainerItemProxy section */
 
@@ -28,6 +36,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				EDC69A002F694200002FF663 /* WaitoWidgetExtension.appex in Embed Foundation Extensions */,
+				F1DB7CAE302666BF00B745D6 /* WaitoShareExtension.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -37,6 +46,7 @@
 /* Begin PBXFileReference section */
 		EDC699852F6941DF002FF663 /* Waito.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Waito.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		EDC69A032F694200002FF663 /* WaitoWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WaitoWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		F1DB7CA4302666BF00B745D6 /* WaitoShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = WaitoShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
@@ -66,6 +76,13 @@
 			);
 			target = EDC69A072F694200002FF663 /* WaitoWidgetExtension */;
 		};
+		F1DB7CB2302666BF00B745D6 /* Exceptions for "WaitoShareExtension" folder in "WaitoShareExtension" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F1DB7CA3302666BF00B745D6 /* WaitoShareExtension */;
+		};
 /* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -81,6 +98,14 @@
 		EDC69A052F694200002FF663 /* WaitoWidgetExtension */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = WaitoWidgetExtension;
+			sourceTree = "<group>";
+		};
+		F1DB7CA5302666BF00B745D6 /* WaitoShareExtension */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F1DB7CB2302666BF00B745D6 /* Exceptions for "WaitoShareExtension" folder in "WaitoShareExtension" target */,
+			);
+			path = WaitoShareExtension;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -100,6 +125,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F1DB7CA1302666BF00B745D6 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -108,6 +140,7 @@
 			children = (
 				EDC699872F6941DF002FF663 /* Waito */,
 				EDC69A052F694200002FF663 /* WaitoWidgetExtension */,
+				F1DB7CA5302666BF00B745D6 /* WaitoShareExtension */,
 				EDC699862F6941DF002FF663 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -117,6 +150,7 @@
 			children = (
 				EDC699852F6941DF002FF663 /* Waito.app */,
 				EDC69A032F694200002FF663 /* WaitoWidgetExtension.appex */,
+				F1DB7CA4302666BF00B745D6 /* WaitoShareExtension.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -137,6 +171,7 @@
 			);
 			dependencies = (
 				EDC69A0A2F694200002FF663 /* PBXTargetDependency */,
+				F1DB7CAD302666BF00B745D6 /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				EDC699872F6941DF002FF663 /* Waito */,
@@ -170,6 +205,28 @@
 			productReference = EDC69A032F694200002FF663 /* WaitoWidgetExtension.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
+		F1DB7CA3302666BF00B745D6 /* WaitoShareExtension */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = F1DB7CB1302666BF00B745D6 /* Build configuration list for PBXNativeTarget "WaitoShareExtension" */;
+			buildPhases = (
+				F1DB7CA0302666BF00B745D6 /* Sources */,
+				F1DB7CA1302666BF00B745D6 /* Frameworks */,
+				F1DB7CA2302666BF00B745D6 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				F1DB7CA5302666BF00B745D6 /* WaitoShareExtension */,
+			);
+			name = WaitoShareExtension;
+			packageProductDependencies = (
+			);
+			productName = WaitoShareExtension;
+			productReference = F1DB7CA4302666BF00B745D6 /* WaitoShareExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -177,7 +234,7 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
-				LastSwiftUpdateCheck = 2600;
+				LastSwiftUpdateCheck = 2660;
 				LastUpgradeCheck = 2650;
 				TargetAttributes = {
 					EDC699842F6941DF002FF663 = {
@@ -185,6 +242,9 @@
 					};
 					EDC69A072F694200002FF663 = {
 						CreatedOnToolsVersion = 26.0.1;
+					};
+					F1DB7CA3302666BF00B745D6 = {
+						CreatedOnToolsVersion = 26.6;
 					};
 				};
 			};
@@ -204,6 +264,7 @@
 			targets = (
 				EDC699842F6941DF002FF663 /* Waito */,
 				EDC69A072F694200002FF663 /* WaitoWidgetExtension */,
+				F1DB7CA3302666BF00B745D6 /* WaitoShareExtension */,
 			);
 		};
 /* End PBXProject section */
@@ -217,6 +278,13 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		EDC69A082F694200002FF663 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F1DB7CA2302666BF00B745D6 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -240,6 +308,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F1DB7CA0302666BF00B745D6 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -247,6 +322,11 @@
 			isa = PBXTargetDependency;
 			target = EDC69A072F694200002FF663 /* WaitoWidgetExtension */;
 			targetProxy = EDC69A012F694200002FF663 /* PBXContainerItemProxy */;
+		};
+		F1DB7CAD302666BF00B745D6 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = F1DB7CA3302666BF00B745D6 /* WaitoShareExtension */;
+			targetProxy = F1DB7CAC302666BF00B745D6 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 
@@ -510,6 +590,74 @@
 			};
 			name = Release;
 		};
+		F1DB7CAF302666BF00B745D6 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WaitoShareExtension/WaitoShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 33;
+				DEVELOPMENT_TEAM = M3KH86595Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WaitoShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Waito;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sangjin.Waito.WaitoShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Debug;
+		};
+		F1DB7CB0302666BF00B745D6 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = WaitoShareExtension/WaitoShareExtension.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 33;
+				DEVELOPMENT_TEAM = M3KH86595Z;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = WaitoShareExtension/Info.plist;
+				INFOPLIST_KEY_CFBundleDisplayName = Waito;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				IPHONEOS_DEPLOYMENT_TARGET = 18.6;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.2.2;
+				PRODUCT_BUNDLE_IDENTIFIER = com.sangjin.Waito.WaitoShareExtension;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SUPPORTS_XR_DESIGNED_FOR_IPHONE_IPAD = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = 1;
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -536,6 +684,15 @@
 			buildConfigurations = (
 				EDC69A0B2F694200002FF663 /* Debug */,
 				EDC69A0C2F694200002FF663 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		F1DB7CB1302666BF00B745D6 /* Build configuration list for PBXNativeTarget "WaitoShareExtension" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F1DB7CAF302666BF00B745D6 /* Debug */,
+				F1DB7CB0302666BF00B745D6 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

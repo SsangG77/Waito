@@ -68,7 +68,8 @@ export interface TrackerDeliveryEvent {
   time: string;
   status: { code: string };
   description: string;
-  location?: string;
+  // tracker.delivery Location 오브젝트 — 이름(허브명 등)만 사용. 좌표/우편번호는 API 가 이름 외 제공 안 함.
+  location?: { name?: string } | null;
 }
 
 export interface TrackerDeliveryResponse {

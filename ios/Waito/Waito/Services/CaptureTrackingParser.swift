@@ -24,6 +24,15 @@ enum CaptureTrackingParser {
         return extract(from: lines)
     }
 
+    /// 복사한 텍스트(클립보드 등) → 운송장/택배사/상품명 추출. OCR 없이 라인 파서만 재사용.
+    static func parse(text: String) -> CapturedTrackingInfo {
+        let lines = text
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        return extract(from: lines)
+    }
+
     // MARK: - 이미지 디코딩 (UIKit 비의존)
 
     private static func makeCGImage(from data: Data) -> CGImage? {
