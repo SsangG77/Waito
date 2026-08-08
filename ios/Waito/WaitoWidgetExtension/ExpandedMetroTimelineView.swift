@@ -45,73 +45,84 @@ struct ExpandedMetroTimelineView: View {
         .padding(.vertical, 8)
     }
 
-    /// center 영역 — 좌 20% 유저 커스텀 트럭 크게 / 우측 위→아래: 물품명 → 가로 타임라인(+라벨)
-    /// → 하단 가로줄(배송상태 크게 · 날짜). bottom 영역은 더 이상 사용하지 않는다.
+    /// center 영역 — 위→아래: 물품명 → 가로 타임라인(현재 노드 = 커스텀 트럭 크게) → 라벨
+    /// → 하단 가로줄(배송상태 크게 · 날짜). 좌측 고정 트럭은 제거 — 트럭이 진행 위치를 직접 표시.
+    /// (2개 동시 표시는 펼침 높이 상한 160pt에 걸려 폐기 — 잠금화면만 2개, DI 펼침은 primary 1개.)
     private func mainContent(_ item: TrackingItemState) -> some View {
-        HStack(spacing: 12) {
-            // 좌: 커스텀 트럭 — 폭 약 20%. 커스터마이즈 가시성 피드백 반영(크게 전시).
-            CatalogTruckView(cab: state.truckConfig.cab, truckBody: state.truckConfig.body, wheels: state.truckConfig.wheelType, size: 50)
-                .frame(width: 58)
+        VStack(alignment: .leading, spacing: 7) {
+            Text(item.itemName)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.white)
+                .lineLimit(1)
 
-            VStack(alignment: .leading, spacing: 7) {
-                Text(item.itemName)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
+            stageBar(current: item.status)
+            stageLabels(current: item.status)
+
+            // 하단 가로줄 — 배송상태(좌·날짜보다 30% 크게) + 날짜(우)
+            HStack(alignment: .firstTextBaseline) {
+                Text(item.status.displayName)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Color.wPixelOrange)
                     .lineLimit(1)
-
-                stageBar(current: item.status)
-                stageLabels(current: item.status)
-
-                // 하단 가로줄 — 배송상태(좌·날짜보다 30% 크게) + 날짜(우)
-                HStack(alignment: .firstTextBaseline) {
-                    Text(item.status.displayName)
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundStyle(Color.wPixelOrange)
-                        .lineLimit(1)
-                    Spacer(minLength: 6)
-                    Text(shortDate(item.departureDate))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Color.wPixelMuted)
-                        .lineLimit(1)
-                }
+                Spacer(minLength: 6)
+                Text(shortDate(item.departureDate))
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Color.wPixelMuted)
+                    .lineLimit(1)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// 가로 픽셀 스텝바 — 고정 5단계, 진행된 만큼 채우고 남은 단계는 흐리게
+    /// 가로 픽셀 스텝바 — 고정 5단계. 현재 단계 노드는 네모점 대신 유저 커스텀 트럭(크게).
     private func stageBar(current: DeliveryStatus) -> some View {
         let count = DeliveryStatus.collapsedStages.count
         let currentOrder = current.collapsedStepIndex
         let dotSize: CGFloat = 5
         let gap: CGFloat = 4
+        let truckSize: CGFloat = 30
 
         return GeometryReader { geo in
             let total = geo.size.width
             let unit = unitWidth(total: total, count: count, dotSize: dotSize, gap: gap)
             let lineW = max(0, unit - dotSize - gap * 2)
+            let lineY = truckSize / 2   // 라인·점은 바 세로 중앙 — 트럭 중심이 점 위치와 일치
 
-            ZStack(alignment: .leading) {
+            // 트럭 실제 위치(가장자리 클램프 반영) 기준으로 인접 라인을 잘라 간격 유지.
+            // 간격 = 점-라인 gap 의 1.5배. 클램프로 트럭이 밀려도 라인이 트럭에 붙지 않는다.
+            let cx = unit * CGFloat(currentOrder) + dotSize / 2
+            let truckX = min(max(cx, truckSize / 2), total - truckSize / 2)
+            let truckGapH = gap * 1.5
+
+            ZStack(alignment: .topLeading) {
                 // Lines
                 ForEach(0..<count - 1, id: \.self) { i in
-                    let x = unit * CGFloat(i) + dotSize + gap
+                    let defaultStart = unit * CGFloat(i) + dotSize + gap
+                    let defaultEnd = defaultStart + lineW
+                    let start = i == currentOrder ? max(defaultStart, truckX + truckSize / 2 + truckGapH) : defaultStart
+                    let end = (i + 1) == currentOrder ? min(defaultEnd, truckX - truckSize / 2 - truckGapH) : defaultEnd
                     let filled = i < currentOrder
                     Rectangle()
                         .fill(filled ? Color.wPixelOrange.opacity(0.7) : Color.white.opacity(0.15))
-                        .frame(width: lineW, height: 1)
-                        .offset(x: x, y: dotSize / 2 - 0.5)
+                        .frame(width: max(0, end - start), height: 1)
+                        .offset(x: start, y: lineY - 0.5)
                 }
-                // Dots
+                // Dots — 현재 단계는 트럭이 대신하므로 생략
                 ForEach(0..<count, id: \.self) { i in
-                    let x = unit * CGFloat(i)
-                    Rectangle()
-                        .fill(dotColor(index: i, currentOrder: currentOrder))
-                        .frame(width: dotSize, height: dotSize)
-                        .offset(x: x)
+                    if i != currentOrder {
+                        let x = unit * CGFloat(i)
+                        Rectangle()
+                            .fill(dotColor(index: i, currentOrder: currentOrder))
+                            .frame(width: dotSize, height: dotSize)
+                            .offset(x: x, y: lineY - dotSize / 2)
+                    }
                 }
+                // 현재 단계 노드 = 커스텀 트럭
+                CatalogTruckView(cab: state.truckConfig.cab, truckBody: state.truckConfig.body, wheels: state.truckConfig.wheelType, size: truckSize)
+                    .position(x: truckX, y: lineY - 3)   // 라인 위에 살짝 떠 있게
             }
         }
-        .frame(height: dotSize)
+        .frame(height: truckSize)
     }
 
     /// 스텝바 아래 단계 라벨 — 각 점 중심에 정렬, 현재 단계만 오렌지·굵게

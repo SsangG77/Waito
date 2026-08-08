@@ -332,6 +332,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **택배사 선택**: 시스템 Menu 대신 픽셀 스타일 펼침 드롭다운(`PixelDropdown`)
 - **추가 폼**: 인라인 폼(AddTrackingView 제거). 조회 실패(NOT_FOUND) 시 "그래도 추가" 확인 다이얼로그(`PixelConfirm`) → `force` 재요청
 - **캡처로 추가(OCR)**: 배송 알림 스크린샷을 `PhotosPicker` 로 고르면 `CaptureTrackingParser`(Apple Vision, **온디바이스·서버 전송 없음**)가 운송장번호·택배사·품명을 뽑아 추가 폼에 prefill. 아무것도 못 찾으면 안내 팝업(`showCaptureNoInfo`).
+- **공유시트로 추가(WaitoShareExtension)**: 이미지(스크린샷)·텍스트(문자·카톡) 공유 → 익스텐션이 App Group(`group.com.sangjin.Waito`)에 저장(이미지=`shared_capture.dat` 파일, 텍스트=`shared_text` UserDefaults) 후 `waito://capture` 로 앱 오픈 → 앱이 소비해 OCR/라인 파싱 후 ADD 폼 prefill. OCR/파싱은 전부 앱 쪽(익스텐션은 저장만, 파서 타깃 공유 불필요).
+- **클립보드 자동인식**: 문자·카톡 내용 복사 후 앱 진입 시 `CaptureTrackingParser.parse(text:)`로 운송장·택배사·품명 추출 → 운송장이 있으면 ADD 폼 자동 오픈+prefill. `changeCount` 로 1회만. **프리필 공통 가드 `canAutofill`** = 편집 중 금지, ADD 폼 열려 있어도 비어 있으면 허용. 포그라운드 복귀 시 0.4s 지연 실행(클립보드 권한 프롬프트/익스텐션 파일쓰기 타이밍) + `onOpenURL(waito://)` 직접 신호.
 - **정렬**: 도착임박순(기본) / 최근 업데이트순 / 등록순 — 칩으로 선택, `@AppStorage` 영구 저장
 - **완료 섹션 구분**: 배송완료(`currentStatus.isCompleted`) 항목은 리스트 아래 **"완료 N" 섹션**으로 분리(`activeTrackings`/`completedTrackings`, 각 그룹 안에서 현재 정렬 적용). 헤더 탭으로 접기/펼치기(`@AppStorage("completed_section_collapsed")`, 기본 접힘). 완료 없으면 섹션 숨김.
 - **행 슬라이드 → 삭제/수정**: 왼쪽 슬라이드 → "> DEL_"(빨강)·"> EDIT_"(오렌지) **2버튼 세로 분할**(각 절반 높이, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), 바깥 탭/ADD 누르면 닫힘.
@@ -361,7 +363,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 ### Live Activity 푸시 (서버 + iOS)
 - APNs 실제 전송 + push-to-start 이벤트 기반 (위 "데이터 흐름" 참조)
 - 무료 1개 / 유료 **2개** 추적 제한(`SubscriptionManager.liveActivityLimit`). 잠금화면은 토글된 전부를 `ForEach`로 표시(primary+secondary 고정 아님). 한도 도달 시 무료는 Plus 페이월, 유료는 "표시 제한" 안내 팝업(`showLiveActivityLimitAlert`). ⚠️ ActivityKit ContentState 4KB·잠금화면 높이 제약상 상한 둠.
-- **트럭 표시(위젯)**: 접힌 DI = **왼쪽(compact leading) 픽셀 원형 진행링(`DeliveryProgressRingView`, 둘레에 사각 블록), 오른쪽(compact trailing) `CatalogTruckView` 트럭**. 잠금화면 배송 행은 **`CatalogTruckView` 트럭만** 정적 표시. **잠금화면 idle 과 펼친 DI idle(배송 없음 + 항상노출)은 동일한 `LockScreenIdleRow`(좌측 트럭 + `> BOUNCE_` 버튼) 공유** — `ExpandedMetroTimelineView.idleContent` 가 그대로 재사용.
+- **트럭 표시(위젯)**: 접힌 DI = **왼쪽(compact leading) 픽셀 원형 진행링(`DeliveryProgressRingView`, 둘레에 사각 블록), 오른쪽(compact trailing) `CatalogTruckView` 트럭**. **타임라인의 현재 단계 노드 = 커스텀 트럭**(네모점 대체, 인앱 목록 접힘 바·DI 펼침·잠금화면 3면 동일 디자인) — 트럭 중심이 점 위치, 3pt 위 오프셋, 인접 라인은 클램프된 트럭 가장자리 기준 gap×1.5 간격으로 잘라냄. **잠금화면 idle 과 펼친 DI idle(배송 없음 + 항상노출)은 동일한 `LockScreenIdleRow`(좌측 트럭 + `> BOUNCE_` 버튼) 공유** — `ExpandedMetroTimelineView.idleContent` 가 그대로 재사용.
   - ⚠️ **iOS 제약**: Live Activity(잠금화면/DI)는 시스템이 SwiftUI 애니메이션 모디파이어를 무시 → `repeatForever` 등 연속 애니메이션이 **실기기/시뮬에서 안 돎**(공식 문서 "Animating data updates in widgets and Live Activities"). 위젯에선 **오직 content state(ContentState) 변경 시에만** 화면이 갱신됨. → 위젯에선 자율 애니메이션 효과를 쓰지 않음.
     - **실기기 검증 결과(2026-06)**: idle 트럭을 "스스로 움직이게" 하려는 3가지 시도 모두 정지 확인 — ①`ProgressView(timerInterval:)`+커스텀 `ProgressViewStyle`(시스템이 `fractionCompleted` 를 커스텀 스타일에 안 흘려줌), ②`PhaseAnimator`(위젯에서 순환 안 함), ③`repeatForever`+`onAppear`(트리거 미발동). **자동 동력이 필요하면 서버 push 뿐이나 APNs Live Activity update 는 15초 throttle → walk-cycle 불가.** 결론: idle 트럭은 정적 + `> BOUNCE` 버튼(탭=state 변경)으로만 움직임.
   - **`RunningTruckView`(`RunningTruckScene.swift`)**: 트럭 바운스+속도선 "달리는" 효과 래퍼(`animated` 플래그). **인앱/프리뷰 전용**(일반 SwiftUI라 정상 재생). 현재 **목록 빈 상태(DeliveryListView)** 에서 사용. 모션은 `TimelineView(.animation)` 공유 시간축 + 위상(phase) 기반 — 각 속도선이 항상 화면 전체에 균등 분배돼 우→좌로 흐름(이전 `repeatForever`+`delay` 방식의 뭉침/트럭 뒤 출현 문제 해결). `Color(hex: UInt32)` 포함. 위젯에선 미사용.
@@ -374,7 +376,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - 데이터: 서버 `GET /api/trackings` 목록이 각 택배의 `events` 전체 포함(`TrackingListItem.events`). LA는 위젯 타깃이 `TrackingEvent`를 못 보므로 **compact 필드(`eventCount`/`statusLabel`)만** 전달.
 - **상태 단계 = 택배사 코드 5개**(접수·집화완료·간선·배송출발·배송완료). `statusMapper` 가 tracker.delivery 코드를 **1:1 매핑**(IN_TRANSIT→간선(inTransitIn), OUT_FOR_DELIVERY→배송출발). **간선상차/하차·배송중 세분화(문구 키워드 추측)는 폐기** → enum 의 `inTransitOut`/`delivering` 은 미사용(deprecated, 호환용 유지). `DeliveryStatus.collapsedStages`(5)/`collapsedStepIndex`(inTransitOut→간선2, delivering→배송출발3). 게이지·트럭 위치용 `progress`는 **5단계 균등 0.1/0.3/0.5/0.7/0.9**(표시 전용, 서버 전진 판정 STATUS_T_VALUES 와 별개 — 파일 상단 표 참조).
 - 인앱(`TrackingRowView`): **접힘 가로바·폴백 타임라인 = 고정 5단계**(`collapsedStages`). **펼침 세로 타임라인 = 실제 events 기반**(점마다 원본 `description` 라벨). (②) `eventDotBar` 미사용.
-- 위젯: 잠금화면 `LockScreenStatusTimeline`·DI 펼침 `ExpandedMetroTimelineView` 모두 **고정 5단계**(`collapsedStepIndex`). DI 펼침 center=물품명+타임라인, bottom=출발날짜 ⟷ 상태라벨. **현재 상태 텍스트 = `status.displayName`(예: 간선상차)로 인앱·DI·잠금화면 전부 통일**. 택배사 **원본 메시지는 인앱 펼침 타임라인 점 라벨에만**(`TrackingRowView`).
+- 위젯: 잠금화면 `LockScreenStatusTimeline`·DI 펼침 `ExpandedMetroTimelineView` 모두 **고정 5단계**(`collapsedStepIndex`). DI 펼침 center = 물품명 → 가로 타임라인(현재 노드=커스텀 트럭) → 단계 라벨 → 상태·날짜 가로줄(bottom 영역 미사용, 좌측 고정 트럭 제거 — 2개 동시 표시는 펼침 160pt 상한으로 폐기, primary 1개만). 인앱 펼침 세로 타임라인은 노드마다 원본 메시지→위치→시간 세로 정렬(레일 구조, 점-선 간격 4pt). **현재 상태 텍스트 = `status.displayName`(예: 간선상차)로 인앱·DI·잠금화면 전부 통일**. 택배사 **원본 메시지는 인앱 펼침 타임라인 점 라벨에만**(`TrackingRowView`).
 - `ExpandedTruckPathView`(폐기된 Island Circuit 1차 디자인) 삭제됨.
 
 ### 잠금화면 idle (항상 노출)

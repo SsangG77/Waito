@@ -111,11 +111,11 @@ struct LockScreenStatusTimeline: View {
 
     private let dotSize: CGFloat = 5
     private let gap: CGFloat = 3
-    private let truckSize: CGFloat = 16
-    private let truckGap: CGFloat = 3   // 트럭과 점 사이 세로 간격
+    private let truckSize: CGFloat = 26   // 현재 단계 노드를 대체하는 커스텀 트럭
 
     var body: some View {
         // 전체 배송 과정(고정 단계)을 항상 표시 — 진행된 만큼 채우고 남은 단계는 흐리게.
+        // 현재 단계 노드는 네모점 대신 유저 커스텀 트럭이 그 자리에 선다.
         let count = DeliveryStatus.collapsedStages.count
         let currentIndex = status.collapsedStepIndex
 
@@ -123,38 +123,47 @@ struct LockScreenStatusTimeline: View {
             let denom = CGFloat(max(count - 1, 1))
             let lineWidth = max(0, (geo.size.width - (dotSize + gap * 2) * CGFloat(count) + gap * 2) / denom)
             let stepW = dotSize + gap * 2 + lineWidth
-            let dotsCenterY = truckSize + truckGap + dotSize / 2
+            let dotsCenterY = truckSize / 2   // 라인·점은 세로 중앙 — 트럭 중심이 점 위치와 일치
             let currentDotCenterX = stepW * CGFloat(currentIndex) + dotSize / 2
             let truckX = min(max(currentDotCenterX, truckSize / 2), geo.size.width - truckSize / 2)
+
+            // 트럭 실제 위치(가장자리 클램프 반영) 기준으로 인접 라인을 잘라 간격 유지.
+            // 간격 = 점-라인 gap 의 1.5배. 클램프로 트럭이 밀려도 라인이 트럭에 붙지 않는다.
+            let truckGapH = gap * 1.5
 
             ZStack(alignment: .topLeading) {
                 // 연결선
                 if count > 1 {
                     ForEach(0..<count - 1, id: \.self) { i in
-                        let x = stepW * CGFloat(i) + dotSize + gap
+                        let defaultStart = stepW * CGFloat(i) + dotSize + gap
+                        let defaultEnd = defaultStart + lineWidth
+                        let start = i == currentIndex ? max(defaultStart, truckX + truckSize / 2 + truckGapH) : defaultStart
+                        let end = (i + 1) == currentIndex ? min(defaultEnd, truckX - truckSize / 2 - truckGapH) : defaultEnd
                         let filled = i < currentIndex
                         Rectangle()
                             .fill(filled ? wPixelStatusColor(status) : Color.white.opacity(0.22))
-                            .frame(width: lineWidth, height: 1)
-                            .offset(x: x, y: dotsCenterY - 0.5)
+                            .frame(width: max(0, end - start), height: 1)
+                            .offset(x: start, y: dotsCenterY - 0.5)
                     }
                 }
-                // 점
+                // 점 — 현재 단계는 트럭이 대신하므로 생략
                 ForEach(0..<count, id: \.self) { i in
-                    let x = stepW * CGFloat(i)
-                    let filled = i <= currentIndex
-                    Rectangle()
-                        .fill(filled ? wPixelStatusColor(status) : Color.white.opacity(0.25))
-                        .frame(width: dotSize, height: dotSize)
-                        .offset(x: x, y: dotsCenterY - dotSize / 2)
+                    if i != currentIndex {
+                        let x = stepW * CGFloat(i)
+                        let filled = i < currentIndex
+                        Rectangle()
+                            .fill(filled ? wPixelStatusColor(status) : Color.white.opacity(0.25))
+                            .frame(width: dotSize, height: dotSize)
+                            .offset(x: x, y: dotsCenterY - dotSize / 2)
+                    }
                 }
-                // 마지막(현재) 점 위 작은 트럭
+                // 현재 단계 노드 = 커스텀 트럭
                 CatalogTruckView(cab: truckConfig.cab, truckBody: truckConfig.body, wheels: truckConfig.wheelType, size: truckSize)
                     .frame(width: truckSize, height: truckSize)
-                    .position(x: truckX, y: truckSize / 2)
+                    .position(x: truckX, y: dotsCenterY - 3)   // 라인 위에 살짝 떠 있게
             }
         }
-        .frame(height: truckSize + truckGap + dotSize)
+        .frame(height: truckSize)
     }
 }
 
