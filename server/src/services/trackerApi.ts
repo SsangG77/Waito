@@ -30,6 +30,9 @@ const TRACK_QUERY = gql`
   }
 `;
 
+/// tracker API 요청 단위 상한. 폴링이 직렬이라 한 건이 매달리면 사이클 전체가 멈춘다.
+const REQUEST_TIMEOUT_MS = 10_000;
+
 let client: GraphQLClient | null = null;
 
 function getClient(): GraphQLClient {
@@ -104,9 +107,11 @@ export async function trackPackage(
     return buildTestTrackResponse(createdAtMs ?? Date.now());
   }
   try {
-    return await getClient().request<TrackerDeliveryResponse>(TRACK_QUERY, {
-      carrierId,
-      trackingNumber,
+    return await getClient().request<TrackerDeliveryResponse>({
+      document: TRACK_QUERY,
+      variables: { carrierId, trackingNumber },
+      // 요청마다 새 signal — 재사용하면 첫 타임아웃 이후 영구 abort 된다.
+      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
     if (error instanceof ClientError && error.response.status === 401) {
@@ -149,13 +154,17 @@ export async function registerWebhook(
   if (trackingNumber === TEST_TRACKING_NUMBER) {
     return { expiresAt };
   }
-  await getClient().request(REGISTER_WEBHOOK_MUTATION, {
-    input: {
-      carrierId,
-      trackingNumber,
-      callbackUrl,
-      expirationTime: expiresAt,
+  await getClient().request({
+    document: REGISTER_WEBHOOK_MUTATION,
+    variables: {
+      input: {
+        carrierId,
+        trackingNumber,
+        callbackUrl,
+        expirationTime: expiresAt,
+      },
     },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   return { expiresAt };
 }

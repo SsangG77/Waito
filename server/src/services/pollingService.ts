@@ -63,7 +63,15 @@ async function pollTracking(trackingId: number): Promise<void> {
       );
     }
 
-    // 상태가 변경된 경우에만 업데이트
+    // 상태가 그대로여도 최신 이벤트 시각은 항상 반영한다.
+    // 간선 허브를 여러 번 거치면 상태는 inTransitIn 로 동일하지만 이벤트는 계속 쌓이는데,
+    // 이걸 상태 변경 시에만 갱신하면 last_event_time 이 며칠씩 멈춰
+    // 정렬(최근 업데이트순)·"확인 중" 판정이 실제와 어긋난다.
+    db.prepare(`
+      UPDATE trackings SET last_event_time = ?, updated_at = datetime('now') WHERE id = ?
+    `).run(result.track.lastEvent.time, trackingId);
+
+    // 상태가 변경된 경우에만 단계·푸시 갱신
     if (newStatus !== tracking.current_status) {
       db.prepare(`
         UPDATE trackings
@@ -176,33 +184,21 @@ async function pollTestTracking(tracking: {
 }
 
 /**
- * 배송 전 택배: 2시간마다, 배송출발 이후: 30분마다 폴링
+ * 미완료 택배 전체를 5분마다 폴링.
+ *
+ * webhook 이 주 경로이고 폴링은 백업이지만, webhook 이 죽으면 이 주기가 곧 지연 상한이 된다.
+ * tracker.delivery 월 쿼터는 "고유 운송장 번호 수"(10,000) 기준이라 같은 운송장을 자주 조회해도
+ * 월 사용량이 늘지 않는다. 제약은 APICallsPerSecond(10) 뿐 → 직렬 호출인 현재 구조에선 여유.
+ * (단계별로 주기를 나눴던 이전 구조는 주기가 같아져 의미가 없어 하나로 합침)
  */
 export function startPollingScheduler(): void {
-  // 배송 전 (2시간마다)
-  cron.schedule('0 */2 * * *', async () => {
-    console.log('[Polling] Running pre-delivery poll...');
+  cron.schedule('*/5 * * * *', async () => {
+    console.log('[Polling] Running poll...');
     const db = getDb();
     const trackings = db.prepare(`
       SELECT id FROM trackings
-      WHERE current_status IN ('registered', 'pickedUp', 'inTransitIn', 'inTransitOut')
-        AND delivered_at IS NULL
+      WHERE delivered_at IS NULL
     `).all() as Array<{ id: number }>;
-
-    for (const t of trackings) {
-      await pollTracking(t.id);
-    }
-  });
-
-  // 배송출발 이후 (30분마다)
-  cron.schedule('*/30 * * * *', async () => {
-    console.log('[Polling] Running active delivery poll...');
-    const db = getDb();
-    const trackings = db.prepare(`
-      SELECT id FROM trackings
-      WHERE (current_status IN ('outForDelivery', 'delivering') AND delivered_at IS NULL)
-         OR (tracking_number = ? AND delivered_at IS NULL)
-    `).all(TEST_TRACKING_NUMBER) as Array<{ id: number }>;
 
     for (const t of trackings) {
       await pollTracking(t.id);
@@ -215,9 +211,13 @@ export function startPollingScheduler(): void {
     const db = getDb();
     const trackings = db.prepare(`
       SELECT id, carrier_id, tracking_number FROM trackings
-      WHERE webhook_expires_at IS NOT NULL
-        AND delivered_at IS NULL
-        AND webhook_expires_at < datetime('now', '+24 hours')
+      WHERE delivered_at IS NULL
+        AND (
+          -- 최초 등록이 실패해 NULL 로 남은 건도 매일 재시도한다.
+          -- (IS NOT NULL 조건만 두면 그 택배는 평생 webhook 없이 폴링에만 의존)
+          webhook_expires_at IS NULL
+          OR webhook_expires_at < datetime('now', '+24 hours')
+        )
     `).all() as Array<{
       id: number;
       carrier_id: string;
