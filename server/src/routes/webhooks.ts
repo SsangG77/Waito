@@ -3,6 +3,7 @@ import { getDb } from '../db/database.js';
 import { trackPackage } from '../services/trackerApi.js';
 import { resolveNewStatus } from '../services/statusMapper.js';
 import { pushTrackingUpdate } from '../services/pushService.js';
+import { pollTracking } from '../services/pollingService.js';
 import { DeliveryStatus, STATUS_T_VALUES } from '../types/delivery.js';
 
 const router = Router();
@@ -13,9 +14,10 @@ router.post('/tracker', (req: Request, res: Response) => {
   // 즉시 202 응답
   res.status(202).json({ ok: true });
 
-  // 비동기 처리
-  processWebhook(req.body).catch(error => {
+  // 비동기 처리 — 실패해도 폴링 경로로 폴백해 갱신 자체는 살린다.
+  processWebhook(req.body).catch(async error => {
     console.error('[Webhook] Processing error:', error);
+    await fallbackToPolling(req.body);
   });
 });
 
@@ -73,9 +75,17 @@ async function processWebhook(payload: any): Promise<void> {
         newStatus,
         event.description,
         event.time,
-        event.location || null,
+        // location 은 { name } 객체 — 문자열로 풀어야 한다.
+        // 객체를 그대로 넘기면 better-sqlite3 가 named parameter 로 해석해
+        // positional ? 가 안 채워지고 throw → 이 콜백의 갱신 전체가 죽는다.
+        event.location?.name || null,
       );
     }
+
+    // 상태가 그대로여도 최신 이벤트 시각은 항상 반영 (폴링 경로와 동일)
+    db.prepare(`
+      UPDATE trackings SET last_event_time = ?, updated_at = datetime('now') WHERE id = ?
+    `).run(result.track.lastEvent.time, tracking.id);
 
     if (newStatus !== tracking.current_status) {
       db.prepare(`
@@ -94,6 +104,28 @@ async function processWebhook(payload: any): Promise<void> {
 
       await pushTrackingUpdate(tracking.id, newStatus);
     }
+  }
+}
+
+/**
+ * webhook 처리가 예외로 죽었을 때의 폴백 — 같은 운송장을 폴링 경로로 다시 태운다.
+ * 파싱 버그가 재발해도 상태 갱신·푸시는 살아남는다.
+ */
+async function fallbackToPolling(payload: any): Promise<void> {
+  const trackingNumber = payload?.trackingNumber;
+  if (!trackingNumber) return;
+
+  try {
+    const db = getDb();
+    const rows = db.prepare(
+      'SELECT id FROM trackings WHERE tracking_number = ? AND delivered_at IS NULL'
+    ).all(trackingNumber) as Array<{ id: number }>;
+
+    for (const row of rows) {
+      await pollTracking(row.id);
+    }
+  } catch (error) {
+    console.error(`[Webhook] Fallback polling failed for ${trackingNumber}:`, error);
   }
 }
 
