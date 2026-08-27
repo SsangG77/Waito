@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { mapTrackerStatus, shouldUpdateStatus, resolveNewStatus } from '../src/services/statusMapper.js';
+import { mapTrackerStatus, mapTrack17Status, shouldUpdateStatus, resolveNewStatus } from '../src/services/statusMapper.js';
 import { DeliveryStatus } from '../src/types/delivery.js';
 
 describe('mapTrackerStatus (택배사 코드 1:1)', () => {
@@ -92,5 +92,53 @@ describe('resolveNewStatus', () => {
 
     status = resolveNewStatus(status, 'AT_PICKUP');
     expect(status).toBe(DeliveryStatus.OutForDelivery);
+  });
+});
+
+describe('mapTrack17Status (17TRACK 해외 코드)', () => {
+  it('maps InfoReceived to registered', () => {
+    expect(mapTrack17Status('InfoReceived')).toBe(DeliveryStatus.Registered);
+  });
+
+  it('folds InTransit (통관 포함) into inTransitIn', () => {
+    expect(mapTrack17Status('InTransit')).toBe(DeliveryStatus.InTransitIn);
+    expect(mapTrack17Status('InTransit', 'Customs clearance in progress')).toBe(DeliveryStatus.InTransitIn);
+  });
+
+  it('treats AvailableForPickup same as OutForDelivery', () => {
+    expect(mapTrack17Status('AvailableForPickup')).toBe(DeliveryStatus.OutForDelivery);
+    expect(mapTrack17Status('OutForDelivery')).toBe(DeliveryStatus.OutForDelivery);
+  });
+
+  it('maps Delivered to delivered', () => {
+    expect(mapTrack17Status('Delivered')).toBe(DeliveryStatus.Delivered);
+  });
+
+  it('returns null for non-progress states (전진 없음)', () => {
+    expect(mapTrack17Status('NotFound')).toBeNull();
+    expect(mapTrack17Status('Expired')).toBeNull();
+    expect(mapTrack17Status('DeliveryFailure')).toBeNull();
+    expect(mapTrack17Status('Exception')).toBeNull();
+  });
+});
+
+describe('resolveNewStatus — provider 분기', () => {
+  it('uses 17TRACK codes only when provider is track17', () => {
+    // 같은 문자열이라도 provider 에 따라 해석이 달라진다
+    expect(resolveNewStatus(DeliveryStatus.Registered, 'InTransit', '', 'track17'))
+      .toBe(DeliveryStatus.InTransitIn);
+    // tracker(기본)에서는 모르는 코드 → 현재 상태 유지
+    expect(resolveNewStatus(DeliveryStatus.Registered, 'InTransit'))
+      .toBe(DeliveryStatus.Registered);
+  });
+
+  it('never moves backwards for 17TRACK either', () => {
+    expect(resolveNewStatus(DeliveryStatus.OutForDelivery, 'InTransit', '', 'track17'))
+      .toBe(DeliveryStatus.OutForDelivery);
+  });
+
+  it('keeps current status on DeliveryFailure (배송실패는 전진 아님)', () => {
+    expect(resolveNewStatus(DeliveryStatus.OutForDelivery, 'DeliveryFailure', '', 'track17'))
+      .toBe(DeliveryStatus.OutForDelivery);
   });
 });

@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { getDb } from '../db/database.js';
 import { trackPackage, registerWebhook, TEST_TRACKING_NUMBER, TEST_STEPS, TEST_STEP_INTERVAL_MS, testStepIndex } from './trackerApi.js';
+import { trackPackage17, isTrack17Configured } from './track17Api.js';
 import { resolveNewStatus, mapTrackerStatus } from './statusMapper.js';
 import { pushTrackingUpdate } from './pushService.js';
 import { isCredentialExpired } from './credentialMonitor.js';
@@ -33,13 +34,23 @@ async function pollTracking(trackingId: number): Promise<void> {
   const carrier = CARRIERS.find(c => c.id === tracking.carrier_id);
   if (!carrier) return;
 
-  if (isCredentialExpired()) {
+  const isTrack17 = carrier.provider === 'track17';
+
+  // 제공자별 사용 불가 조건 — 해당 제공자 쪽만 건너뛴다.
+  if (isTrack17) {
+    if (!isTrack17Configured()) {
+      console.warn(`[Polling] Skipping tracking ${trackingId} — 17TRACK key not configured`);
+      return;
+    }
+  } else if (isCredentialExpired()) {
     console.warn(`[Polling] Skipping tracking ${trackingId} — credential expired`);
     return;
   }
 
   try {
-    const result = await trackPackage(carrier.trackerId, tracking.tracking_number);
+    const result = isTrack17
+      ? await trackPackage17(carrier.trackerId, tracking.tracking_number)
+      : await trackPackage(carrier.trackerId, tracking.tracking_number);
 
     if (!result.track?.lastEvent) return;
 
@@ -47,7 +58,7 @@ async function pollTracking(trackingId: number): Promise<void> {
     let newStatus = tracking.current_status;
     for (const edge of result.track.events.edges) {
       const event = edge.node;
-      newStatus = resolveNewStatus(newStatus, event.status.code, event.description);
+      newStatus = resolveNewStatus(newStatus, event.status.code, event.description, carrier.provider);
 
       // 이벤트 기록
       db.prepare(`
@@ -228,6 +239,8 @@ export function startPollingScheduler(): void {
       try {
         const carrier = CARRIERS.find(c => c.id === t.carrier_id);
         if (!carrier) continue;
+        // 17TRACK 은 운송장별 webhook 등록이 없다 — 넣으면 tracker.delivery 에 헛요청만 간다.
+        if (carrier.provider !== 'tracker') continue;
 
         const result = await registerWebhook(
           carrier.trackerId,
