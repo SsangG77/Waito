@@ -1,6 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/database.js';
 import { trackPackage, registerWebhook, isTrackingNotFoundError } from '../services/trackerApi.js';
+import { trackPackage17 } from '../services/track17Api.js';
 import { resolveNewStatus } from '../services/statusMapper.js';
 import { pollTracking } from '../services/pollingService.js';
 import { DeliveryStatus, STATUS_T_VALUES, CARRIERS } from '../types/delivery.js';
@@ -50,13 +51,17 @@ router.post('/', async (req: Request, res: Response) => {
   // 확 바뀌는 flip 이 생긴다. (mapped_status 는 폴링과 같이 누적 계산)
   const initialEvents: Array<{ code: string; mapped: DeliveryStatus; description: string; time: string; location: string | null }> = [];
   try {
-    const result = await trackPackage(carrier.trackerId, trackingNumber);
+    // 해외(17TRACK)는 등록이 있어야 조회가 된다. 여기서 quota 1건이 차감되고,
+    // 이후 폴링·재조회는 무과금이라 등록 지점을 이 한 곳으로 모은다.
+    const result = carrier.provider === 'track17'
+      ? await trackPackage17(carrier.trackerId, trackingNumber)
+      : await trackPackage(carrier.trackerId, trackingNumber);
     if (result.track?.lastEvent) {
       lastEventTime = result.track.lastEvent.time;
     }
     if (result.track?.events?.edges) {
       for (const edge of result.track.events.edges) {
-        initialStatus = resolveNewStatus(initialStatus, edge.node.status.code, edge.node.description);
+        initialStatus = resolveNewStatus(initialStatus, edge.node.status.code, edge.node.description, carrier.provider);
         initialEvents.push({
           code: edge.node.status.code,
           mapped: initialStatus,
@@ -107,7 +112,10 @@ router.post('/', async (req: Request, res: Response) => {
     }
   }
 
-  // Webhook 등록 시도
+  // Webhook 등록 시도 — tracker.delivery 전용.
+  // 17TRACK 은 운송장별 등록이 아니라 대시보드에 콜백 URL 을 한 번 설정하는 방식이고,
+  // TLSv1.2 이상을 요구하는데 현재 서버는 도메인 없는 HTTP 라 폴링으로만 갱신한다.
+  if (carrier.provider === 'tracker') {
   try {
     const webhook = await registerWebhook(
       carrier.trackerId,
@@ -118,6 +126,7 @@ router.post('/', async (req: Request, res: Response) => {
       .run(webhook.expiresAt, trackingId);
   } catch (error) {
     console.warn(`[Tracking] Webhook registration failed, will rely on polling:`, error);
+  }
   }
 
   res.status(201).json({

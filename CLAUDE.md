@@ -6,6 +6,23 @@
 **플랫폼**: iOS (iPhone 14 Pro 이상, Dynamic Island 탑재 기기)
 **핵심 컨셉**: 택배 트럭이 Dynamic Island 테두리를 따라 이동하며 배송 상태를 시각적으로 보여주는 앱
 
+### 타겟 유저 (2026-08 전환)
+
+**해외 배송을 기다리는 사용자** — 특히 해외 거주자·해외직구 이용자.
+
+전환 근거(실사용자 피드백):
+- 국내 배송은 대부분 **하루 만에 도착** → "굳이 왜 써야 하는지 모르겠다"는 의견이 다수
+- 반면 **해외 거주자들은 배송이 오래 걸려 기다리는 기간이 길고**, 그 구간에서 유용하다는 응답을 받음
+
+즉 앱의 가치는 **기다리는 시간의 길이에 비례**한다. 하루 만에 끝나는 배송에는 트럭을 띄워둘 이유가 약하고,
+일주일 이상 걸리는 배송에서 진행 상황이 계속 보이는 것이 실제 효용이 된다.
+
+→ 그래서 **해외 배송 지원을 전제로 설계**한다. 기능·문구·페이월 우선순위 판단 시 이 기준을 따른다.
+(기존에 잡았던 "국내 쇼핑 헤비유저" 타겟은 폐기)
+
+⚠️ 해외 택배사 지원 현황은 아래 "택배사 API" 참조 — tracker.delivery 가 DHL·Cainiao·Japan Post 등을 이미 지원하므로
+`CARRIERS` 상수 추가만으로 확장 가능(앱 빌드 불필요). FedEx·UPS·USPS 는 미지원이라 별도 검토 필요.
+
 ---
 
 ## 명령어 (Commands)
@@ -275,7 +292,10 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - 조회 안 되면 NOT_FOUND (잘못된 번호 / 배송준비중 / 데이터 만료를 API가 구분 못 함)
 
 ### 지원 택배사 (`server/src/types/delivery.ts` 의 `CARRIERS` 상수)
-`id` (앱/DB 키) — `name` — `trackerId` (tracker.delivery 식별자)
+
+각 항목은 `provider` 로 어느 API 를 쓸지 정한다 — `tracker`(국내) / `track17`(해외).
+
+**국내 — tracker.delivery** (`trackerId` = tracker.delivery 식별자)
 1. cj — CJ대한통운 — kr.cjlogistics
 2. hanjin — 한진택배 — kr.hanjin
 3. lotte — 롯데택배 — kr.lotte
@@ -283,8 +303,28 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 5. logen — 로젠택배 — kr.logen
 6. coupang — 쿠팡 — kr.coupangls
 
-> 택배사는 코드 상수. 추가하려면 `CARRIERS` 에 `trackerId`(tracker.delivery 의 정확한 식별자)와 함께 추가.
-> tracker.delivery 는 한국 외 글로벌 택배사도 지원하므로, API 동기화로 바꾸려면 `kr.` 필터 필요.
+**해외 — 17TRACK** (`trackerId` = 17TRACK carrier key, `international: true`)
+7. cainiao — Cainiao (알리·테무) — 190271
+8. dhl — DHL — 101266
+9. fedex — FedEx — 100003
+10. ups — UPS — 100002
+11. usps — USPS — 21051
+12. japanpost — Japan Post — 10021
+
+> 택배사는 코드 상수. 앱은 `GET /api/carriers` 로 목록을 받아오므로 **상수만 추가하면 앱 빌드·심사 없이 반영**된다.
+> 해외 carrier key 는 [공식 CSV](https://res.17track.net/asset/carrier/info/apicarrier.all.csv)(3,486개)에서 확인할 것 — 이름이 비슷한 항목이 여럿 있어 추측하면 틀린다(DHL 은 101266, Japan Post 는 10021).
+
+### 17TRACK (해외 조회) — `server/src/services/track17Api.ts`
+
+- **왜 집계 API 인가**: 해외 캐리어 공식 API 는 전부 "발송인(계약 화주)" 모델이라 수취인이 남의 운송장을 조회할 수 없다. Cainiao·J&T 는 가맹점 전용, Yamato·Royal Mail 은 자사 발송분 한정, Japan Post 는 추적 API 자체가 없음. FedEx·UPS 만 임의 운송장 조회가 되지만 최대 물량인 Cainiao 를 못 잡아 실익이 없다.
+- **인증**: 헤더 `17token` (`TRACK17_API_KEY`). **21일 갱신 없음**(tracker.delivery 와 대비되는 장점).
+- **과금**: **운송장 등록당 1건**. 등록 이후 조회·재조회·푸시는 무과금 → **폴링 주기를 줄여도 비용이 늘지 않는다.** 무료 200건(신규 계정 1회), 유료는 $119/5,000건(선불, 12개월 유효).
+- **등록 지점은 한 곳**: `POST /api/trackings` 의 초기 조회(`trackPackage17` 내부에서 미등록이면 자동 등록). 이미 등록된 운송장 재등록은 중복 차감 없음(에러코드 -18019901 통과 처리).
+- **응답 변환**: 17TRACK 응답을 `TrackerDeliveryResponse` 모양으로 변환해 돌려준다 → `pollTracking` 의 이벤트 저장·상태 판정 로직을 제공자별로 나누지 않아도 됨. 분기는 "어느 API 를 부를지" 뿐.
+- **상태 매핑**(`mapTrack17Status`): 9개 상태를 기존 5단계에 접는다. InfoReceived→접수 / InTransit(**통관 포함**)→간선 / AvailableForPickup·OutForDelivery→배송출발 / Delivered→배송완료 / NotFound·Expired·DeliveryFailure·Exception→**전진 없음(현재 유지)**.
+  - ⚠️ 해외는 통관에서 며칠 머무는 게 흔한데 지금은 '간선'으로 뭉뚱그려진다. 단계 추가는 앱·위젯 3면을 모두 고쳐야 해서 보류 — 실제 해외 배송 데이터를 본 뒤 판단.
+- **webhook 미사용**: 17TRACK 콜백은 TLSv1.2 이상 필수인데 현재 서버는 도메인 없는 HTTP(`158.247.223.154:3001`) → **폴링으로만 갱신**. 조회가 무과금이라 실질 문제 없음. webhook 갱신 cron 도 `provider === 'tracker'` 인 것만 처리한다.
+- **키 미설정 시**: 해외 택배만 graceful skip(국내는 정상 동작). 키는 서버 `.env` 에만 두고 커밋 금지.
 
 ---
 

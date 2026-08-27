@@ -15,6 +15,13 @@ export const config = {
     credentialLifetimeDays: 21,
   },
 
+  // 17TRACK — 해외 택배사 조회. 키가 없으면 해외 택배 등록·폴링을 graceful skip 한다.
+  // 과금은 운송장 등록당 1건이고 이후 조회는 무과금이라 폴링 주기와 무관하다.
+  track17: {
+    apiUrl: process.env.TRACK17_API_URL || 'https://api.17track.net/track/v2.2',
+    apiKey: process.env.TRACK17_API_KEY || '',
+  },
+
   apns: {
     keyId: process.env.APNS_KEY_ID || '',
     teamId: process.env.APNS_TEAM_ID || '',
