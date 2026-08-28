@@ -3,7 +3,7 @@ import { getDb } from '../db/database.js';
 import { trackPackage, registerWebhook, TEST_TRACKING_NUMBER, TEST_STEPS, TEST_STEP_INTERVAL_MS, testStepIndex } from './trackerApi.js';
 import { trackPackage17, isTrack17Configured } from './track17Api.js';
 import { resolveNewStatus, mapTrackerStatus } from './statusMapper.js';
-import { pushTrackingUpdate } from './pushService.js';
+import { pushTrackingUpdate, reviveExpiredActivities } from './pushService.js';
 import { isCredentialExpired } from './credentialMonitor.js';
 import { DeliveryStatus, STATUS_T_VALUES, CARRIERS } from '../types/delivery.js';
 import { config } from '../config.js';
@@ -78,9 +78,11 @@ async function pollTracking(trackingId: number): Promise<void> {
     // 간선 허브를 여러 번 거치면 상태는 inTransitIn 로 동일하지만 이벤트는 계속 쌓이는데,
     // 이걸 상태 변경 시에만 갱신하면 last_event_time 이 며칠씩 멈춰
     // 정렬(최근 업데이트순)·"확인 중" 판정이 실제와 어긋난다.
+    // sub_stage(통관 등)는 COALESCE — 한 번 설정되면 유지(이벤트 50개 제한으로 잘려도 뒤로 안 감).
     db.prepare(`
-      UPDATE trackings SET last_event_time = ?, updated_at = datetime('now') WHERE id = ?
-    `).run(result.track.lastEvent.time, trackingId);
+      UPDATE trackings SET last_event_time = ?, sub_stage = COALESCE(?, sub_stage),
+                           updated_at = datetime('now') WHERE id = ?
+    `).run(result.track.lastEvent.time, result.track.subStage ?? null, trackingId);
 
     // 상태가 변경된 경우에만 단계·푸시 갱신
     if (newStatus !== tracking.current_status) {
@@ -213,6 +215,17 @@ export function startPollingScheduler(): void {
 
     for (const t of trackings) {
       await pollTracking(t.id);
+    }
+  });
+
+  // Live Activity keep-alive (30분마다) — 8시간 한도로 사라진 LA 를 push-to-start 로 되살린다.
+  // 해외 배송처럼 상태가 며칠 안 바뀌는 경우에도 DI/잠금화면 표시가 유지되게 한다.
+  // (심야 억제·대상 판정은 reviveExpiredActivities 내부에서 처리)
+  cron.schedule('*/30 * * * *', async () => {
+    try {
+      await reviveExpiredActivities();
+    } catch (error) {
+      console.error('[Keep-Alive] 실행 실패:', error);
     }
   });
 
