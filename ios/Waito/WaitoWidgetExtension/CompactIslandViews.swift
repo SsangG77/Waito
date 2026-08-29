@@ -114,7 +114,7 @@ struct SecondaryTrackingRow: View {
                         .fill(Color.white.opacity(0.15))
                     RoundedRectangle(cornerRadius: 1.5)
                         .fill(Color.white.opacity(0.6))
-                        .frame(width: geo.size.width * item.status.progress)
+                        .frame(width: geo.size.width * item.stageInfo.progress)
                 }
             }
             .frame(width: 30, height: 3)
@@ -126,7 +126,7 @@ struct SecondaryTrackingRow: View {
 
             Spacer()
 
-            Text(item.status.displayName)
+            Text(item.stageInfo.currentName)
                 .font(.system(size: 10))
                 .foregroundStyle(.white.opacity(0.5))
         }

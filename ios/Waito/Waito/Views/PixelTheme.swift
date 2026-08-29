@@ -98,28 +98,45 @@ extension View {
 // MARK: - PixelTextField
 
 struct PixelTextField: View {
-    let label: String
+    /// LocalizedStringKey — Localizable.xcstrings 의 키. 시스템 언어에 맞춰 자동 치환된다.
+    let label: LocalizedStringKey
     @Binding var text: String
     /// 읽기전용(편집 모드에서 운송장번호/택배사처럼 수정 불가 항목 표시용)
     var disabled: Bool = false
+    /// 입력칸 안쪽 오른쪽 끝 아이콘 버튼 (예: 운송장 바코드 스캔). nil 이면 미표시.
+    var trailingIcon: String? = nil
+    var trailingAccessibilityId: String? = nil
+    var onTrailingTap: (() -> Void)? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(pixelFont(9))
+                .font(pixelFont(12))
                 .foregroundStyle(Color.pixelOrange)
 
-            TextField("", text: $text)
-                .font(pixelFont(10))
-                .foregroundStyle(disabled ? Color.pixelMuted : Color.pixelText)
-                .tint(Color.pixelOrange)
-                .disabled(disabled)
-                // 고정 줄 높이 — 빈 필드+커스텀 폰트가 포커스 시 줄 높이로 스냅되며 박스가 줄어드는 것 방지
-                .frame(height: 18)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 14)
-                .pixelBox()
-                .opacity(disabled ? 0.6 : 1.0)
+            HStack(spacing: 10) {
+                TextField("", text: $text)
+                    .font(pixelFont(13))
+                    .foregroundStyle(disabled ? Color.pixelMuted : Color.pixelText)
+                    .tint(Color.pixelOrange)
+                    .disabled(disabled)
+                    // 고정 줄 높이 — 빈 필드+커스텀 폰트가 포커스 시 줄 높이로 스냅되며 박스가 줄어드는 것 방지
+                    .frame(height: 22)
+
+                if let trailingIcon, let onTrailingTap {
+                    Button(action: onTrailingTap) {
+                        Image(systemName: trailingIcon)
+                            .font(.system(size: 16))
+                            .foregroundStyle(Color.pixelOrange)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier(trailingAccessibilityId ?? "pixel_field_trailing_button")
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 14)
+            .pixelBox()
+            .opacity(disabled ? 0.6 : 1.0)
         }
     }
 }
@@ -133,22 +150,24 @@ struct PixelDropdownOption: Identifiable, Equatable {
 }
 
 struct PixelDropdown: View {
-    let label: String
+    /// LocalizedStringKey — Localizable.xcstrings 의 키. 시스템 언어에 맞춰 자동 치환된다.
+    let label: LocalizedStringKey
     let options: [PixelDropdownOption]
     @Binding var selectedId: String
-    var placeholder: String = "선택해주세요"
-    var emptyText: String = "로딩 중..."
+    var placeholder: LocalizedStringKey = "선택해주세요"
+    var emptyText: LocalizedStringKey = "로딩 중..."
 
     @State private var isOpen = false
 
-    private var selectedName: String {
-        options.first(where: { $0.id == selectedId })?.name ?? placeholder
+    /// 선택된 항목명. 미선택이면 nil → 헤더에서 placeholder(로컬라이즈) 로 대체한다.
+    private var selectedName: String? {
+        options.first(where: { $0.id == selectedId })?.name
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text(label)
-                .font(pixelFont(9))
+                .font(pixelFont(12))
                 .foregroundStyle(Color.pixelOrange)
 
             VStack(spacing: 0) {
@@ -159,12 +178,18 @@ struct PixelDropdown: View {
                     }
                 } label: {
                     HStack {
-                        Text(selectedName)
-                            .font(pixelFont(10))
-                            .foregroundStyle(selectedId.isEmpty ? Color.pixelMuted : Color.pixelText)
+                        Group {
+                            if let selectedName {
+                                Text(selectedName)
+                            } else {
+                                Text(placeholder)
+                            }
+                        }
+                        .font(pixelFont(13))
+                        .foregroundStyle(selectedName == nil ? Color.pixelMuted : Color.pixelText)
                         Spacer()
                         Text(isOpen ? "▲" : "▼")
-                            .font(pixelFont(8))
+                            .font(pixelFont(10))
                             .foregroundStyle(Color.pixelOrange)
                     }
                     .padding(.horizontal, 12)
@@ -181,7 +206,7 @@ struct PixelDropdown: View {
 
                     if options.isEmpty {
                         Text(emptyText)
-                            .font(pixelFont(10))
+                            .font(pixelFont(13))
                             .foregroundStyle(Color.pixelMuted)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.horizontal, 12)
@@ -217,10 +242,10 @@ struct PixelDropdown: View {
         } label: {
             HStack(spacing: 8) {
                 Text(isSelected ? ">" : " ")
-                    .font(pixelFont(10))
+                    .font(pixelFont(13))
                     .foregroundStyle(Color.pixelOrange)
                 Text(option.name)
-                    .font(pixelFont(10))
+                    .font(pixelFont(13))
                     .foregroundStyle(isSelected ? Color.pixelOrange : Color.pixelText)
                 Spacer()
             }

@@ -57,7 +57,8 @@ struct DeliveryListView: View {
 
     // 입력 폼 상태
     @State private var newTrackingNumber = ""
-    @State private var newCarrierId = ""
+    @State private var newCarrierId = ""   // 미선택 시작 — 유저가 직접 고르는 게 기본, 목록 첫 항목에 자동 감지 제공
+    @State private var showBarcodeScanner = false
     @State private var newItemName = ""
     @State private var newMemo = ""
     @State private var isSubmitting = false
@@ -496,11 +497,11 @@ struct DeliveryListView: View {
         } label: {
             HStack(spacing: 6) {
                 Text(sortOrder.label)
-                    .font(pixelFont(9))
+                    .font(pixelFont(12))
                     .foregroundStyle(Color.pixelText)
                 Spacer(minLength: 8)
                 Text(sortMenuOpen ? "▲" : "▼")
-                    .font(pixelFont(8))
+                    .font(pixelFont(10))
                     .foregroundStyle(Color.pixelOrange)
             }
             .padding(.horizontal, 10)
@@ -508,7 +509,7 @@ struct DeliveryListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(width: 132)
+        .frame(width: 156)
         .pixelBox(
             border: sortMenuOpen ? Color.pixelOrange.opacity(0.6) : Color.pixelBorder,
             bg: Color.pixelSurface,
@@ -535,10 +536,10 @@ struct DeliveryListView: View {
                 } label: {
                     HStack(spacing: 6) {
                         Text(selected ? ">" : " ")
-                            .font(pixelFont(9))
+                            .font(pixelFont(12))
                             .foregroundStyle(Color.pixelOrange)
                         Text(order.label)
-                            .font(pixelFont(9))
+                            .font(pixelFont(12))
                             .foregroundStyle(selected ? Color.pixelOrange : Color.pixelText)
                         Spacer(minLength: 0)
                     }
@@ -550,7 +551,7 @@ struct DeliveryListView: View {
                 .buttonStyle(.plain)
             }
         }
-        .frame(width: 132)
+        .frame(width: 156)
         .pixelBox(
             border: Color.pixelOrange.opacity(0.6),
             bg: Color.pixelSurface,
@@ -632,7 +633,7 @@ struct DeliveryListView: View {
     private var isEditing: Bool { editingTrackingId != nil }
 
     private var inlineAddForm: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 18) {
             if isEditing {
                 // 운송장번호/택배사는 읽기전용으로 채워서 보여줌
                 PixelTextField(label: "TRACKING NO.", text: $newTrackingNumber, disabled: true)
@@ -640,7 +641,7 @@ struct DeliveryListView: View {
             } else {
                 // 캡처 우선 유도 — 폼 최상단, 수동 입력보다 시각적 1순위
                 captureButton
-                PixelTextField(label: "TRACKING NO.", text: $newTrackingNumber)
+                trackingNumberField
                 carrierPicker
             }
             PixelTextField(label: "ITEM NAME", text: $newItemName)
@@ -658,7 +659,7 @@ struct DeliveryListView: View {
 
     /// 캡처(카톡·문자 스크린샷)로 자동 입력 — 온디바이스 OCR, 폼 필드 프리필
     private var captureButton: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: 9) {
             Button {
                 showCapturePicker = true
             } label: {
@@ -666,7 +667,7 @@ struct DeliveryListView: View {
                     Image(systemName: "camera.viewfinder")
                         .font(.system(size: 13))
                     Text("캡처 사진으로 자동 입력")
-                        .font(pixelFont(11))
+                        .font(pixelFont(12))
                 }
                 .foregroundStyle(Color.pixelText)
                 .frame(maxWidth: .infinity)
@@ -677,7 +678,7 @@ struct DeliveryListView: View {
             .accessibilityIdentifier("add_capture_button")
 
             Text("카톡·문자 배송 알림 캡처를 올리면 자동으로 채워드려요")
-                .font(pixelFont(8))
+                .font(pixelFont(11))
                 .foregroundStyle(Color.pixelMuted)
         }
     }
@@ -692,10 +693,28 @@ struct DeliveryListView: View {
         return isSubmitting ? "ADDING..." : "ADD"
     }
 
+    /// 운송장 입력 — 입력칸 안쪽 오른쪽 끝에 송장 바코드 스캔 버튼(카메라 지원 기기에서만)
+    private var trackingNumberField: some View {
+        PixelTextField(
+            label: "TRACKING NO.",
+            text: $newTrackingNumber,
+            trailingIcon: BarcodeScannerView.isSupported ? "barcode.viewfinder" : nil,
+            trailingAccessibilityId: "add_barcode_scan_button",
+            onTrailingTap: { showBarcodeScanner = true }
+        )
+        .sheet(isPresented: $showBarcodeScanner) {
+            BarcodeScannerSheet { payload in
+                newTrackingNumber = payload
+            }
+        }
+    }
+
     private var carrierPicker: some View {
         PixelDropdown(
             label: "CARRIER",
-            options: service.carriers.map { PixelDropdownOption(id: $0.id, name: $0.name) },
+            // 첫 항목 = 자동 감지(선택 시 서버가 국내 6사 순회 조회 + 17TRACK 감지). 기본은 미선택.
+            options: [PixelDropdownOption(id: "auto", name: "자동 감지")]
+                + service.carriers.map { PixelDropdownOption(id: $0.id, name: $0.name) },
             selectedId: $newCarrierId
         )
     }

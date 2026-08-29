@@ -238,7 +238,9 @@ struct PlusMarketingHero: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            truckGrid
+            // 상단 히어로 = 잠금화면에 택배 2개가 동시에 뜨는 모습(실제 위젯 뷰).
+            // 피드백상 유저가 체감하는 구독 가치가 트럭 스킨보다 "동시 2개 추적"이라 유틸을 앞세운다.
+            PaywallLockScreenPreview()
 
             titleBlock
             benefits
@@ -247,57 +249,18 @@ struct PlusMarketingHero: View {
         }
     }
 
-    // MARK: - 상단 트럭 그리드 (장식 — 가장자리로 흐르도록 클립)
-
-    private var truckGrid: some View {
-        GeometryReader { geo in
-            let cols = 5
-            let spacing: CGFloat = 15
-            let bleed: CGFloat = 90   // 좌우로 흘러나가는 정도(가장자리 트럭이 반쯤 잘림)
-            // 화면 폭에 맞춰 트럭 크기를 계산 → 기기 폭과 무관하게 항상 꽉 차고 가장자리만 살짝 잘림
-            let size = (geo.size.width + bleed - spacing * CGFloat(cols - 1)) / CGFloat(cols)
-            VStack(spacing: 10) {
-                ForEach(Self.gridRows.indices, id: \.self) { idx in
-                    // 행마다 좌/우 번갈아 천천히 흐르며 다른 조합이 계속 지나간다.
-                    PaywallMarqueeRow(
-                        combos: Self.gridRows[idx],
-                        size: size,
-                        spacing: spacing,
-                        toLeft: idx.isMultiple(of: 2),
-                        period: Double(Self.gridRows[idx].count) * 2.4
-                    )
-                }
-            }
-            .frame(width: geo.size.width, height: geo.size.height, alignment: .center)
-            .opacity(0.97)
-        }
-        .frame(height: 270)
-        // 양옆으로 갈수록 투명해져 배경에 녹아드는 그라데이션 마스크
-        .mask(
-            LinearGradient(
-                stops: [
-                    .init(color: .clear, location: 0.0),
-                    .init(color: .black, location: 0.26),
-                    .init(color: .black, location: 0.74),
-                    .init(color: .clear, location: 1.0),
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-        )
-    }
-
     // MARK: - 타이틀
 
     private var titleBlock: some View {
         VStack(spacing: 14) {
-            Text("내 트럭을 무제한으로")
+            // 포지셔닝 문구 통일 — "실시간 추적"이 아니라 "앱 안 열어도 보인다"가 핵심 가치.
+            Text("택배 2개까지 잠금화면에 동시에")
                 .font(pixelFont(22))
                 .foregroundStyle(gold)
                 .multilineTextAlignment(.center)
                 .lineSpacing(3)
 
-            Text("Plus로 모든 조합과 알림을 잠금 해제하세요")
+            Text("앱 안 열어도 보입니다")
                 .font(pixelFont(11))
                 .foregroundStyle(Color.pixelMuted)
         }
@@ -307,12 +270,20 @@ struct PlusMarketingHero: View {
     // MARK: - 혜택 3종
 
     private var benefits: some View {
+        // 순서 = 체감 가치 순. 피드백에서 "동시 2개 추적"이 가장 유용하다고 나와 유틸을 위로,
+        // 트럭 스킨은 보조로 내렸다.
         VStack(spacing: 18) {
-            benefitRow(icon: gridIcon, title: "24,000가지 트럭 조합", desc: "짐칸·헤드·바퀴를 섞어 나만의 트럭")
-            benefitRow(icon: bellIcon, title: "한눈에 보는 배송 알림", desc: "여러 택배 상태를 알림창에서 동시에")
+            benefitRow(icon: bellIcon, title: "택배 2개를 동시에", desc: "잠금화면·다이나믹 아일랜드에 함께 표시")
+            benefitRow(icon: gridIcon, title: "\(Self.comboCountText)가지 트럭 조합", desc: "짐칸·헤드·바퀴를 섞어 나만의 트럭")
             benefitRow(icon: coinIcon, title: "하루 단 110원", desc: "커피 한 모금보다 저렴하게")
         }
     }
+
+    /// 카탈로그에서 직접 계산 — 부품이 늘어도 문구가 따라간다(하드코딩 시 실제 개수와 어긋남).
+    private static let comboCountText: String = {
+        let total = TruckCab.allCases.count * TruckBody.allCases.count * TruckWheelType.allCases.count
+        return NumberFormatter.localizedString(from: NSNumber(value: total), number: .decimal)
+    }()
 
     private func benefitRow<Icon: View>(icon: Icon, title: String, desc: String) -> some View {
         HStack(spacing: 16) {
@@ -386,61 +357,6 @@ struct PlusMarketingHero: View {
         .frame(width: 26, height: 26)
     }
 
-    // MARK: - 트럭 그리드 조합 (4행 × 8열) — 마퀴로 흐르므로 행마다 다양하게
-
-    private static let gridRows: [[(TruckCab, TruckBody, TruckWheelType)]] = {
-        let cabs = TruckCab.allCases
-        let bodies = TruckBody.allCases
-        let wheels = TruckWheelType.allCases
-        let rows = 4
-        let perRow = 8
-        return (0..<rows).map { r in
-            (0..<perRow).map { c -> (TruckCab, TruckBody, TruckWheelType) in
-                let i = r * perRow + c
-                return (
-                    cabs[(i * 7 + r) % cabs.count],
-                    bodies[(i * 5 + r * 3) % bodies.count],
-                    wheels[(i * 3 + r) % wheels.count]
-                )
-            }
-        }
-    }()
-}
-
-// MARK: - 페이월 트럭 마퀴 행 (좌/우로 끊김 없이 순환)
-
-/// 한 행의 콤보를 2벌 이어붙여 offset 을 한 벌 너비만큼 선형 반복 → 끊김 없는 순환.
-private struct PaywallMarqueeRow: View {
-    let combos: [(TruckCab, TruckBody, TruckWheelType)]
-    let size: CGFloat
-    let spacing: CGFloat
-    let toLeft: Bool
-    let period: Double
-
-    @State private var animate = false
-
-    var body: some View {
-        let count = combos.count
-        let rowWidth = (size + spacing) * CGFloat(count)   // 한 벌 너비 = 순환 주기 거리
-        HStack(spacing: spacing) {
-            ForEach(0..<(count * 2), id: \.self) { i in
-                let c = combos[i % count]
-                CatalogTruckView(cab: c.0, truckBody: c.1, wheels: c.2, size: size)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .offset(x: offsetX(rowWidth: rowWidth))
-        .animation(.linear(duration: period).repeatForever(autoreverses: false), value: animate)
-        .onAppear { animate = true }
-    }
-
-    private func offsetX(rowWidth: CGFloat) -> CGFloat {
-        if toLeft {
-            return animate ? -rowWidth : 0          // 0 → -rowWidth (왼쪽으로 흐름)
-        } else {
-            return animate ? 0 : -rowWidth          // -rowWidth → 0 (오른쪽으로 흐름)
-        }
-    }
 }
 
 #Preview("기본") {

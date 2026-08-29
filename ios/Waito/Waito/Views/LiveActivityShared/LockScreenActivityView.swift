@@ -79,7 +79,7 @@ struct LockScreenTrackingRow: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            // 상단: 물품명(왼쪽) · 상태 라벨(오른쪽, = 마지막 이벤트 원본 설명)
+            // 상단: 물품명(왼쪽) · 상태 라벨(오른쪽, = 표시 단계명. 해외 통관 구간이면 "통관")
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(item.itemName)
                     .font(.caption)
@@ -88,15 +88,15 @@ struct LockScreenTrackingRow: View {
                     .lineLimit(1)
                     .layoutPriority(1)   // 물품명 우선, 긴 상태 라벨이 먼저 truncate
                 Spacer(minLength: 8)
-                Text(item.status.displayName)   // 원본 메시지 대신 간단한 단계명(예: 간선상차)
+                Text(item.stageInfo.currentName)   // 원본 메시지 대신 간단한 단계명(예: 간선상차·통관)
                     .font(.caption2)
                     .fontWeight(.semibold)
                     .foregroundStyle(wPixelStatusColor(item.status))
                     .lineLimit(1)
             }
 
-            // 전체 배송 과정(고정 단계) 타임라인 + 현재 단계 점 위에 작은 트럭
-            LockScreenStatusTimeline(status: item.status, truckConfig: truckConfig)
+            // 전체 배송 과정(고정 단계 — 국내 5/해외 6) 타임라인 + 현재 단계 점 위에 작은 트럭
+            LockScreenStatusTimeline(status: item.status, stage: item.stageInfo, truckConfig: truckConfig)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
@@ -107,6 +107,8 @@ struct LockScreenTrackingRow: View {
 
 struct LockScreenStatusTimeline: View {
     let status: DeliveryStatus
+    /// 표시 단계 — 국내 5단계 / 해외 6단계(통관 포함). DeliveryStageInfo 가 한 곳에서 계산.
+    let stage: DeliveryStageInfo
     let truckConfig: TruckConfig
 
     private let dotSize: CGFloat = 5
@@ -116,8 +118,8 @@ struct LockScreenStatusTimeline: View {
     var body: some View {
         // 전체 배송 과정(고정 단계)을 항상 표시 — 진행된 만큼 채우고 남은 단계는 흐리게.
         // 현재 단계 노드는 네모점 대신 유저 커스텀 트럭이 그 자리에 선다.
-        let count = DeliveryStatus.collapsedStages.count
-        let currentIndex = status.collapsedStepIndex
+        let count = stage.count
+        let currentIndex = stage.currentIndex
 
         GeometryReader { geo in
             let denom = CGFloat(max(count - 1, 1))
