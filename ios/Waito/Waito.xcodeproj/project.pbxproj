@@ -69,6 +69,8 @@
 				Models/TruckConfig.swift,
 				Models/TruckPathCalculator.swift,
 				PixelFont.swift,
+				Views/LiveActivityShared/LockScreenActivityView.swift,
+				Views/LiveActivityShared/WaitoWidgetColors.swift,
 				Views/TruckDrawing/CatalogTruckView.swift,
 				Views/TruckDrawing/RunningTruckScene.swift,
 				Views/TruckDrawing/TruckShapes.swift,
@@ -254,6 +256,7 @@
 			knownRegions = (
 				en,
 				Base,
+				ko,
 			);
 			mainGroup = EDC6997C2F6941DF002FF663;
 			minimizedProjectReferenceProxies = 1;
@@ -461,7 +464,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Waito/Waito.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 51;
 				DEVELOPMENT_TEAM = M3KH86595Z;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -479,7 +482,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sangjin.Waito;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -503,7 +506,7 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = Waito/Waito.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 51;
 				DEVELOPMENT_TEAM = M3KH86595Z;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
@@ -521,7 +524,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sangjin.Waito;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
@@ -543,7 +546,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 51;
 				DEVELOPMENT_TEAM = M3KH86595Z;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = WaitoWidgetExtensionInfo.plist;
@@ -552,7 +555,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sangjin.Waito.WaitoWidgetExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -569,7 +572,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 51;
 				DEVELOPMENT_TEAM = M3KH86595Z;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = WaitoWidgetExtensionInfo.plist;
@@ -578,7 +581,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sangjin.Waito.WaitoWidgetExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -595,7 +598,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = WaitoShareExtension/WaitoShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 51;
 				DEVELOPMENT_TEAM = M3KH86595Z;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WaitoShareExtension/Info.plist;
@@ -607,7 +610,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sangjin.Waito.WaitoShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -629,7 +632,7 @@
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = WaitoShareExtension/WaitoShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 33;
+				CURRENT_PROJECT_VERSION = 51;
 				DEVELOPMENT_TEAM = M3KH86595Z;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = WaitoShareExtension/Info.plist;
@@ -641,7 +644,7 @@
 					"@executable_path/Frameworks",
 					"@executable_path/../../Frameworks",
 				);
-				MARKETING_VERSION = 2.0.0;
+				MARKETING_VERSION = 2.0.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.sangjin.Waito.WaitoShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;

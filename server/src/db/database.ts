@@ -69,6 +69,11 @@ function runColumnMigrations(database: Database.Database): void {
   addColumnIfMissing(database, 'devices', 'live_activity_push_token', 'TEXT');
   // 그 LA 에 현재 담긴 택배 id 목록(JSON 배열, 순서 보존). iOS 가 동기화 → 서버가 전체 items 재구성에 사용.
   addColumnIfMissing(database, 'devices', 'la_tracking_ids', 'TEXT');
+  // LA 가 마지막으로 (재)시작된 시각 — Apple 8시간 한도 만료를 추정해 keep-alive 로 되살리는 근거.
+  // 갱신 시점: 앱이 update 토큰을 등록할 때 / 서버 push-to-start 성공 시.
+  addColumnIfMissing(database, 'devices', 'la_started_at', 'TEXT');
+  // 해외 배송 세부 구간('customs' = 통관). 국내는 NULL. 한 번 설정되면 서버가 지우지 않는다.
+  addColumnIfMissing(database, 'trackings', 'sub_stage', 'TEXT');
 }
 
 function addColumnIfMissing(

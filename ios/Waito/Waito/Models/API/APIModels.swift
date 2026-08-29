@@ -5,6 +5,14 @@ import Foundation
 struct Carrier: Codable, Identifiable, Hashable {
     let id: String
     let name: String
+    /// 해외 택배사 여부 — 서버 CARRIERS 상수에서 내려옴. 구서버 호환을 위해 Optional.
+    let international: Bool?
+
+    init(id: String, name: String, international: Bool? = nil) {
+        self.id = id
+        self.name = name
+        self.international = international
+    }
 }
 
 // MARK: - Device Registration
@@ -87,6 +95,10 @@ struct TrackingListItem: Decodable, Identifiable {
     /// 원본 택배사 이벤트 전체(가변 타임라인용). 서버 목록 API 가 포함해 내려줌.
     /// 배포 순서/구버전 안전을 위해 Optional — 누락 시 nil, 사용처에서 `?? []`.
     let events: [TrackingEvent]?
+    /// 해외 배송 세부 구간 — 'customs'(통관) | nil. 구서버 호환 Optional.
+    let subStage: String?
+    /// 해외 택배사 여부(6단계 타임라인 판별). 구서버 호환 Optional.
+    let isInternational: Bool?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -103,10 +115,17 @@ struct TrackingListItem: Decodable, Identifiable {
         case lastEventTime = "last_event_time"
         case deliveredAt = "delivered_at"
         case events
+        case subStage = "sub_stage"
+        case isInternational = "is_international"
     }
 
     /// 한 번이라도 조회에 성공해 이벤트를 받았는지. nil 이면 "아직 데이터 없음"
     var hasTrackingData: Bool { lastEventTime != nil }
+
+    /// 타임라인·게이지가 쓰는 표시 단계 (국내 5 / 해외 6단계, 한 곳에서 계산)
+    var stageInfo: DeliveryStageInfo {
+        DeliveryStageInfo(status: currentStatus, isInternational: isInternational ?? false, subStage: subStage)
+    }
 
     // 더미/프리뷰 생성 코드 호환을 위해 updatedAt / lastEventTime / events 은 기본값 nil
     init(
@@ -123,7 +142,9 @@ struct TrackingListItem: Decodable, Identifiable {
         memo: String? = nil,
         updatedAt: String? = nil,
         lastEventTime: String? = nil,
-        events: [TrackingEvent]? = nil
+        events: [TrackingEvent]? = nil,
+        subStage: String? = nil,
+        isInternational: Bool? = nil
     ) {
         self.id = id
         self.carrierId = carrierId
@@ -139,6 +160,8 @@ struct TrackingListItem: Decodable, Identifiable {
         self.lastEventTime = lastEventTime
         self.deliveredAt = deliveredAt
         self.events = events
+        self.subStage = subStage
+        self.isInternational = isInternational
     }
 }
 

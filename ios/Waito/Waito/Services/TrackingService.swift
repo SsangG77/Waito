@@ -416,7 +416,9 @@ final class TrackingService {
                 // 가변 타임라인 compact 필드 — 로컬 Activity 와 서버 push 가 동일 shape 가 되도록.
                 eventCount: tracking.events?.count,
                 statusLabel: tracking.events?.last?.description,
-                departureDate: tracking.createdAt        // 목록의 등록(출발) 날짜
+                departureDate: tracking.createdAt,       // 목록의 등록(출발) 날짜
+                subStage: tracking.subStage,             // 해외 통관 구간 표시
+                isInternational: tracking.isInternational
             )
         }
 
@@ -631,6 +633,37 @@ final class TrackingService {
             itemName: "무선 키보드", currentStatus: .registered,
             currentTValue: 0.05, carrierName: "우체국택배",
             estimatedDelivery: "3일 후", createdAt: "2026-04-12T08:00:00Z", deliveredAt: nil
+        ),
+        // 해외 더미 — 6단계(통관 포함) 타임라인 검증용. 국내 건들과 섞여 표시된다.
+        TrackingListItem(
+            id: 5, carrierId: "cainiao", trackingNumber: "LP00512345678901",
+            itemName: "블루투스 스피커 (알리)", currentStatus: .inTransitIn,
+            currentTValue: 0.5, carrierName: "Cainiao (알리·테무)",
+            estimatedDelivery: "5일 후", createdAt: "2026-04-08T10:00:00Z", deliveredAt: nil,
+            lastEventTime: "2026-04-11T16:00:00Z",
+            events: [
+                TrackingEvent(id: 501, trackerStatus: "InfoReceived", mappedStatus: "registered", description: "발송 정보 접수", eventTime: "2026-04-08T10:00:00Z", location: "Guangzhou"),
+                TrackingEvent(id: 502, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "발송국 출항 (항공)", eventTime: "2026-04-09T22:00:00Z", location: "Guangzhou Airport"),
+                TrackingEvent(id: 503, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "인천공항 도착", eventTime: "2026-04-11T06:30:00Z", location: "Incheon"),
+                TrackingEvent(id: 504, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "수입 통관 진행 중", eventTime: "2026-04-11T16:00:00Z", location: "인천세관"),
+            ],
+            subStage: "customs",      // 통관 구간 → 6단계 중 4번째(통관) 노드에 트럭
+            isInternational: true
+        ),
+        TrackingListItem(
+            id: 6, carrierId: "dhl", trackingNumber: "7799551234",
+            itemName: "빈티지 카메라 렌즈", currentStatus: .outForDelivery,
+            currentTValue: 0.7, carrierName: "DHL",
+            estimatedDelivery: "오늘", createdAt: "2026-04-06T09:00:00Z", deliveredAt: nil,
+            lastEventTime: "2026-04-12T08:40:00Z",
+            events: [
+                TrackingEvent(id: 601, trackerStatus: "InfoReceived", mappedStatus: "registered", description: "Shipment information received", eventTime: "2026-04-06T09:00:00Z", location: "Berlin"),
+                TrackingEvent(id: 602, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "Departed facility", eventTime: "2026-04-07T13:00:00Z", location: "Leipzig Hub"),
+                TrackingEvent(id: 603, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "통관 완료", eventTime: "2026-04-10T11:00:00Z", location: "인천세관"),
+                TrackingEvent(id: 604, trackerStatus: "OutForDelivery", mappedStatus: "outForDelivery", description: "With delivery courier", eventTime: "2026-04-12T08:40:00Z", location: "서울 강남"),
+            ],
+            subStage: "customs",      // 통관 이력 유지(서버 COALESCE 와 동일) — 배송출발이라 5번째 노드
+            isInternational: true
         ),
     ]
 

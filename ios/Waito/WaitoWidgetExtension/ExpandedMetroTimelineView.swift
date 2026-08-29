@@ -49,18 +49,20 @@ struct ExpandedMetroTimelineView: View {
     /// → 하단 가로줄(배송상태 크게 · 날짜). 좌측 고정 트럭은 제거 — 트럭이 진행 위치를 직접 표시.
     /// (2개 동시 표시는 펼침 높이 상한 160pt에 걸려 폐기 — 잠금화면만 2개, DI 펼침은 primary 1개.)
     private func mainContent(_ item: TrackingItemState) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
+        // 표시 단계 — 국내 5단계 / 해외 6단계(통관 포함). 한 곳(DeliveryStageInfo)에서 계산.
+        let stage = item.stageInfo
+        return VStack(alignment: .leading, spacing: 7) {
             Text(item.itemName)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
-            stageBar(current: item.status)
-            stageLabels(current: item.status)
+            stageBar(stage: stage)
+            stageLabels(stage: stage)
 
             // 하단 가로줄 — 배송상태(좌·날짜보다 30% 크게) + 날짜(우)
             HStack(alignment: .firstTextBaseline) {
-                Text(item.status.displayName)
+                Text(stage.currentName)   // 해외 통관 구간이면 "통관"
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(Color.wPixelOrange)
                     .lineLimit(1)
@@ -74,10 +76,10 @@ struct ExpandedMetroTimelineView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    /// 가로 픽셀 스텝바 — 고정 5단계. 현재 단계 노드는 네모점 대신 유저 커스텀 트럭(크게).
-    private func stageBar(current: DeliveryStatus) -> some View {
-        let count = DeliveryStatus.collapsedStages.count
-        let currentOrder = current.collapsedStepIndex
+    /// 가로 픽셀 스텝바 — 고정 단계(국내 5/해외 6). 현재 단계 노드는 네모점 대신 유저 커스텀 트럭(크게).
+    private func stageBar(stage: DeliveryStageInfo) -> some View {
+        let count = stage.count
+        let currentOrder = stage.currentIndex
         let dotSize: CGFloat = 5
         let gap: CGFloat = 4
         let truckSize: CGFloat = 30
@@ -126,16 +128,15 @@ struct ExpandedMetroTimelineView: View {
     }
 
     /// 스텝바 아래 단계 라벨 — 각 점 중심에 정렬, 현재 단계만 오렌지·굵게
-    private func stageLabels(current: DeliveryStatus) -> some View {
-        let stages = DeliveryStatus.collapsedStages
-        let currentOrder = current.collapsedStepIndex
+    private func stageLabels(stage: DeliveryStageInfo) -> some View {
+        let currentOrder = stage.currentIndex
         let dotSize: CGFloat = 5
         let gap: CGFloat = 4
 
         return GeometryReader { geo in
-            let unit = unitWidth(total: geo.size.width, count: stages.count, dotSize: dotSize, gap: gap)
-            ForEach(Array(stages.enumerated()), id: \.offset) { i, stage in
-                Text(stage.displayName)
+            let unit = unitWidth(total: geo.size.width, count: stage.count, dotSize: dotSize, gap: gap)
+            ForEach(Array(stage.names.enumerated()), id: \.offset) { i, name in
+                Text(name)
                     .font(.system(size: 8, weight: i == currentOrder ? .bold : .regular))
                     .foregroundStyle(labelColor(index: i, currentOrder: currentOrder))
                     .fixedSize()

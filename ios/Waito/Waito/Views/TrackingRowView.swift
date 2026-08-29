@@ -1,4 +1,5 @@
 import SwiftUI
+import Translation   // 해외 배송 이벤트 원문(영문·중문 등) 온디바이스 번역
 
 struct TrackingRowView: View {
     let tracking: TrackingListItem
@@ -18,6 +19,10 @@ struct TrackingRowView: View {
     var onPromoteToPrimary: () -> Void = {}
 
     @State private var isExpanded = false
+    // 해외 이벤트 번역 (온디바이스 Translation framework)
+    @State private var showTranslated = false
+    @State private var translatedById: [Int: String] = [:]
+    @State private var translationConfig: TranslationSession.Configuration?
     /// 추가 직후 강조 바운스 스케일
     @State private var bounceScale: CGFloat = 1
     /// 추가 직후 슬라이드 힌트를 이미 재생했는지 (스크롤 재등장 시 반복 방지)
@@ -67,16 +72,16 @@ struct TrackingRowView: View {
                 switch dataState {
                 case .checking:
                     Text("· 확인 중")
-                        .font(pixelFont(10))
+                        .font(pixelFont(12))
                         .foregroundStyle(Color.pixelMuted)
                 case .notFound:
                     Text("· 번호 확인 필요")
-                        .font(pixelFont(10))
+                        .font(pixelFont(12))
                         .foregroundStyle(Color.pixelOrange)
                 case .ok:
-                    // 정상 배송: 현재 단계명(간선상차 등)을 같은 자리에 표시 — DI/LA 와 동일한 status.displayName
-                    Text("· \(tracking.currentStatus.displayName)")
-                        .font(pixelFont(10))
+                    // 정상 배송: 현재 단계명(간선상차·통관 등)을 같은 자리에 표시 — DI/LA 와 동일한 stageInfo
+                    Text("· \(tracking.stageInfo.currentName)")
+                        .font(pixelFont(12))
                         .foregroundStyle(progressColor)
                 }
             }
@@ -164,8 +169,10 @@ struct TrackingRowView: View {
         let cfg = TruckConfigStore.shared.config
 
         return GeometryReader { geo in
-            let steps = DeliveryStatus.collapsedStages.count
-            let curIndex = tracking.currentStatus.collapsedStepIndex
+            // 표시 단계 — 국내 5단계 / 해외 6단계(통관 포함)
+            let stage = tracking.stageInfo
+            let steps = stage.count
+            let curIndex = stage.currentIndex
             let lineWidth = (geo.size.width - (dotSize + gap * 2) * CGFloat(steps) + gap * 2) / CGFloat(steps - 1)
             let stepW = dotSize + gap * 2 + lineWidth
             let lineY = truckSize / 2   // 라인·점은 세로 중앙 — 트럭 중심이 점 위치와 일치
@@ -209,6 +216,10 @@ struct TrackingRowView: View {
     var verticalProgress: some View {
         Group {
             if let events = tracking.events, !events.isEmpty {
+                // 해외 택배 — 원본 이벤트가 영문·중문 등으로 와서 번역 토글 제공(온디바이스, 서버 전송 없음)
+                if tracking.isInternational == true {
+                    translateToggle(events)
+                }
                 eventTimeline(events)
             } else {
                 statusFallbackTimeline
@@ -216,6 +227,49 @@ struct TrackingRowView: View {
         }
         .padding(.horizontal, 14)
         .padding(.bottom, 10)
+        // 토글 시 config 가 설정되면 시스템이 세션을 열어 일괄 번역 (언어팩 미설치면 다운로드 안내)
+        .translationTask(translationConfig) { session in
+            let events = tracking.events ?? []
+            let requests = events.map {
+                TranslationSession.Request(sourceText: $0.description, clientIdentifier: String($0.id))
+            }
+            guard let responses = try? await session.translations(from: requests) else { return }
+            for response in responses {
+                if let idText = response.clientIdentifier, let id = Int(idText) {
+                    translatedById[id] = response.targetText
+                }
+            }
+        }
+    }
+
+    /// 번역 토글 버튼 — 첫 켬에서 번역 세션 시작, 이후엔 캐시 표시/원문 전환만
+    private func translateToggle(_ events: [TrackingEvent]) -> some View {
+        HStack {
+            Spacer()
+            Button {
+                if showTranslated {
+                    showTranslated = false
+                } else {
+                    showTranslated = true
+                    if translatedById.isEmpty {
+                        translationConfig = TranslationSession.Configuration(
+                            target: Locale.Language(identifier: "ko")
+                        )
+                    }
+                }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "character.bubble")
+                        .font(.system(size: 11))
+                    Text(showTranslated ? "원문 보기" : "번역")
+                        .font(pixelFont(11))
+                }
+                .foregroundStyle(showTranslated ? Color.pixelOrange : Color.pixelMuted)
+            }
+            .buttonStyle(.plain)
+            .accessibilityIdentifier("row_translate_toggle")
+        }
+        .padding(.bottom, 6)
     }
 
     /// 원본 이벤트 기반 세로 타임라인 — 라벨 = 택배사 description, 모두 지나감(채움), 마지막=현재.
@@ -259,19 +313,19 @@ struct TrackingRowView: View {
 
                     // 원본 메시지 → 위치 → 시간, 세로 정렬
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(event.description)
+                        Text(showTranslated ? (translatedById[event.id] ?? event.description) : event.description)
                             .font(pixelFont(isCurrent ? 12 : 9))
                             .foregroundStyle(isCurrent ? progressColor : Color.pixelText.opacity(0.6))
                             .fixedSize(horizontal: false, vertical: true)
 
                         if let loc, !loc.isEmpty {
                             Text(loc)
-                                .font(pixelFont(8))
+                                .font(pixelFont(10))
                                 .foregroundStyle(Color.pixelMuted.opacity(0.85))
                         }
                         if !time.isEmpty {
                             Text(time)
-                                .font(pixelFont(8))
+                                .font(pixelFont(10))
                                 .foregroundStyle(Color.pixelMuted.opacity(0.6))
                         }
                     }
@@ -282,14 +336,15 @@ struct TrackingRowView: View {
         }
     }
 
-    /// 이벤트 없을 때 폴백 — 기존 status 기반 고정 7단계 세로 타임라인.
+    /// 이벤트 없을 때 폴백 — 고정 단계(국내 5/해외 6) 세로 타임라인.
     private var statusFallbackTimeline: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            ForEach(Array(DeliveryStatus.collapsedStages.enumerated()), id: \.element) { index, stage in
-                let curIndex = tracking.currentStatus.collapsedStepIndex
+        let stageInfo = tracking.stageInfo
+        return VStack(alignment: .leading, spacing: 0) {
+            ForEach(Array(stageInfo.names.enumerated()), id: \.offset) { index, stageName in
+                let curIndex = stageInfo.currentIndex
                 let isCurrent = index == curIndex
                 let isPast = index < curIndex
-                let isLast = index == DeliveryStatus.collapsedStages.count - 1
+                let isLast = index == stageInfo.count - 1
 
                 HStack(alignment: .top, spacing: 10) {
                     // 레일: 점 + 두 노드 사이를 잇는 세로선. 현재 노드 = 커스텀 트럭.
@@ -320,7 +375,7 @@ struct TrackingRowView: View {
                     }
                     .frame(width: 7)
 
-                    Text(stage.displayName)
+                    Text(stageName)
                         .font(pixelFont(isCurrent ? 12 : 9))
                         .foregroundStyle(
                             isCurrent ? progressColor
@@ -344,7 +399,7 @@ struct TrackingRowView: View {
             } label: {
                 HStack(spacing: 4) {
                     Text(isExpanded ? "CLOSE" : "DETAIL")
-                        .font(pixelFont(10))
+                        .font(pixelFont(12))
                         .foregroundStyle(Color.pixelMuted)
                     PixelChevron(isExpanded: isExpanded)
                         .frame(width: 10, height: 7)
@@ -451,10 +506,10 @@ struct TrackingRowView: View {
                     if let memo = tracking.memo, !memo.isEmpty {
                         VStack(alignment: .leading, spacing: 4) {
                             Text("MEMO")
-                                .font(pixelFont(8))
+                                .font(pixelFont(11))
                                 .foregroundStyle(Color.pixelMuted)
                             Text(memo)
-                                .font(pixelFont(10))
+                                .font(pixelFont(12))
                                 .foregroundStyle(Color.pixelText)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
@@ -566,10 +621,10 @@ struct TrackingRowView: View {
     private func labelValue(_ label: String, _ value: String) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(label)
-                .font(pixelFont(6))
+                .font(pixelFont(10))
                 .foregroundStyle(Color.pixelMuted)
             Text(value)
-                .font(pixelFont(8))
+                .font(pixelFont(12))
                 .foregroundStyle(Color.pixelOrange)
         }
     }

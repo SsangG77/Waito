@@ -1,13 +1,39 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/database.js';
 import { trackPackage, registerWebhook, isTrackingNotFoundError } from '../services/trackerApi.js';
-import { trackPackage17 } from '../services/track17Api.js';
+import { trackPackage17, detectCarrier17 } from '../services/track17Api.js';
 import { resolveNewStatus } from '../services/statusMapper.js';
 import { pollTracking } from '../services/pollingService.js';
-import { DeliveryStatus, STATUS_T_VALUES, CARRIERS } from '../types/delivery.js';
+import { DeliveryStatus, STATUS_T_VALUES, CARRIERS, type Carrier } from '../types/delivery.js';
 import { config } from '../config.js';
 
 const router = Router();
+
+/**
+ * 운송장 번호만으로 택배사를 감지한다 (carrierId='auto').
+ * 1) 국내: tracker.delivery 를 CARRIERS 순서대로 조회 — 이벤트가 나오는 택배사 채택.
+ *    (한국 운송장은 자릿수가 12~13자리로 겹쳐 패턴 판별이 불가능 → 실조회가 정답)
+ * 2) 전부 실패 시: 17TRACK 자동 감지(등록 시 carrier 생략) → 우리 해외 CARRIERS 와 매핑.
+ *    지원 목록 밖 택배사로 감지되면 null (quota 1건 소모는 감수 — 드묾).
+ */
+async function detectCarrier(trackingNumber: string): Promise<Carrier | null> {
+  for (const candidate of CARRIERS.filter(c => c.provider === 'tracker')) {
+    try {
+      const result = await trackPackage(candidate.trackerId, trackingNumber);
+      if (result.track?.lastEvent) return candidate;
+    } catch {
+      // NOT_FOUND·오류 → 다음 후보
+    }
+  }
+
+  const key = await detectCarrier17(trackingNumber);
+  if (key) {
+    const matched = CARRIERS.find(c => c.provider === 'track17' && c.trackerId === key);
+    if (matched) return matched;
+    console.warn(`[Detect] 17TRACK 감지 결과가 지원 목록 밖 (carrier key=${key})`);
+  }
+  return null;
+}
 
 // POST /api/trackings — 택배 추적 등록
 router.post('/', async (req: Request, res: Response) => {
@@ -18,8 +44,18 @@ router.post('/', async (req: Request, res: Response) => {
     return;
   }
 
-  const carrier = CARRIERS.find(c => c.id === carrierId);
+  // 'auto' — 운송장 번호만으로 택배사를 감지한다.
+  // 국내(tracker.delivery)를 순서대로 조회해 데이터가 나오는 택배사를 채택하고,
+  // 전부 실패하면 17TRACK 자동 감지(해외)로 넘어간다.
+  let carrier = carrierId === 'auto' ? await detectCarrier(trackingNumber) : CARRIERS.find(c => c.id === carrierId);
   if (!carrier) {
+    if (carrierId === 'auto') {
+      res.status(422).json({
+        error: 'TRACKING_NOT_FOUND',
+        message: '택배사를 자동으로 찾지 못했어요. 택배사를 직접 선택해주세요.',
+      });
+      return;
+    }
     res.status(400).json({ error: 'Invalid carrierId' });
     return;
   }
@@ -37,7 +73,7 @@ router.post('/', async (req: Request, res: Response) => {
   // 중복 확인
   const existing = db.prepare(
     'SELECT id FROM trackings WHERE device_id = ? AND carrier_id = ? AND tracking_number = ?'
-  ).get(device.id, carrierId, trackingNumber);
+  ).get(device.id, carrier.id, trackingNumber);
   if (existing) {
     res.status(409).json({ error: 'Tracking already exists' });
     return;
@@ -88,7 +124,7 @@ router.post('/', async (req: Request, res: Response) => {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     device.id,
-    carrierId,
+    carrier.id,
     trackingNumber,
     itemName || '',
     memo || '',
@@ -131,7 +167,7 @@ router.post('/', async (req: Request, res: Response) => {
 
   res.status(201).json({
     id: trackingId,
-    carrierId,
+    carrierId: carrier.id,   // 'auto' 요청이면 감지된 실제 택배사 id
     trackingNumber,
     itemName: itemName || '',
     status: initialStatus,
@@ -158,9 +194,10 @@ router.get('/', (req: Request, res: Response) => {
 
   const trackings = db.prepare(`
     SELECT id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value,
-           carrier_name, estimated_delivery, created_at, updated_at, last_event_time, delivered_at
+           carrier_name, estimated_delivery, created_at, updated_at, last_event_time, delivered_at,
+           sub_stage
     FROM trackings WHERE device_id = ? ORDER BY created_at DESC
-  `).all(device.id) as Array<{ id: number }>;
+  `).all(device.id) as Array<{ id: number; carrier_id: string }>;
 
   // 각 택배의 원본 이벤트를 한 번에 읽어 id별로 묶어 붙인다(가변 타임라인용).
   let eventsByTracking: Record<number, unknown[]> = {};
@@ -176,7 +213,12 @@ router.get('/', (req: Request, res: Response) => {
     }, {} as Record<number, unknown[]>);
   }
 
-  res.json(trackings.map((t) => ({ ...t, events: eventsByTracking[t.id] ?? [] })));
+  // is_international: 해외 택배사 여부 — 앱이 6단계(통관 포함) 타임라인을 그릴지 판별하는 근거.
+  res.json(trackings.map((t) => ({
+    ...t,
+    is_international: CARRIERS.find(c => c.id === t.carrier_id)?.international === true,
+    events: eventsByTracking[t.id] ?? [],
+  })));
 });
 
 // GET /api/trackings/:id — 상세 조회

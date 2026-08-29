@@ -19,6 +19,9 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<!-- 송장 바코드 스캔(택배 추가 폼) — 카메라는 스캔 순간에만 사용 -->
+	<key>NSCameraUsageDescription</key>
+	<string>송장 바코드를 스캔해 운송장 번호를 자동 입력할 때 카메라를 사용합니다.</string>
 	<key>UIAppFonts</key>
 	<array>
 		<string>Galmuri9.ttf</string>

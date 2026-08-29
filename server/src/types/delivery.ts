@@ -106,5 +106,10 @@ export interface TrackerDeliveryResponse {
         node: TrackerDeliveryEvent;
       }>;
     };
+    /**
+     * 해외 배송 세부 구간 — 'customs'(통관 이력 있음) | undefined.
+     * 17TRACK 만 채운다(sub_status 기반). tracker.delivery 경로는 항상 undefined.
+     */
+    subStage?: string;
   };
 }

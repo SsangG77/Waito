@@ -18,6 +18,15 @@ struct TrackingItemState: Codable, Hashable {
     var statusLabel: String?
     /// 출발(등록) 날짜 — 목록의 createdAt 원본 문자열. 위젯에서 짧게 포맷해 표시.
     var departureDate: String?
+    /// 해외 배송 세부 구간 — 'customs'(통관) | nil. ⚠️ Optional 필수(하위호환).
+    var subStage: String?
+    /// 해외 택배사 여부 — 6단계(통관 포함) 타임라인 판별. nil = 국내(5단계).
+    var isInternational: Bool?
+
+    /// 타임라인·게이지가 쓰는 표시 단계 (국내 5 / 해외 6단계, 한 곳에서 계산)
+    var stageInfo: DeliveryStageInfo {
+        DeliveryStageInfo(status: status, isInternational: isInternational ?? false, subStage: subStage)
+    }
 }
 
 // MARK: - Live Activity Attributes

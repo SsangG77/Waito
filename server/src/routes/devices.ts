@@ -214,14 +214,16 @@ router.put('/live-activity', (req: Request, res: Response) => {
   // 제공된 값만 갱신(미제공은 기존 유지, COALESCE)
   const idsJson = provideIds ? JSON.stringify(trackingIds) : null;
   const truckConfigJson = truckConfig ? JSON.stringify(truckConfig) : null;
+  // pushToken 이 오면 새 LA 가 시작된 것 — 8시간 한도 keep-alive 의 기준 시각을 리셋한다.
   db.prepare(
     `UPDATE devices
      SET la_tracking_ids = COALESCE(?, la_tracking_ids),
          live_activity_push_token = COALESCE(?, live_activity_push_token),
+         la_started_at = CASE WHEN ? THEN datetime('now') ELSE la_started_at END,
          truck_config = COALESCE(?, truck_config),
          updated_at = datetime('now')
      WHERE id = ?`,
-  ).run(idsJson, providePush ? pushToken : null, truckConfigJson, device.id);
+  ).run(idsJson, providePush ? pushToken : null, providePush ? 1 : 0, truckConfigJson, device.id);
 
   res.json({ success: true });
 });

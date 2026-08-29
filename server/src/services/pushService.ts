@@ -1,4 +1,4 @@
-import { DeliveryStatus } from '../types/delivery.js';
+import { DeliveryStatus, CARRIERS } from '../types/delivery.js';
 import { getDb } from '../db/database.js';
 import { sendLiveActivityPush, sendAlertPush, LIVE_ACTIVITY_TOPIC, type ApnsResult } from './apnsClient.js';
 import { config } from '../config.js';
@@ -22,6 +22,10 @@ interface TrackingItemState {
   eventCount: number;
   statusLabel: string | null;
   departureDate: string | null;
+  // 해외 배송용 옵셔널 필드 — 구버전 앱은 모르는 키를 무시하므로 하위호환 안전.
+  // subStage: 'customs'(통관 구간) | null. isInternational: 해외 택배사 여부(6단계 타임라인 판별).
+  subStage?: string | null;
+  isInternational?: boolean;
 }
 
 const STATUS_DESCRIPTIONS: Record<DeliveryStatus, string> = {
@@ -125,6 +129,49 @@ function parseIdArray(raw: string | null): number[] {
   }
 }
 
+/**
+ * LA 에 담긴 택배 전부를 순서대로 items 로 재구성한다. 배송완료(도착)는 제외해 자동으로 사라지게 한다.
+ * (상태 변경 push 와 keep-alive 재시작이 같은 로직을 쓴다)
+ */
+function buildDeviceItems(laTrackingIds: string | null): TrackingItemState[] {
+  const db = getDb();
+  const itemStmt = db.prepare(
+    `SELECT tracking_number, current_status, carrier_id, carrier_name, item_name, estimated_delivery,
+            created_at, sub_stage,
+            (SELECT COUNT(*) FROM tracking_events e WHERE e.tracking_id = trackings.id) AS event_count,
+            (SELECT e.description FROM tracking_events e WHERE e.tracking_id = trackings.id
+               ORDER BY e.event_time DESC LIMIT 1) AS last_event_description
+     FROM trackings WHERE id = ?`,
+  );
+  const items: TrackingItemState[] = [];
+  for (const id of parseIdArray(laTrackingIds)) {
+    const t = itemStmt.get(id) as
+      | {
+          tracking_number: string; current_status: DeliveryStatus; carrier_id: string;
+          carrier_name: string; item_name: string; estimated_delivery: string | null;
+          created_at: string | null; sub_stage: string | null;
+          event_count: number; last_event_description: string | null;
+        }
+      | undefined;
+    if (!t) continue;
+    if (t.current_status === DeliveryStatus.Delivered) continue; // 도착 → LA 에서 제거
+    const carrier = CARRIERS.find(c => c.id === t.carrier_id);
+    items.push({
+      trackingNumber: t.tracking_number,
+      status: t.current_status,
+      carrierName: t.carrier_name,
+      itemName: t.item_name,
+      estimatedDelivery: t.estimated_delivery,
+      eventCount: t.event_count ?? 0,
+      statusLabel: t.last_event_description ?? null,
+      departureDate: t.created_at ?? null,
+      subStage: t.sub_stage ?? null,
+      isInternational: carrier?.international === true,
+    });
+  }
+  return items;
+}
+
 export async function pushTrackingUpdate(changedTrackingId: number, changedStatus: DeliveryStatus): Promise<void> {
   const db = getDb();
 
@@ -156,37 +203,7 @@ export async function pushTrackingUpdate(changedTrackingId: number, changedStatu
   if (!dev) return;
 
   const truckConfig = safeParseJson(dev.truck_config);
-
-  // LA 에 담긴 택배 전부를 순서대로 items 로 재구성 — 배송완료(도착)는 제외해 자동으로 사라지게 한다.
-  const itemStmt = db.prepare(
-    `SELECT tracking_number, current_status, carrier_name, item_name, estimated_delivery, created_at,
-            (SELECT COUNT(*) FROM tracking_events e WHERE e.tracking_id = trackings.id) AS event_count,
-            (SELECT e.description FROM tracking_events e WHERE e.tracking_id = trackings.id
-               ORDER BY e.event_time DESC LIMIT 1) AS last_event_description
-     FROM trackings WHERE id = ?`,
-  );
-  const items: TrackingItemState[] = [];
-  for (const id of parseIdArray(dev.la_tracking_ids)) {
-    const t = itemStmt.get(id) as
-      | {
-          tracking_number: string; current_status: DeliveryStatus; carrier_name: string;
-          item_name: string; estimated_delivery: string | null; created_at: string | null;
-          event_count: number; last_event_description: string | null;
-        }
-      | undefined;
-    if (!t) continue;
-    if (t.current_status === DeliveryStatus.Delivered) continue; // 도착 → LA 에서 제거
-    items.push({
-      trackingNumber: t.tracking_number,
-      status: t.current_status,
-      carrierName: t.carrier_name,
-      itemName: t.item_name,
-      estimatedDelivery: t.estimated_delivery,
-      eventCount: t.event_count ?? 0,
-      statusLabel: t.last_event_description ?? null,
-      departureDate: t.created_at ?? null,
-    });
-  }
+  const items = buildDeviceItems(dev.la_tracking_ids);
 
   let bannerShown = false;
   let laHandled = false;
@@ -426,5 +443,67 @@ export async function sendPushToStartEvent(
     priority: 10,
     expiration: now + 60 * 60,  // 오프라인 대비 1시간 보관/재시도
   });
+
+  // 시작 성공 → 8시간 한도의 기준 시각 기록(keep-alive 가 만료 추정에 사용).
+  // 앱이 update 토큰을 등록하면 그 시점으로 다시 정확히 덮인다.
+  if (result.ok) {
+    getDb()
+      .prepare("UPDATE devices SET la_started_at = datetime('now') WHERE device_token = ?")
+      .run(deviceId);
+  }
   return { ok: result.ok, reason: result.reason, skipped: result.skipped };
+}
+
+// ── keep-alive (8시간 한도 만료 후 재표시) ──────────────────
+
+/**
+ * Apple 은 Live Activity 를 시작 후 8시간에 강제 종료한다(잠금화면은 +4시간 더 잔존).
+ * 상태 변경이 잦은 국내 배송은 변경 시점의 push-to-start 로 자연스럽게 되살아나지만,
+ * 해외 배송은 통관 등에서 며칠씩 상태가 안 바뀌어 LA 가 사라진 채 방치된다.
+ *
+ * 이 함수는 주기적으로(cron) 만료 추정 디바이스를 찾아 push-to-start 로 되살린다.
+ * - Apple 이 start 페이로드에 alert 를 강제하므로 재시작마다 배너가 뜬다 → 심야(KST 23~08시)엔
+ *   되살리지 않아 하루 최대 2회 수준으로 억제한다.
+ * - la_started_at 이 NULL 인 디바이스(이 기능 배포 전 마지막 동기화)는 건너뛴다 —
+ *   다음 상태 변경이나 앱 실행에서 시각이 기록된 뒤부터 keep-alive 대상이 된다.
+ */
+export async function reviveExpiredActivities(): Promise<void> {
+  // 심야(KST) 억제 — 서버는 UTC 라 +9h 로 환산
+  const kstHour = (new Date().getUTCHours() + 9) % 24;
+  if (kstHour >= 23 || kstHour < 8) return;
+
+  const db = getDb();
+  const devices = db
+    .prepare(
+      `SELECT device_token, push_to_start_token, truck_config, la_tracking_ids
+       FROM devices
+       WHERE push_to_start_token IS NOT NULL
+         AND la_tracking_ids IS NOT NULL AND la_tracking_ids != '[]'
+         AND la_started_at IS NOT NULL
+         AND la_started_at < datetime('now', '-8 hours')`,
+    )
+    .all() as Array<{
+      device_token: string;
+      push_to_start_token: string;
+      truck_config: string | null;
+      la_tracking_ids: string | null;
+    }>;
+
+  for (const dev of devices) {
+    const items = buildDeviceItems(dev.la_tracking_ids);
+    if (items.length === 0) continue;  // 전부 도착 → 되살릴 이유 없음
+
+    const result = await sendPushToStartEvent(
+      dev.push_to_start_token,
+      dev.device_token,
+      items,
+      safeParseJson(dev.truck_config),
+    );
+    if (result.reason === 'Unregistered') {
+      db.prepare('UPDATE devices SET push_to_start_token = NULL WHERE device_token = ?')
+        .run(dev.device_token);
+    } else if (!result.ok && !result.skipped) {
+      console.warn(`[Keep-Alive] 재시작 실패 (device ${dev.device_token.slice(0, 8)}…, reason=${result.reason ?? 'unknown'})`);
+    }
+  }
 }

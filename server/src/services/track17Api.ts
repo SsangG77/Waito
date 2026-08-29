@@ -106,6 +106,40 @@ export async function trackPackage17(
   return toTrackerShape(info);
 }
 
+/**
+ * 운송장 번호만으로 택배사를 자동 감지한다 — carrier 를 생략하고 등록하면 17TRACK 이 판별.
+ * 성공 시 17TRACK carrier key(문자열), 실패 시 null.
+ *
+ * ⚠️ 등록이므로 quota 1건이 차감된다. 감지 성공 = 실제 추가로 이어지는 흐름(carrierId='auto')
+ * 에서만 호출할 것. 이미 등록된 번호면 조회로 carrier 만 읽는다(무과금).
+ */
+export async function detectCarrier17(trackingNumber: string): Promise<string | null> {
+  if (!isTrack17Configured()) return null;
+  try {
+    const reg = await request<{
+      code: number;
+      data: {
+        accepted?: Array<{ number: string; carrier?: number }>;
+        rejected?: Array<{ number: string; error: { code: number; message: string } }>;
+      };
+    }>('/register', [{ number: trackingNumber }]);
+
+    const accepted = reg.data?.accepted?.[0];
+    if (accepted?.carrier) return String(accepted.carrier);
+
+    // 이미 등록된 번호(-18019901) → 조회로 carrier 확인 (무과금)
+    const info = await request<{
+      code: number;
+      data: { accepted?: Track17Accepted[] };
+    }>('/gettrackinfo', [{ number: trackingNumber }]);
+    const carrier = info.data?.accepted?.[0]?.carrier;
+    return carrier ? String(carrier) : null;
+  } catch (error) {
+    console.warn(`[17TRACK] 자동 감지 실패 (${trackingNumber}):`, error);
+    return null;
+  }
+}
+
 interface Track17Event {
   time_iso?: string;
   time_utc?: string;
@@ -117,6 +151,8 @@ interface Track17Event {
 
 interface Track17Accepted {
   number: string;
+  /** 17TRACK 이 판별/지정한 택배사 key. 자동 감지 시 이 값으로 우리 CARRIERS 와 매핑한다. */
+  carrier?: number;
   track_info?: {
     latest_status?: { status?: string; sub_status?: string };
     tracking?: {
@@ -155,6 +191,12 @@ function toTrackerShape(accepted: Track17Accepted): TrackerDeliveryResponse {
   const rawEvents: Track17Event[] = (info.tracking?.providers ?? [])
     .flatMap(p => p.events ?? []);
 
+  // 통관 이력 판별 — latest_status 또는 이벤트 어디든 Customs 계열 sub_status 가 있으면 통관 구간.
+  // (이벤트가 잘려도 뒤로 안 가도록 서버 DB 쪽에서 COALESCE 로 한 번 설정되면 유지한다)
+  const sawCustoms =
+    /customs/i.test(info.latest_status?.sub_status ?? '') ||
+    rawEvents.some(e => /customs/i.test(e.sub_status ?? ''));
+
   const events: TrackerDeliveryEvent[] = rawEvents
     .map(e => {
       const time = e.time_iso || e.time_utc || '';
@@ -179,6 +221,7 @@ function toTrackerShape(accepted: Track17Accepted): TrackerDeliveryResponse {
       // 마지막 이벤트의 stage 보다 latest_status 가 정확하다(17TRACK 이 종합 판정한 값).
       lastEvent: { time: last.time, status: { code: latestStatus } },
       events: { edges: events.map(node => ({ node })) },
+      subStage: sawCustoms ? 'customs' : undefined,
     },
   };
 }
