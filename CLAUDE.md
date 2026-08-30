@@ -380,6 +380,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **행 슬라이드 → 삭제/수정**: 왼쪽 슬라이드 → "> DEL_"(빨강)·"> EDIT_"(오렌지) **2버튼 세로 분할**(각 절반 높이, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), 바깥 탭/ADD 누르면 닫힘.
   - **펼친 상태에선 슬라이드 비활성**(`.gesture(dragGesture, isEnabled: !isExpanded)`) — 대신 상세 아래에 구분선 + 같은 DEL/EDIT 버튼을 **가로 2분할**로 배치(`row_expanded_actions`, 높이 34). 버튼 뷰는 슬라이드 쪽과 동일 인스턴스 재사용.
   - EDIT 탭 시 펼친 상세는 접힘(편집 폼이 상단에 열리므로).
+- **LA 대표(DI) 선택**: LA 를 켠 택배가 **2개 이상일 때만** 각 행 스위치 아래에 `PixelRadio`(`DI ON`, 식별자 `row_la_primary_radio`)가 나타난다. 선택 = `promoteToLiveActivityPrimary`(순서 배열 맨 앞으로) → 단일 선택이 구조적으로 보장. 1개로 줄면 라디오 숨김. 2개째를 켤 때마다 `PixelAlert`("다이나믹 아일랜드 설정") 노출. (구) `① DI·잠금 / ② 잠금` 뱃지는 폐기.
   - **삭제**: 탭 시 즉시 삭제 X → 상위(`DeliveryListView`)에서 `PixelConfirm`("삭제하면 되돌릴 수 없어요") 한 번 더 확인 후 `service.deleteTracking`. (확인 팝업은 전체화면 오버레이라 행이 아닌 상위에 부착)
   - **수정(EDIT)**: 탭 시 상단 입력 폼이 **편집 모드**로 열리며 기존 값 prefill. 운송장번호/택배사는 '신원'이라 **읽기전용**(회색), **품명·메모만 수정**. 제출 버튼 라벨이 ADD→**EDIT**. `service.updateTracking`(PUT /api/trackings/:id) 호출. (`editingTrackingId`로 add/edit 분기)
 - **추가 직후 강조**: 새로 추가된 행이 한 번 통통 바운스(`justAddedId` → `scaleEffect` 스프링). 사용자가 추가됨을 인지.

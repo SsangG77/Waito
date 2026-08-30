@@ -28,6 +28,8 @@ struct DeliveryListView: View {
     @State private var showError = false
     @State private var showSubscriptionAlert = false
     @State private var showLiveActivityLimitAlert = false   // 유료 상한(3개) 도달 안내
+    /// 2개째를 켜 대표(DI) 선택 라디오가 나타날 때마다 띄우는 설명
+    @State private var showPrimaryPickerInfo = false
     @State private var showPaywall = false
     @State private var showNotFoundConfirm = false
     @State private var notFoundMessage = ""
@@ -103,6 +105,11 @@ struct DeliveryListView: View {
                 title: "표시 제한",
                 message: "Live Activity는 최대 2개까지 켤 수 있어요.\n다른 택배의 표시를 끄고 다시 시도해주세요.",
                 isPresented: $showLiveActivityLimitAlert
+            ) {}
+            .pixelAlert(
+                title: "다이나믹 아일랜드 설정",
+                message: "켜진 항목 중 하나만 다이나믹 아일랜드에서 표시됩니다.\n스위치 아래 토글로 설정해주세요.",
+                isPresented: $showPrimaryPickerInfo
             ) {}
             .fullScreenCover(isPresented: $showPaywall) {
                 PlusPaywallView()   // 구매는 PlusPaywallView 내부에서 처리(별도 후처리 없음)
@@ -390,6 +397,7 @@ struct DeliveryListView: View {
             openRowId: $openRowId,
             justAddedId: justAddedId,
             liveActivityRank: service.liveActivityRank(trackingNumber: tracking.trackingNumber),
+            showsPrimaryPicker: service.liveTrackingNumbers.count >= 2,
             onPromoteToPrimary: {
                 Task { await service.promoteToLiveActivityPrimary(trackingNumber: tracking.trackingNumber) }
             }
@@ -864,6 +872,10 @@ struct DeliveryListView: View {
                     }
                 } else {
                     await service.addToLiveActivity(trackingNumber: tracking.trackingNumber)
+                    // 2개째가 켜져 대표 선택 라디오가 나타나는 순간마다 설명
+                    if service.liveTrackingNumbers.count == 2 {
+                        showPrimaryPickerInfo = true
+                    }
                 }
             }
         }

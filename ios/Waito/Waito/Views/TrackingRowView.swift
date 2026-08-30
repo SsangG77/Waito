@@ -21,9 +21,11 @@ struct TrackingRowView: View {
     @Binding var openRowId: Int?
     /// 방금 추가돼 한 번 바운스로 강조할 행 id (이 행과 같으면 바운스)
     var justAddedId: Int? = nil
-    /// LA 표시 순위 — 1 = 접힌 DI 대표(+잠금화면), 2 = 잠금화면만. 미표시면 nil.
+    /// LA 표시 순위 — 1 = 접힌 DI 대표(+잠금화면), 2 이상 = 잠금화면만. 미표시면 nil.
     var liveActivityRank: Int? = nil
-    /// ② 뱃지 탭 → 이 택배를 DI 대표(①)로 승격
+    /// LA 를 켠 택배가 2개 이상일 때만 true — 이때만 대표 선택 라디오를 띄운다.
+    var showsPrimaryPicker: Bool = false
+    /// 라디오 선택 → 이 택배를 DI 대표로
     var onPromoteToPrimary: () -> Void = {}
 
     @State private var isExpanded = false
@@ -99,43 +101,30 @@ struct TrackingRowView: View {
     }
     
     var liveActivityBtn: some View {
-        VStack(alignment: .trailing, spacing: 5) {
+        VStack(alignment: .trailing, spacing: 10) {
             PixelToggle(isOn: isLiveActive, onToggle: onToggleLiveActivity)
 
-            // 어디에 표시되는지 명시(피드백: "2개 기준 불명확") — ①=DI 대표, ②=잠금화면만.
-            // ② 탭 시 ①로 승격해 순서도 사용자가 제어.
-            if isLiveActive, let rank = liveActivityRank {
-                rankBadge(rank)
+            // 켠 택배가 2개 이상일 때만 — 다이나믹 아일랜드(접힘)에 나올 하나를 라디오로 고른다.
+            // 잠금화면에는 켠 것 전부 나오므로 선택 대상이 아님.
+            if isLiveActive, showsPrimaryPicker {
+                PixelRadio(
+                    isSelected: liveActivityRank == 1,
+                    label: "DI ON",
+                    onSelect: onPromoteToPrimary
+                )
+                .accessibilityIdentifier("row_la_primary_radio")
+                .transition(.opacity)
             }
         }
+        .animation(.easeInOut(duration: 0.15), value: showsPrimaryPicker)
     }
 
-    /// LA 표시 위치 뱃지 — ① DI·잠금 / ② 잠금(탭=승격)
-    private func rankBadge(_ rank: Int) -> some View {
-        let isPrimary = rank == 1
-        return Button {
-            if !isPrimary { onPromoteToPrimary() }
-        } label: {
-            Text(isPrimary ? "① DI·잠금" : "② 잠금")
-                .font(pixelFont(7))
-                .foregroundStyle(isPrimary ? Color.pixelOrange : Color.pixelMuted)
-                .padding(.horizontal, 5)
-                .padding(.vertical, 3)
-                .overlay(
-                    Rectangle()
-                        .stroke(isPrimary ? Color.pixelOrange.opacity(0.5) : Color.pixelBorder, lineWidth: 1)
-                )
-        }
-        .buttonStyle(.plain)
-        .disabled(isPrimary)
-        .accessibilityIdentifier("row_la_rank_badge")
-    }
-    
     var horizontalProgress: some View {
         // 접힘(간략)은 어느 택배든 고정 단계로 과정을 표시(②). 현재 노드 = 커스텀 트럭.
         fixedStepBar
             .padding(.horizontal, 14)
-            .padding(.bottom, 8)
+            .padding(.top, 6)
+            .padding(.bottom, 4)
             .transition(.opacity)
     }
 
@@ -175,7 +164,7 @@ struct TrackingRowView: View {
     private var fixedStepBar: some View {
         let dotSize: CGFloat = 5
         let gap: CGFloat = 4
-        let truckSize: CGFloat = 26
+        let truckSize: CGFloat = 30
         let cfg = TruckConfigStore.shared.config
 
         return GeometryReader { geo in
@@ -527,7 +516,8 @@ struct TrackingRowView: View {
                         .fill(Color.pixelBorder)
                         .frame(height: 1)
                         .padding(.horizontal, 14)
-                        .padding(.bottom, 10)
+                        .padding(.bottom, 8)
+                        .padding(.top, 8)
 
                     verticalProgress
 
