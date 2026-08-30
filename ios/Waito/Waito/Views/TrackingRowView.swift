@@ -1,6 +1,14 @@
 import SwiftUI
 import Translation   // 해외 배송 이벤트 원문(영문·중문 등) 온디바이스 번역
 
+/// 펼친 타임라인 노드들의 텍스트 높이를 모아 최댓값을 구한다(세로선 길이 통일용).
+private struct NodeTextHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
+}
+
 struct TrackingRowView: View {
     let tracking: TrackingListItem
     let isLiveActive: Bool
@@ -25,6 +33,8 @@ struct TrackingRowView: View {
     @State private var translationConfig: TranslationSession.Configuration?
     /// 추가 직후 강조 바운스 스케일
     @State private var bounceScale: CGFloat = 1
+    /// 펼친 타임라인에서 가장 긴 노드의 텍스트 높이 — 모든 노드를 이 높이로 맞춰 세로선 길이를 통일
+    @State private var maxNodeTextHeight: CGFloat = 0
     /// 추가 직후 슬라이드 힌트를 이미 재생했는지 (스크롤 재등장 시 반복 방지)
     @State private var didPlayAddHint = false
     /// 슬라이드 힌트는 앱 생애 최초 1회(첫 택배)만 — 두 번째 추가는 페이월이 뜨므로 겹치지 않게.
@@ -60,28 +70,28 @@ struct TrackingRowView: View {
     var mainInfo: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(tracking.itemName.uppercased())
-                .font(pixelFont(15))
+                .font(pixelFont(17))
                 .foregroundStyle(dataState == .ok ? Color.pixelText : Color.pixelMuted)
                 .lineLimit(1)
 
             HStack(spacing: 6) {
                 Text(formatDate(tracking.createdAt))
-                    .font(pixelFont(12))
+                    .font(pixelFont(13))
                     .foregroundStyle(Color.pixelMuted)
 
                 switch dataState {
                 case .checking:
                     Text("· 확인 중")
-                        .font(pixelFont(12))
+                        .font(pixelFont(13))
                         .foregroundStyle(Color.pixelMuted)
                 case .notFound:
                     Text("· 번호 확인 필요")
-                        .font(pixelFont(12))
+                        .font(pixelFont(13))
                         .foregroundStyle(Color.pixelOrange)
                 case .ok:
                     // 정상 배송: 현재 단계명(간선상차·통관 등)을 같은 자리에 표시 — DI/LA 와 동일한 stageInfo
                     Text("· \(tracking.stageInfo.currentName)")
-                        .font(pixelFont(12))
+                        .font(pixelFont(13))
                         .foregroundStyle(progressColor)
                 }
             }
@@ -312,27 +322,44 @@ struct TrackingRowView: View {
                     .padding(.top, 2)
 
                     // 원본 메시지 → 위치 → 시간, 세로 정렬
-                    VStack(alignment: .leading, spacing: 3) {
+                    VStack(alignment: .leading, spacing: 6) {
                         Text(showTranslated ? (translatedById[event.id] ?? event.description) : event.description)
-                            .font(pixelFont(isCurrent ? 12 : 9))
-                            .foregroundStyle(isCurrent ? progressColor : Color.pixelText.opacity(0.6))
+                            .font(pixelFont(isCurrent ? 15 : 14))
+                            // 타이틀(택배사 원본 메시지) — 현재 노드는 상태색으로 강조, 지나간 노드는 밝은 회색.
+                            .foregroundStyle(isCurrent ? progressColor : Color.pixelText.opacity(0.8))
                             .fixedSize(horizontal: false, vertical: true)
 
-                        if let loc, !loc.isEmpty {
-                            Text(loc)
-                                .font(pixelFont(10))
-                                .foregroundStyle(Color.pixelMuted.opacity(0.85))
+                        // 위치 · 시간은 한 줄에 가로 배치. 상태색 강조는 타이틀만 — 여기는 노드와 무관하게 동일.
+                        HStack(spacing: 6) {
+                            if let loc, !loc.isEmpty {
+                                Text(loc)
+                                if !time.isEmpty { Text("|") }
+                            }
+                            if !time.isEmpty {
+                                Text(time)
+                            }
                         }
-                        if !time.isEmpty {
-                            Text(time)
-                                .font(pixelFont(10))
-                                .foregroundStyle(Color.pixelMuted.opacity(0.6))
+                        .font(pixelFont(13))
+                        .foregroundStyle(Color.pixelText.opacity(0.6))
+                    }
+                    // 노드 높이를 가장 긴 노드에 맞춰 통일 → 사이를 잇는 세로선 길이도 전부 같아진다.
+                    // 측정은 .frame 적용 전 내용 크기 기준(피드백 루프 없음). 마지막 노드는 아래에
+                    // 선이 없어 통일 대상에서 제외(측정·적용 모두).
+                    .background {
+                        if !isLast {
+                            GeometryReader { geo in
+                                Color.clear.preference(key: NodeTextHeightKey.self, value: geo.size.height)
+                            }
                         }
                     }
+                    .frame(minHeight: isLast ? 0 : maxNodeTextHeight, alignment: .topLeading)
                     .padding(.leading, isLast ? 19 : 0)  // 트럭(26)이 점 슬롯(7)보다 넓은 만큼 밀어 간격 유지
                     .padding(.bottom, isLast ? 0 : 22)   // 노드 간격
                 }
             }
+        }
+        .onPreferenceChange(NodeTextHeightKey.self) { value in
+            Task { @MainActor in maxNodeTextHeight = value }
         }
     }
 
@@ -376,7 +403,7 @@ struct TrackingRowView: View {
                     .frame(width: 7)
 
                     Text(stageName)
-                        .font(pixelFont(isCurrent ? 12 : 9))
+                        .font(pixelFont(isCurrent ? 14 : 13))
                         .foregroundStyle(
                             isCurrent ? progressColor
                             : isPast   ? Color.pixelText.opacity(0.6)
@@ -425,7 +452,8 @@ struct TrackingRowView: View {
         .padding(.trailing, openOffset)
         .offset(x: offsetX)
         .scaleEffect(bounceScale)
-        .gesture(dragGesture)
+        // 상세로 펼친 동안엔 슬라이드 금지 — 세로 타임라인 스크롤/탭과 섞이지 않게
+        .gesture(dragGesture, isEnabled: !isExpanded)
         .clipped()
         .onChange(of: openRowId) { _, newValue in
             // 다른 행이 열리면 이 행은 닫는다
@@ -517,6 +545,24 @@ struct TrackingRowView: View {
                         .padding(.horizontal, 14)
                         .padding(.bottom, 10)
                     }
+
+                    // 액션 영역 구분선 (상단 구분선과 동일)
+                    Rectangle()
+                        .fill(Color.pixelBorder)
+                        .frame(height: 1)
+                        .padding(.horizontal, 14)
+                        .padding(.top, 14)
+                        .padding(.bottom, 14)
+
+                    // 펼친 동안엔 슬라이드가 막히므로 같은 액션을 가로로 제공
+                    HStack(spacing: slideGap) {
+                        deleteButton
+                        editButton
+                    }
+                    .frame(height: 34)
+                    .padding(.horizontal, 14)
+                    .padding(.bottom, 10)
+                    .accessibilityIdentifier("row_expanded_actions")
                 }
                 .transition(.opacity)
             }
@@ -570,6 +616,8 @@ struct TrackingRowView: View {
         Button {
             withAnimation(slideSpring) { offsetX = 0 }
             if openRowId == tracking.id { openRowId = nil }
+            // 편집 폼이 열리므로 펼쳐둔 상세는 접는다
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.85)) { isExpanded = false }
             onEdit()
         } label: {
             HStack(spacing: 6) {

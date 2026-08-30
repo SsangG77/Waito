@@ -222,11 +222,21 @@ struct DeliveryListView: View {
     private func applyCapturedInfo(_ info: CapturedTrackingInfo, fallbackAlert: Bool) {
         if info.hasAnyInfo {
             if let number = info.trackingNumber { newTrackingNumber = number }
-            if let carrier = info.carrierId { newCarrierId = carrier }
             if let name = info.itemName { newItemName = name }
+            fillCarrier(detected: info.carrierId)
             openAddForm()
         } else if fallbackAlert {
             showCaptureNoInfo = true
+        }
+    }
+
+    /// 캡처·스캔으로 얻은 택배사를 폼에 채운다.
+    /// 감지된 값이 있으면 그것으로, 없으면 "자동 감지"(서버 detectCarrier)로 — 사용자가 이미 고른 값은 덮지 않는다.
+    private func fillCarrier(detected: String?) {
+        if let detected {
+            newCarrierId = detected
+        } else if newCarrierId.isEmpty {
+            newCarrierId = "auto"
         }
     }
 
@@ -273,15 +283,7 @@ struct DeliveryListView: View {
             }
             capturePhotoItem = nil
             isParsingCapture = false
-
-            if info.hasAnyInfo {
-                if let number = info.trackingNumber { newTrackingNumber = number }
-                if let carrier = info.carrierId { newCarrierId = carrier }
-                if let name = info.itemName { newItemName = name }
-                openAddForm()
-            } else {
-                showCaptureNoInfo = true
-            }
+            applyCapturedInfo(info, fallbackAlert: true)
         }
     }
 
@@ -694,6 +696,7 @@ struct DeliveryListView: View {
     }
 
     /// 운송장 입력 — 입력칸 안쪽 오른쪽 끝에 송장 바코드 스캔 버튼(카메라 지원 기기에서만)
+    /// 바코드 payload 에는 택배사 정보가 없어 감지값 nil — 택배사는 "자동 감지"로 채워진다.
     private var trackingNumberField: some View {
         PixelTextField(
             label: "TRACKING NO.",
@@ -705,6 +708,7 @@ struct DeliveryListView: View {
         .sheet(isPresented: $showBarcodeScanner) {
             BarcodeScannerSheet { payload in
                 newTrackingNumber = payload
+                fillCarrier(detected: nil)
             }
         }
     }

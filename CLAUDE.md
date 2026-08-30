@@ -372,11 +372,14 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **택배사 선택**: 시스템 Menu 대신 픽셀 스타일 펼침 드롭다운(`PixelDropdown`)
 - **추가 폼**: 인라인 폼(AddTrackingView 제거). 조회 실패(NOT_FOUND) 시 "그래도 추가" 확인 다이얼로그(`PixelConfirm`) → `force` 재요청
 - **캡처로 추가(OCR)**: 배송 알림 스크린샷을 `PhotosPicker` 로 고르면 `CaptureTrackingParser`(Apple Vision, **온디바이스·서버 전송 없음**)가 운송장번호·택배사·품명을 뽑아 추가 폼에 prefill. 아무것도 못 찾으면 안내 팝업(`showCaptureNoInfo`).
+- **택배사 자동 채움**: 캡처·클립보드·**바코드 스캔**(`BarcodeScannerSheet`) 어디서 들어오든 `fillCarrier(detected:)` 한 곳을 거친다. OCR 이 택배사 키워드를 찾으면 그 값으로, 못 찾으면(바코드는 항상 해당) 드롭다운 첫 항목 **`"auto"`(자동 감지)** 로 채워 서버 `detectCarrier` 에 맡김. 사용자가 이미 고른 택배사는 덮지 않음.
 - **공유시트로 추가(WaitoShareExtension)**: 이미지(스크린샷)·텍스트(문자·카톡) 공유 → 익스텐션이 App Group(`group.com.sangjin.Waito`)에 저장(이미지=`shared_capture.dat` 파일, 텍스트=`shared_text` UserDefaults) 후 `waito://capture` 로 앱 오픈 → 앱이 소비해 OCR/라인 파싱 후 ADD 폼 prefill. OCR/파싱은 전부 앱 쪽(익스텐션은 저장만, 파서 타깃 공유 불필요).
 - **클립보드 자동인식**: 문자·카톡 내용 복사 후 앱 진입 시 `CaptureTrackingParser.parse(text:)`로 운송장·택배사·품명 추출 → 운송장이 있으면 ADD 폼 자동 오픈+prefill. `changeCount` 로 1회만. **프리필 공통 가드 `canAutofill`** = 편집 중 금지, ADD 폼 열려 있어도 비어 있으면 허용. 포그라운드 복귀 시 0.4s 지연 실행(클립보드 권한 프롬프트/익스텐션 파일쓰기 타이밍) + `onOpenURL(waito://)` 직접 신호.
 - **정렬**: 도착임박순(기본) / 최근 업데이트순 / 등록순 — 칩으로 선택, `@AppStorage` 영구 저장
 - **완료 섹션 구분**: 배송완료(`currentStatus.isCompleted`) 항목은 리스트 아래 **"완료 N" 섹션**으로 분리(`activeTrackings`/`completedTrackings`, 각 그룹 안에서 현재 정렬 적용). 헤더 탭으로 접기/펼치기(`@AppStorage("completed_section_collapsed")`, 기본 접힘). 완료 없으면 섹션 숨김.
 - **행 슬라이드 → 삭제/수정**: 왼쪽 슬라이드 → "> DEL_"(빨강)·"> EDIT_"(오렌지) **2버튼 세로 분할**(각 절반 높이, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), 바깥 탭/ADD 누르면 닫힘.
+  - **펼친 상태에선 슬라이드 비활성**(`.gesture(dragGesture, isEnabled: !isExpanded)`) — 대신 상세 아래에 구분선 + 같은 DEL/EDIT 버튼을 **가로 2분할**로 배치(`row_expanded_actions`, 높이 34). 버튼 뷰는 슬라이드 쪽과 동일 인스턴스 재사용.
+  - EDIT 탭 시 펼친 상세는 접힘(편집 폼이 상단에 열리므로).
   - **삭제**: 탭 시 즉시 삭제 X → 상위(`DeliveryListView`)에서 `PixelConfirm`("삭제하면 되돌릴 수 없어요") 한 번 더 확인 후 `service.deleteTracking`. (확인 팝업은 전체화면 오버레이라 행이 아닌 상위에 부착)
   - **수정(EDIT)**: 탭 시 상단 입력 폼이 **편집 모드**로 열리며 기존 값 prefill. 운송장번호/택배사는 '신원'이라 **읽기전용**(회색), **품명·메모만 수정**. 제출 버튼 라벨이 ADD→**EDIT**. `service.updateTracking`(PUT /api/trackings/:id) 호출. (`editingTrackingId`로 add/edit 분기)
 - **추가 직후 강조**: 새로 추가된 행이 한 번 통통 바운스(`justAddedId` → `scaleEffect` 스프링). 사용자가 추가됨을 인지.
@@ -399,6 +402,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **포인트 경제**: 배송완료 1건=1포인트(디바이스별, 서버 `devices.delivered_count`). 부품 1개 해제=3포인트(서버 `devices.unlocked_parts` JSON). 잔액 = 누적−해제수×3. `TrackingService.pointBalance/isUnlocked/loadDeviceProgress/unlockPart`. delivered 전환 +1은 `pollingService`, 해제 검증(Plus계열 403/잔액 400)은 `devices.ts` POST `/unlock-part`. ⚠️ 디바이스 단위(키체인 토큰) — 기기 간 동기화는 2차 로그인.
 - **My Truck 게이팅**: 셀 잠금 = 무료/구독이면 없음, `pointUnlockable` 미해제면 "3P"(코인), `plusOnly`면 크라운. 저장 시 `handleSave` — Plus전용 끼면 페이월, 포인트대상이면 `PixelConfirm`로 N×3P 차감 후 커밋. **포인트 부족 시 중간 안내 없이 바로 `PlusPaywallView` 직행** — 페이월 가격 위에 보유/부족 포인트 표시(`PlusPaywallView.pointStatus`, 옵셔널이라 잠금탭·첫추가 업셀 등 다른 진입점은 미표시).
 - cab/body/wheel 조합 → `TruckConfigStore`(UserDefaults). 변경 시 실행 중 Activity 갱신(`pushTruckConfig`) + 서버 push-to-start 설정 갱신(`refreshPushToStartConfig`)
+- **포인트 안내 = i 버튼 토글**: 포인트 바 오른쪽 `info.circle` 탭 시 적립·차감 규칙 문구가 펼쳐짐(`showPointInfo`). 평소엔 숨겨 잔액만 노출.
+- **본문 크기**: Apple HIG 최소 11pt 기준으로 상향(8/10pt 제거) — 안내문 11, 섹션 제목 13, 잔액 14, 저장 버튼 15. 픽셀폰트 고정 레이아웃이라 Dynamic Type 은 미적용.
 
 ### Live Activity 푸시 (서버 + iOS)
 - APNs 실제 전송 + push-to-start 이벤트 기반 (위 "데이터 흐름" 참조)
