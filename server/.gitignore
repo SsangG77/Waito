@@ -6,3 +6,4 @@ dist/
 .env
 certs/
 credential_alert_state.json
+credential_state.json
