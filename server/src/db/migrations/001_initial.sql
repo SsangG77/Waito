@@ -37,6 +37,17 @@ CREATE TABLE IF NOT EXISTS tracking_events (
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
+-- 국내 허브명 → 좌표 대응표. 배송 이력의 location 문자열을 카카오 장소검색으로 한 번만 변환해 재사용한다.
+-- status='failed' 는 변환 실패(재시도 안 함, 관리자가 수동 입력할 대상).
+CREATE TABLE IF NOT EXISTS hub_locations (
+  name TEXT PRIMARY KEY,
+  lat REAL,
+  lon REAL,
+  status TEXT NOT NULL DEFAULT 'ok',
+  source TEXT NOT NULL DEFAULT 'kakao',
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_trackings_device_id ON trackings(device_id);
 CREATE INDEX IF NOT EXISTS idx_trackings_status ON trackings(current_status);
 CREATE INDEX IF NOT EXISTS idx_trackings_webhook ON trackings(webhook_id);

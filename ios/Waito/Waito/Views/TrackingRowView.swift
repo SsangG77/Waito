@@ -17,6 +17,10 @@ struct TrackingRowView: View {
     var onDelete: () -> Void = {}
     /// 수정 요청(상위에서 입력 폼을 편집 모드로 연다)
     var onEdit: () -> Void = {}
+    /// 지도 요청. 잠금 상태면 상위가 페이월을 띄운다.
+    var onMap: () -> Void = {}
+    /// 지도 사용 가능 여부(구독). false 면 버튼에 자물쇠 표시.
+    var isMapUnlocked: Bool = false
     /// 현재 액션 버튼이 열린 행의 id (한 번에 하나만 열리도록 공유)
     @Binding var openRowId: Int?
     /// 방금 추가돼 한 번 바운스로 강조할 행 id (이 행과 같으면 바운스)
@@ -544,8 +548,9 @@ struct TrackingRowView: View {
                         .padding(.top, 14)
                         .padding(.bottom, 14)
 
-                    // 펼친 동안엔 슬라이드가 막히므로 같은 액션을 가로로 제공
+                    // 펼친 동안엔 슬라이드가 막히므로 같은 액션을 가로로 제공 (+ 지도)
                     HStack(spacing: slideGap) {
+                        mapButton
                         deleteButton
                         editButton
                     }
@@ -582,6 +587,31 @@ struct TrackingRowView: View {
         }
         .frame(width: delWidth)
         .frame(maxHeight: .infinity)
+    }
+
+    /// 지도 열기. 비구독이면 자물쇠를 달아 두고, 탭하면 상위가 페이월을 띄운다.
+    private var mapButton: some View {
+        Button {
+            withAnimation(slideSpring) { offsetX = 0 }
+            if openRowId == tracking.id { openRowId = nil }
+            onMap()
+        } label: {
+            HStack(spacing: 6) {
+                if isMapUnlocked {
+                    Text(">")
+                } else {
+                    Image(systemName: "lock.fill")
+                        .font(.system(size: 9))
+                }
+                Text("MAP_")
+            }
+            .font(pixelFont(11))
+            .foregroundStyle(isMapUnlocked ? Color.pixelText : Color.pixelMuted)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("row_map_button")
     }
 
     private var deleteButton: some View {

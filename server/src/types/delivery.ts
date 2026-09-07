@@ -91,8 +91,9 @@ export interface TrackerDeliveryEvent {
   time: string;
   status: { code: string };
   description: string;
-  // tracker.delivery Location 오브젝트 — 이름(허브명 등)만 사용. 좌표/우편번호는 API 가 이름 외 제공 안 함.
-  location?: { name?: string } | null;
+  // 위치. tracker.delivery(국내)는 이름만 준다 — 좌표는 허브 대응표에서 채운다.
+  // 17TRACK(해외)은 좌표까지 주지만 비어 있는 이벤트도 흔하다.
+  location?: { name?: string; lat?: number; lon?: number } | null;
 }
 
 export interface TrackerDeliveryResponse {

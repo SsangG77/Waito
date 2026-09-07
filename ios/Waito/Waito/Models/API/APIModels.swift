@@ -1,4 +1,5 @@
 import Foundation
+import CoreLocation
 
 // MARK: - Carrier
 
@@ -214,6 +215,10 @@ struct TrackingEvent: Decodable, Identifiable {
     let description: String
     let eventTime: String
     let location: String?
+    /// 위치 좌표 — 국내는 서버의 허브 대응표, 해외는 택배사 응답에서 온다.
+    /// 구서버 호환 + 좌표를 못 구한 지점 때문에 항상 Optional.
+    let lat: Double?
+    let lon: Double?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -222,6 +227,16 @@ struct TrackingEvent: Decodable, Identifiable {
         case description
         case eventTime = "event_time"
         case location
+        case lat
+        case lon
+    }
+}
+
+extension TrackingEvent {
+    /// 좌표가 둘 다 있을 때만 지도에 쓸 수 있는 위치가 된다.
+    var coordinate: CLLocationCoordinate2D? {
+        guard let lat, let lon else { return nil }
+        return CLLocationCoordinate2D(latitude: lat, longitude: lon)
     }
 }
 

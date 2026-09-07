@@ -31,6 +31,14 @@ export const config = {
     apiKey: process.env.TRACK17_API_KEY || '',
   },
 
+  // 카카오 로컬(장소 검색) — 국내 허브명을 좌표로 바꿔 지도에 찍기 위한 용도.
+  // 키가 없으면 변환 자체를 건너뛴다(실패로 기록하지 않음 → 나중에 키를 넣으면 그대로 처리됨).
+  // 무료 한도: 카카오 전체 API 합산 월 300만 건, 장소검색 일 10만 건. 허브명은 대응표에 캐시돼 재호출 없음.
+  kakao: {
+    apiUrl: process.env.KAKAO_LOCAL_API_URL || 'https://dapi.kakao.com/v2/local/search/keyword.json',
+    restApiKey: process.env.KAKAO_REST_API_KEY || '',
+  },
+
   apns: {
     keyId: process.env.APNS_KEY_ID || '',
     teamId: process.env.APNS_TEAM_ID || '',

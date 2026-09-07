@@ -62,8 +62,8 @@ async function pollTracking(trackingId: number): Promise<void> {
 
       // 이벤트 기록
       db.prepare(`
-        INSERT OR IGNORE INTO tracking_events (tracking_id, tracker_status, mapped_status, description, event_time, location)
-        VALUES (?, ?, ?, ?, ?, ?)
+        INSERT OR IGNORE INTO tracking_events (tracking_id, tracker_status, mapped_status, description, event_time, location, lat, lon)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       `).run(
         trackingId,
         event.status.code,
@@ -71,7 +71,18 @@ async function pollTracking(trackingId: number): Promise<void> {
         event.description,
         event.time,
         event.location?.name || null,
+        event.location?.lat ?? null,
+        event.location?.lon ?? null,
       );
+
+      // 좌표 없이 저장돼 있던 기존 이벤트를 뒤늦게 채운다.
+      // (중복 방지 INSERT OR IGNORE 는 기존 행을 건드리지 않아 좌표가 영영 비게 됨)
+      if (event.location?.lat != null && event.location?.lon != null) {
+        db.prepare(`
+          UPDATE tracking_events SET lat = ?, lon = ?
+          WHERE tracking_id = ? AND event_time = ? AND description = ? AND lat IS NULL
+        `).run(event.location.lat, event.location.lon, trackingId, event.time, event.description);
+      }
     }
 
     // 상태가 그대로여도 최신 이벤트 시각은 항상 반영한다.
