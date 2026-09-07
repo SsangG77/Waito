@@ -53,22 +53,21 @@ struct ExpandedMetroTimelineView: View {
         let stage = item.stageInfo
         return VStack(alignment: .leading, spacing: 7) {
             Text(item.itemName)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
             stageBar(stage: stage)
-            stageLabels(stage: stage)
 
-            // 하단 가로줄 — 배송상태(좌·날짜보다 30% 크게) + 날짜(우)
+            // 하단 가로줄 — 배송상태(좌) + 날짜(우)
             HStack(alignment: .firstTextBaseline) {
                 Text(stage.currentName)   // 해외 통관 구간이면 "통관"
-                    .font(.system(size: 13, weight: .bold))
+                    .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.wPixelOrange)
                     .lineLimit(1)
                 Spacer(minLength: 6)
                 Text(shortDate(item.departureDate))
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Color.wPixelMuted)
                     .lineLimit(1)
             }
@@ -125,31 +124,6 @@ struct ExpandedMetroTimelineView: View {
             }
         }
         .frame(height: truckSize)
-    }
-
-    /// 스텝바 아래 단계 라벨 — 각 점 중심에 정렬, 현재 단계만 오렌지·굵게
-    private func stageLabels(stage: DeliveryStageInfo) -> some View {
-        let currentOrder = stage.currentIndex
-        let dotSize: CGFloat = 5
-        let gap: CGFloat = 4
-
-        return GeometryReader { geo in
-            let unit = unitWidth(total: geo.size.width, count: stage.count, dotSize: dotSize, gap: gap)
-            ForEach(Array(stage.names.enumerated()), id: \.offset) { i, name in
-                Text(name)
-                    .font(.system(size: 8, weight: i == currentOrder ? .bold : .regular))
-                    .foregroundStyle(labelColor(index: i, currentOrder: currentOrder))
-                    .fixedSize()
-                    .position(x: unit * CGFloat(i) + dotSize / 2, y: 5)
-            }
-        }
-        .frame(height: 10)
-    }
-
-    private func labelColor(index: Int, currentOrder: Int) -> Color {
-        if index == currentOrder { return Color.wPixelOrange }
-        if index < currentOrder { return Color.wPixelMuted }
-        return Color.white.opacity(0.25)
     }
 
     /// "2026-08-01 ..." → "2026.08.01" (위젯은 문자열 파싱만)

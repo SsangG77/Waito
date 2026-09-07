@@ -4,6 +4,15 @@ import path from 'path';
 
 dotenv.config();
 
+/** 운영 서버 실주소. .env 가 비었거나 자리표시자면 이 값으로 동작한다. */
+const PUBLIC_URL_FALLBACK = 'http://158.247.223.154:3001';
+
+function resolvePublicUrl(): string {
+  const raw = (process.env.WEBHOOK_BASE_URL || '').trim();
+  if (!raw || raw.includes('your-server')) return PUBLIC_URL_FALLBACK;
+  return raw.replace(/\/+$/, '');
+}
+
 export const config = {
   port: parseInt(process.env.PORT || '3000', 10),
 
@@ -34,7 +43,10 @@ export const config = {
     production: process.env.APNS_PRODUCTION === 'true',
   },
 
-  webhookBaseUrl: process.env.WEBHOOK_BASE_URL || 'http://localhost:3000',
+  // 운영 서버 공개 주소. webhook 콜백 URL 과 이메일 속 관리자 링크가 이 값을 쓴다.
+  // ⚠️ .env.example 의 자리표시자(your-server.com)가 그대로 남으면 webhook 이 죽고
+  //    이메일 버튼도 없는 도메인으로 간다 → 자리표시자면 실제 운영 주소로 되돌린다.
+  webhookBaseUrl: resolvePublicUrl(),
 
   admin: {
     secret: process.env.ADMIN_SECRET || 'waito-admin',

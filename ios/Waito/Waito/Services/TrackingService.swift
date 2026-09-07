@@ -600,11 +600,11 @@ final class TrackingService {
             estimatedDelivery: "오늘", createdAt: "2026-04-10T09:00:00Z", deliveredAt: nil,
             lastEventTime: "2026-04-11T10:00:00Z",
             events: [
-                TrackingEvent(id: 101, trackerStatus: "INFORMATION_RECEIVED", mappedStatus: "registered", description: "접수", eventTime: "2026-04-10T09:00:00Z", location: "서울 강남"),
-                TrackingEvent(id: 102, trackerStatus: "AT_PICKUP", mappedStatus: "pickedUp", description: "집화완료", eventTime: "2026-04-10T14:10:00Z", location: "서울 강남터미널"),
-                TrackingEvent(id: 103, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "간선상차", eventTime: "2026-04-10T21:30:00Z", location: "옥천HUB"),
-                TrackingEvent(id: 104, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "간선하차", eventTime: "2026-04-11T05:00:00Z", location: "부산북부터미널"),
-                TrackingEvent(id: 105, trackerStatus: "OUT_FOR_DELIVERY", mappedStatus: "outForDelivery", description: "배송출발", eventTime: "2026-04-11T09:40:00Z", location: "부산 해운대 집배점"),
+                TrackingEvent(id: 101, trackerStatus: "INFORMATION_RECEIVED", mappedStatus: "registered", description: "고객님의 상품이 접수되었습니다.", eventTime: "2026-04-10T09:00:00Z", location: "서울 강남"),
+                TrackingEvent(id: 102, trackerStatus: "AT_PICKUP", mappedStatus: "pickedUp", description: "보내시는 고객님으로부터 상품을 인수받았습니다.", eventTime: "2026-04-10T14:10:00Z", location: "서울 강남터미널"),
+                TrackingEvent(id: 103, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "고객님의 상품이 배송지로 이동중입니다.", eventTime: "2026-04-10T21:30:00Z", location: "옥천HUB"),
+                TrackingEvent(id: 104, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "고객님의 상품이 배송지에 도착하였습니다.", eventTime: "2026-04-11T05:00:00Z", location: "부산북부터미널"),
+                TrackingEvent(id: 105, trackerStatus: "OUT_FOR_DELIVERY", mappedStatus: "outForDelivery", description: "배송담당자가 고객님의 상품을 배송할 예정입니다.", eventTime: "2026-04-11T09:40:00Z", location: "부산 해운대 집배점"),
             ]
         ),
         TrackingListItem(
@@ -621,11 +621,11 @@ final class TrackingService {
             estimatedDelivery: nil, createdAt: "2026-04-07T11:00:00Z",
             deliveredAt: "2026-04-11T14:22:00Z", lastEventTime: "2026-04-11T14:22:00Z",
             events: [
-                TrackingEvent(id: 301, trackerStatus: "INFORMATION_RECEIVED", mappedStatus: "registered", description: "접수", eventTime: "2026-04-07T11:00:00Z", location: "인천 남동"),
-                TrackingEvent(id: 302, trackerStatus: "AT_PICKUP", mappedStatus: "pickedUp", description: "집화완료", eventTime: "2026-04-07T18:00:00Z", location: "인천 남동터미널"),
-                TrackingEvent(id: 303, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "간선상차", eventTime: "2026-04-08T02:00:00Z", location: "대전HUB"),
-                TrackingEvent(id: 304, trackerStatus: "OUT_FOR_DELIVERY", mappedStatus: "outForDelivery", description: "배송출발", eventTime: "2026-04-11T09:00:00Z", location: "대전 유성 집배점"),
-                TrackingEvent(id: 305, trackerStatus: "DELIVERED", mappedStatus: "delivered", description: "배송완료 (문 앞)", eventTime: "2026-04-11T14:22:00Z", location: "대전 유성구"),
+                TrackingEvent(id: 301, trackerStatus: "INFORMATION_RECEIVED", mappedStatus: "registered", description: "고객님의 상품이 접수되었습니다.", eventTime: "2026-04-07T11:00:00Z", location: "인천 남동"),
+                TrackingEvent(id: 302, trackerStatus: "AT_PICKUP", mappedStatus: "pickedUp", description: "보내시는 고객님으로부터 상품을 인수받았습니다.", eventTime: "2026-04-07T18:00:00Z", location: "인천 남동터미널"),
+                TrackingEvent(id: 303, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "고객님의 상품이 배송지로 이동중입니다.", eventTime: "2026-04-08T02:00:00Z", location: "대전HUB"),
+                TrackingEvent(id: 304, trackerStatus: "OUT_FOR_DELIVERY", mappedStatus: "outForDelivery", description: "배송담당자가 고객님의 상품을 배송 중입니다.", eventTime: "2026-04-11T09:00:00Z", location: "대전 유성 집배점"),
+                TrackingEvent(id: 305, trackerStatus: "DELIVERED", mappedStatus: "delivered", description: "고객님의 상품이 배송완료 되었습니다. (문 앞)", eventTime: "2026-04-11T14:22:00Z", location: "대전 유성구"),
             ]
         ),
         TrackingListItem(
@@ -642,10 +642,10 @@ final class TrackingService {
             estimatedDelivery: "5일 후", createdAt: "2026-04-08T10:00:00Z", deliveredAt: nil,
             lastEventTime: "2026-04-11T16:00:00Z",
             events: [
-                TrackingEvent(id: 501, trackerStatus: "InfoReceived", mappedStatus: "registered", description: "발송 정보 접수", eventTime: "2026-04-08T10:00:00Z", location: "Guangzhou"),
-                TrackingEvent(id: 502, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "발송국 출항 (항공)", eventTime: "2026-04-09T22:00:00Z", location: "Guangzhou Airport"),
-                TrackingEvent(id: 503, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "인천공항 도착", eventTime: "2026-04-11T06:30:00Z", location: "Incheon"),
-                TrackingEvent(id: 504, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "수입 통관 진행 중", eventTime: "2026-04-11T16:00:00Z", location: "인천세관"),
+                TrackingEvent(id: 501, trackerStatus: "InfoReceived", mappedStatus: "registered", description: "Shipment information received by the carrier", eventTime: "2026-04-08T10:00:00Z", location: "Guangzhou"),
+                TrackingEvent(id: 502, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "Departed from origin country, in transit to destination", eventTime: "2026-04-09T22:00:00Z", location: "Guangzhou Airport"),
+                TrackingEvent(id: 503, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "Arrived at destination country airport", eventTime: "2026-04-11T06:30:00Z", location: "Incheon"),
+                TrackingEvent(id: 504, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "Held by customs for import clearance", eventTime: "2026-04-11T16:00:00Z", location: "인천세관"),
             ],
             subStage: "customs",      // 통관 구간 → 6단계 중 4번째(통관) 노드에 트럭
             isInternational: true
@@ -657,10 +657,10 @@ final class TrackingService {
             estimatedDelivery: "오늘", createdAt: "2026-04-06T09:00:00Z", deliveredAt: nil,
             lastEventTime: "2026-04-12T08:40:00Z",
             events: [
-                TrackingEvent(id: 601, trackerStatus: "InfoReceived", mappedStatus: "registered", description: "Shipment information received", eventTime: "2026-04-06T09:00:00Z", location: "Berlin"),
-                TrackingEvent(id: 602, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "Departed facility", eventTime: "2026-04-07T13:00:00Z", location: "Leipzig Hub"),
-                TrackingEvent(id: 603, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "통관 완료", eventTime: "2026-04-10T11:00:00Z", location: "인천세관"),
-                TrackingEvent(id: 604, trackerStatus: "OutForDelivery", mappedStatus: "outForDelivery", description: "With delivery courier", eventTime: "2026-04-12T08:40:00Z", location: "서울 강남"),
+                TrackingEvent(id: 601, trackerStatus: "InfoReceived", mappedStatus: "registered", description: "Shipment picked up from the sender", eventTime: "2026-04-06T09:00:00Z", location: "Berlin"),
+                TrackingEvent(id: 602, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "Processed at DHL sorting facility, departed", eventTime: "2026-04-07T13:00:00Z", location: "Leipzig Hub"),
+                TrackingEvent(id: 603, trackerStatus: "InTransit", mappedStatus: "inTransitIn", description: "Customs clearance processing complete", eventTime: "2026-04-10T11:00:00Z", location: "인천세관"),
+                TrackingEvent(id: 604, trackerStatus: "OutForDelivery", mappedStatus: "outForDelivery", description: "With delivery courier, out for delivery today", eventTime: "2026-04-12T08:40:00Z", location: "서울 강남"),
             ],
             subStage: "customs",      // 통관 이력 유지(서버 COALESCE 와 동일) — 배송출발이라 5번째 노드
             isInternational: true

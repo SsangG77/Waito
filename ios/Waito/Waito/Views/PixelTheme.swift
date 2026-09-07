@@ -326,6 +326,46 @@ struct PixelToggle: View {
     }
 }
 
+// MARK: - PixelRadio
+
+/// 픽셀 라디오 — 여러 항목 중 하나만 고르는 선택칸.
+/// 이미 선택된 칸은 탭해도 아무 일 없음(해제 불가 = 라디오 성질).
+struct PixelRadio: View {
+    let isSelected: Bool
+    /// 선택칸 오른쪽 라벨. nil 이면 네모만.
+    var label: String? = nil
+    let onSelect: () -> Void
+
+    var body: some View {
+        Button {
+            if !isSelected { onSelect() }
+        } label: {
+            HStack(spacing: 6) {
+                ZStack {
+                    Rectangle()
+                        .stroke(isSelected ? Color.pixelOrange : Color.pixelBorder, lineWidth: 1.5)
+                        .frame(width: 14, height: 14)
+                    if isSelected {
+                        Rectangle()
+                            .fill(Color.pixelOrange)
+                            .frame(width: 6, height: 6)
+                    }
+                }
+
+                if let label {
+                    Text(label)
+                        .font(pixelFont(11))
+                        .foregroundStyle(isSelected ? Color.pixelOrange : Color.pixelMuted)
+                }
+            }
+            // 선택칸이 작아 터치 영역을 주변까지 확장
+            .contentShape(Rectangle().inset(by: -8))
+        }
+        .buttonStyle(.plain)
+        .animation(.easeInOut(duration: 0.12), value: isSelected)
+    }
+}
+
 // MARK: - PixelAlert
 
 struct PixelAlert: View {
@@ -358,6 +398,8 @@ struct PixelAlert: View {
                     .font(pixelFont(11))
                     .foregroundStyle(Color.pixelText)
                     .lineSpacing(5)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 14)
 
@@ -439,6 +481,8 @@ struct PixelConfirm: View {
                     .font(pixelFont(11))
                     .foregroundStyle(Color.pixelText)
                     .lineSpacing(5)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 18)
                     .padding(.vertical, 14)
 

@@ -1,4 +1,5 @@
 import cron from 'node-cron';
+import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { config } from '../config.js';
@@ -31,6 +32,59 @@ function markAlertedToday(): void {
   } catch (err) {
     console.error('[Credential] 알림 상태 저장 실패:', err);
   }
+}
+
+// 실제로 쓰이고 있는 credential 과 그 credential 을 처음 본 날짜를 기록한다.
+// .env 의 발급일은 손으로 고치지 않으면 예시값(2026-03-17)에 굳어버려 만료일이 영원히 과거가 된다.
+// 키 값이 바뀐 걸 감지한 날을 발급일로 삼으면, 어느 경로로 갱신하든 날짜가 따라온다.
+function credentialStatePath(): string {
+  return process.env.CREDENTIAL_STATE_PATH || path.join(process.cwd(), 'credential_state.json');
+}
+
+function credentialFingerprint(): string {
+  const raw = `${config.tracker.clientId}:${config.tracker.clientSecret}`;
+  return crypto.createHash('sha256').update(raw).digest('hex').slice(0, 16);
+}
+
+/**
+ * 지금 쓰는 credential 의 발급일(YYYY-MM-DD). 키가 바뀌었으면 오늘로 새로 기록한다.
+ *
+ * 첫 실행이라 기록이 없을 때는 .env 의 발급일을 그대로 옮겨 심는다.
+ * (무조건 오늘로 잡으면 이미 20일 지난 credential 이 21일 남은 것으로 보여 경고를 놓친다)
+ */
+function resolveIssuedAt(): string | null {
+  const fingerprint = credentialFingerprint();
+  const envIssuedAt = config.tracker.credentialIssuedAt;
+
+  let saved: { fingerprint?: string; issuedAt?: string } = {};
+  try {
+    saved = JSON.parse(fs.readFileSync(credentialStatePath(), 'utf-8'));
+  } catch {
+    // 기록 없음 → 아래에서 새로 만든다
+  }
+
+  if (saved.fingerprint === fingerprint && saved.issuedAt) {
+    return saved.issuedAt;
+  }
+
+  const seed = saved.fingerprint === undefined && isValidDate(envIssuedAt)
+    ? envIssuedAt
+    : todayKST();
+
+  try {
+    fs.writeFileSync(
+      credentialStatePath(),
+      JSON.stringify({ fingerprint, issuedAt: seed }) + '\n',
+      'utf-8',
+    );
+  } catch (err) {
+    console.error('[Credential] 발급일 기록 실패:', err);
+  }
+  return seed;
+}
+
+function isValidDate(value: string): boolean {
+  return /^\d{4}-\d{2}-\d{2}$/.test(value) && !isNaN(new Date(value).getTime());
 }
 
 export interface CredentialHealth {
@@ -76,14 +130,14 @@ export function getCredentialHealth(): CredentialHealth {
   if (apiExpired) {
     return {
       isValid: false,
-      issuedAt: config.tracker.credentialIssuedAt || null,
+      issuedAt: resolveIssuedAt(),
       expiresAt: null,
       daysRemaining: 0,
       warning: 'credential이 만료되었습니다. tracker.delivery 웹 콘솔에서 갱신하세요.',
     };
   }
 
-  const issuedAt = config.tracker.credentialIssuedAt;
+  const issuedAt = resolveIssuedAt();
   if (!issuedAt) {
     return {
       isValid: true,

@@ -7,6 +7,7 @@ struct TruckCustomizeView: View {
     @Bindable private var store = TruckConfigStore.shared
 
     @State private var showSubscriptionAlert = false
+    @State private var showPointInfo = false          // 포인트 규칙 안내 펼침 여부
 
     /// 미리보기용 임시 조합. 잠금 요소도 자유롭게 골라 미리 볼 수 있고,
     /// "저장하기"를 눌러야 store.config 에 커밋된다(= Live Activity/서버 갱신).
@@ -84,17 +85,39 @@ struct TruckCustomizeView: View {
     // MARK: - 포인트 표시 바
 
     private var pointBar: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "star.fill")
-                .font(.system(size: 12))
-                .foregroundStyle(Color.pixelOrange)
-            Text("\(service.pointBalance) P")
-                .font(pixelFont(12))
-                .foregroundStyle(Color.pixelText)
-            Spacer()
-            Text("배송완료 1건 = 1P · 해제 \(pointUnlockCost)P")
-                .font(pixelFont(8))
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: "star.fill")
+                    .font(.system(size: 14))
+                    .foregroundStyle(Color.pixelOrange)
+                Text("\(service.pointBalance) P")
+                    .font(pixelFont(14))
+                    .foregroundStyle(Color.pixelText)
+                Spacer()
+                // 포인트 규칙은 평소 숨김 — i 버튼으로 필요할 때만 펼침
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.85)) {
+                        showPointInfo.toggle()
+                    }
+                } label: {
+                    Image(systemName: "info.circle")
+                        .font(.system(size: 16))
+                        .foregroundStyle(showPointInfo ? Color.pixelOrange : Color.pixelMuted)
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("truck_point_info_button")
+            }
+
+            if showPointInfo {
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("배송완료 1건에 1P가 적립됩니다.")
+                    Text("아이템 해제 \(pointUnlockCost)P를 사용합니다.")
+                }
+                .font(pixelFont(15))
                 .foregroundStyle(Color.pixelMuted)
+                .padding(.horizontal, 4)
+                .transition(.opacity)
+            }
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
@@ -173,9 +196,9 @@ struct TruckCustomizeView: View {
         Button(action: handleSave) {
             HStack(spacing: 8) {
                 Image(systemName: "checkmark")
-                    .font(.system(size: 13))
+                    .font(.system(size: 15))
                 Text("저장하기_")
-                    .font(pixelFont(12))
+                    .font(pixelFont(15))
                 Spacer()
             }
             .foregroundStyle(hasChanges ? .black : Color.pixelMuted)
@@ -229,7 +252,7 @@ struct TruckCustomizeView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(pixelFont(10))
+                .font(pixelFont(13))
                 .foregroundStyle(Color.pixelOrange)
 
             ScrollView(.horizontal, showsIndicators: false) {
@@ -267,16 +290,16 @@ struct TruckCustomizeView: View {
                     case .plus:
                         // Plus 전용
                         Image(systemName: "crown.fill")
-                            .font(.system(size: 12))
+                            .font(.system(size: 14))
                             .foregroundStyle(Color.pixelOrange)
                     case .point:
                         // 포인트로 해제 가능 — 비용 표시
                         VStack(spacing: 2) {
                             Image(systemName: "lock.fill")
-                                .font(.system(size: 10))
+                                .font(.system(size: 11))
                                 .foregroundStyle(Color.pixelMuted)
                             Text("\(pointUnlockCost)P")
-                                .font(pixelFont(8))
+                                .font(pixelFont(11))
                                 .foregroundStyle(Color.pixelOrange)
                         }
                     case .none:

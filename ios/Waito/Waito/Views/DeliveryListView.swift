@@ -28,6 +28,8 @@ struct DeliveryListView: View {
     @State private var showError = false
     @State private var showSubscriptionAlert = false
     @State private var showLiveActivityLimitAlert = false   // 유료 상한(3개) 도달 안내
+    /// 2개째를 켜 대표(DI) 선택 라디오가 나타날 때마다 띄우는 설명
+    @State private var showPrimaryPickerInfo = false
     @State private var showPaywall = false
     @State private var showNotFoundConfirm = false
     @State private var notFoundMessage = ""
@@ -103,6 +105,11 @@ struct DeliveryListView: View {
                 title: "표시 제한",
                 message: "Live Activity는 최대 2개까지 켤 수 있어요.\n다른 택배의 표시를 끄고 다시 시도해주세요.",
                 isPresented: $showLiveActivityLimitAlert
+            ) {}
+            .pixelAlert(
+                title: "다이나믹 아일랜드 설정",
+                message: "켜진 항목 중 하나만 다이나믹 아일랜드에서 표시됩니다.\n스위치 아래 토글로 설정해주세요.",
+                isPresented: $showPrimaryPickerInfo
             ) {}
             .fullScreenCover(isPresented: $showPaywall) {
                 PlusPaywallView()   // 구매는 PlusPaywallView 내부에서 처리(별도 후처리 없음)
@@ -222,11 +229,21 @@ struct DeliveryListView: View {
     private func applyCapturedInfo(_ info: CapturedTrackingInfo, fallbackAlert: Bool) {
         if info.hasAnyInfo {
             if let number = info.trackingNumber { newTrackingNumber = number }
-            if let carrier = info.carrierId { newCarrierId = carrier }
             if let name = info.itemName { newItemName = name }
+            fillCarrier(detected: info.carrierId)
             openAddForm()
         } else if fallbackAlert {
             showCaptureNoInfo = true
+        }
+    }
+
+    /// 캡처·스캔으로 얻은 택배사를 폼에 채운다.
+    /// 감지된 값이 있으면 그것으로, 없으면 "자동 감지"(서버 detectCarrier)로 — 사용자가 이미 고른 값은 덮지 않는다.
+    private func fillCarrier(detected: String?) {
+        if let detected {
+            newCarrierId = detected
+        } else if newCarrierId.isEmpty {
+            newCarrierId = "auto"
         }
     }
 
@@ -273,15 +290,7 @@ struct DeliveryListView: View {
             }
             capturePhotoItem = nil
             isParsingCapture = false
-
-            if info.hasAnyInfo {
-                if let number = info.trackingNumber { newTrackingNumber = number }
-                if let carrier = info.carrierId { newCarrierId = carrier }
-                if let name = info.itemName { newItemName = name }
-                openAddForm()
-            } else {
-                showCaptureNoInfo = true
-            }
+            applyCapturedInfo(info, fallbackAlert: true)
         }
     }
 
@@ -388,6 +397,7 @@ struct DeliveryListView: View {
             openRowId: $openRowId,
             justAddedId: justAddedId,
             liveActivityRank: service.liveActivityRank(trackingNumber: tracking.trackingNumber),
+            showsPrimaryPicker: service.liveTrackingNumbers.count >= 2,
             onPromoteToPrimary: {
                 Task { await service.promoteToLiveActivityPrimary(trackingNumber: tracking.trackingNumber) }
             }
@@ -694,6 +704,7 @@ struct DeliveryListView: View {
     }
 
     /// 운송장 입력 — 입력칸 안쪽 오른쪽 끝에 송장 바코드 스캔 버튼(카메라 지원 기기에서만)
+    /// 바코드 payload 에는 택배사 정보가 없어 감지값 nil — 택배사는 "자동 감지"로 채워진다.
     private var trackingNumberField: some View {
         PixelTextField(
             label: "TRACKING NO.",
@@ -705,6 +716,7 @@ struct DeliveryListView: View {
         .sheet(isPresented: $showBarcodeScanner) {
             BarcodeScannerSheet { payload in
                 newTrackingNumber = payload
+                fillCarrier(detected: nil)
             }
         }
     }
@@ -860,6 +872,10 @@ struct DeliveryListView: View {
                     }
                 } else {
                     await service.addToLiveActivity(trackingNumber: tracking.trackingNumber)
+                    // 2개째가 켜져 대표 선택 라디오가 나타나는 순간마다 설명
+                    if service.liveTrackingNumbers.count == 2 {
+                        showPrimaryPickerInfo = true
+                    }
                 }
             }
         }

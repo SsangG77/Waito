@@ -17,34 +17,12 @@ struct PaywallLockScreenPreview: View {
     }
 
     var body: some View {
-        VStack(spacing: 20) {
-            lockScreenClock
-            lockScreenCard
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.horizontal, 22)
-        .padding(.top, 8)
-        .accessibilityIdentifier("paywall_lockscreen_preview")
-        .onAppear(perform: playOnce)
-    }
-
-    // MARK: - 잠금화면 맥락 (시계 + 날짜)
-
-    /// 배경 스크린샷 대신 시계·날짜만 얹어 "잠금화면"이라는 맥락만 준다.
-    /// 이미지로 깔면 기기 폭·다크모드마다 다시 만들어야 해서 텍스트로 처리한다.
-    private var lockScreenClock: some View {
-        VStack(spacing: 6) {
-            Text("9:41")
-                .font(pixelFont(38))
-                .foregroundStyle(.white)
-            Text(Self.todayText)
-                .font(pixelFont(10))
-                .foregroundStyle(Color.pixelMuted)
-        }
-        // 시계 영역이 세로로 넉넉히 자리를 차지하도록
-        .padding(.top, 16)
-        .padding(.bottom, 12)
-        .accessibilityIdentifier("paywall_lockscreen_clock")
+        lockScreenCard
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 22)
+            .padding(.top, 8)
+            .accessibilityIdentifier("paywall_lockscreen_preview")
+            .onAppear(perform: playOnce)
     }
 
     // MARK: - 실제 잠금화면 Live Activity 카드
@@ -91,12 +69,6 @@ struct PaywallLockScreenPreview: View {
         statusLabel: "간선상차"
     )
 
-    private static let todayText: String = {
-        let f = DateFormatter()
-        f.locale = Locale(identifier: "ko_KR")
-        f.dateFormat = "M월 d일 EEEE"
-        return f.string(from: Date())
-    }()
 }
 
 #Preview("페이월 잠금화면 프리뷰") {
