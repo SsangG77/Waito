@@ -272,8 +272,9 @@ struct PlusMarketingHero: View {
     private var benefits: some View {
         // 순서 = 체감 가치 순. 피드백에서 "동시 2개 추적"이 가장 유용하다고 나와 유틸을 위로,
         // 트럭 스킨은 보조로 내렸다.
-        VStack(spacing: 18) {
+        VStack(spacing: 14) {
             benefitRow(icon: bellIcon, title: "택배 2개를 동시에", desc: "잠금화면·다이나믹 아일랜드에 함께 표시")
+            benefitRow(icon: mapIcon, title: "지도로 보는 배송 경로", desc: "지나온 지점과 지금 위치를 한눈에")
             benefitRow(icon: gridIcon, title: "\(Self.comboCountText)가지 트럭 조합", desc: "짐칸·헤드·바퀴를 섞어 나만의 트럭")
             benefitRow(icon: coinIcon, title: "하루 단 110원", desc: "커피 한 모금보다 저렴하게")
         }
@@ -310,6 +311,26 @@ struct PlusMarketingHero: View {
     }
 
     // MARK: - 혜택 아이콘 (픽셀 스타일)
+
+    /// 지도 아이콘 — 지나온 지점(회색 네모) 둘을 점선으로 잇고 현재 지점을 빨강으로.
+    private var mapIcon: some View {
+        ZStack {
+            Path { p in
+                p.move(to: CGPoint(x: 6, y: 34))
+                p.addLine(to: CGPoint(x: 20, y: 20))
+                p.addLine(to: CGPoint(x: 38, y: 8))
+            }
+            .stroke(Color.pixelMuted, style: StrokeStyle(lineWidth: 2, dash: [3, 3]))
+
+            Rectangle().fill(Color.pixelMuted).frame(width: 8, height: 8)
+                .position(x: 6, y: 34)
+            Rectangle().fill(Color.pixelMuted).frame(width: 8, height: 8)
+                .position(x: 20, y: 20)
+            Rectangle().fill(Color(hex: "#E5484D")).frame(width: 12, height: 12)
+                .position(x: 38, y: 8)
+        }
+        .frame(width: 44, height: 42)
+    }
 
     private var gridIcon: some View {
         let colors: [Color] = [

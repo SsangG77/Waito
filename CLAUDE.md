@@ -36,7 +36,7 @@ npm test         # vitest run
 ```
 - 포트: 기본 `PORT=3000`, **운영 Vultr 는 3001**(`.env` 로 지정).
 - DB: `server/waito.db` (better-sqlite3, `process.cwd()` 기준 — 반드시 `server/` 에서 실행).
-- 시크릿: `server/.env` (gitignore). 필요한 키 목록은 `server/.env.example`. APNs `.p8` 는 `server/certs/` (gitignore, 서버엔 scp).
+- 시크릿: `server/.env` (gitignore). 필요한 키 목록은 `server/.env.example`(`KAKAO_REST_API_KEY` 포함 — 없으면 허브 좌표 변환만 비활성). APNs `.p8` 는 `server/certs/` (gitignore, 서버엔 scp).
 
 ### iOS (`ios/Waito/Waito.xcodeproj`)
 - scheme: `Waito` (앱), `WaitoWidgetExtension` (Live Activity 위젯)
@@ -160,6 +160,8 @@ Live Activity Expanded View
 │   ├── PaywallView.swift               # StoreKit SubscriptionStoreView(상품 미등록 시 Unavailable)
 │   ├── PlusPaywallView.swift           # 커스텀 풀스크린 페이월(트럭 그리드+혜택+CTA), 잠금 항목 탭 시
 │   ├── TruckCustomizeView.swift        # 트럭 꾸미기(잠금 탭 → PlusPaywallView)
+│   ├── DeliveryMapView.swift           # 배송 경로 지도(구독 전용): 지나온 지점 도트 + 현재 위치 커스텀 트럭 + 점선 경로
+│   ├── NativeAdRowView.swift           # AdMob 네이티브 광고 행(픽셀 상자 + "광고" 배지, NativeAdView UIKit 래핑)
 │   └── TruckDrawing/                    # CatalogTruckView(이미지 기반) 등 트럭 렌더링
 │       └── RunningTruckScene.swift      # RunningTruckView: 트럭 바운스+속도선 "달리는" 효과 래퍼(@ViewBuilder), 위젯 타깃 공유 / Color(hex:UInt32)
 ├── Models/
@@ -168,12 +170,15 @@ Live Activity Expanded View
 │   ├── PixelTruckCatalog.swift         # cab33/body39/wheel32 enum, rawValue=에셋 imageset명, PartTier(free/pointUnlockable/plusOnly)
 │   ├── SubscriptionManager.swift       # @Observable, 실구독(entitlement)+디버그언락 결합 → isSubscribed
 │   ├── TruckPathCalculator.swift       # (미사용) DI 외곽선 경로·회전각 계산 — 초기 컨셉 잔존
-│   └── API/APIModels.swift             # Carrier, TrackingListItem, 요청/응답 DTO
+│   ├── DeliveryMapPoint.swift          # 지도 지점(이벤트 id + 좌표 + 위치명 + 원본 메시지)
+│   └── API/APIModels.swift             # Carrier, TrackingListItem, 요청/응답 DTO (TrackingEvent 에 lat/lon Optional)
 ├── Services/
 │   ├── TrackingService.swift           # @Observable 상태관리 + Live Activity + push 토큰 관찰
 │   ├── APIClient.swift                 # actor, 서버 REST 호출
 │   ├── StoreKitService.swift           # StoreKit2 접근(상품 로드/purchase/restore/entitlement) — SwiftUI 비의존
-│   └── CaptureTrackingParser.swift     # 배송알림 스크린샷 OCR(Vision, 온디바이스) → 운송장/택배사/품명 추출
+│   ├── CaptureTrackingParser.swift     # 배송알림 스크린샷 OCR(Vision, 온디바이스) → 운송장/택배사/품명 추출
+│   ├── DeliveryMapService.swift        # @Observable, 이벤트 → 지도 지점(서버 좌표 우선, 없으면 CLGeocoder 폴백 + UserDefaults 캐시, 화면당 12회 상한)
+│   └── NativeAdLoader.swift            # @Observable, AdMob 네이티브 광고 1개 로드/보관(슬롯당 1인스턴스) + SDK start
 └── (WaitoWidgetExtension/)             # Live Activity 위젯 UI
 
 # AddTrackingView 는 제거됨 — 추가는 DeliveryListView 의 인라인 폼에서 처리
@@ -182,18 +187,19 @@ Live Activity Expanded View
 ### 서버 (`server/src/`) — Express + better-sqlite3(SQLite)
 ```
 ├── index.ts                            # 앱 부팅(initDb, 폴링/credential 스케줄러)
-├── config.ts                           # 환경변수(tracker credential, APNS_*)
+├── config.ts                           # 환경변수(tracker credential, APNS_*, KAKAO_REST_API_KEY)
 ├── db/database.ts, migrations/001_initial.sql  # 멱등 컬럼 + 인덱스 마이그레이션(tracking_events UNIQUE(tracking_id,event_time,description) — INSERT OR IGNORE 중복 차단)
 ├── routes/
 │   ├── carriers.ts                     # GET /api/carriers (CARRIERS 상수)
 │   ├── trackings.ts                    # 택배 CRUD(PUT /:id = 품명·메모 수정) + push-token 등록 + force 추가
 │   ├── devices.ts                      # 디바이스 등록 + push-to-start-token + PUT /apns-token(일반알림) + GET /me(포인트) + POST /unlock-part
 │   ├── webhooks.ts                     # tracker.delivery 콜백 → track 재조회
-│   ├── legal.ts                        # GET /privacy · /terms (App Store 3.1.2(c) 필수 페이지)
-│   └── admin.ts                        # credential 관리 HTML + GET /admin/force-push(디버그: 강제 푸시+APNs 결과 진단)
+│   ├── legal.ts                        # GET /privacy · /terms (App Store 3.1.2(c)) + GET /app-ads.txt(AdMob 판매자 인증)
+│   └── admin.ts                        # credential 관리 HTML + GET /admin/force-push(디버그) + GET/POST /admin/hubs(허브 좌표 수동 입력·재검색)
 └── services/
     ├── trackerApi.ts                   # tracker.delivery GraphQL(track/registerWebhook)
-    ├── pollingService.ts               # 폴링 + webhook keep-alive 스케줄러
+    ├── pollingService.ts               # 폴링 + webhook keep-alive 스케줄러 (이벤트 저장 시 lat/lon 포함, 기존 행 좌표 보강)
+    ├── hubGeocoder.ts                  # 국내 허브명 → 좌표(카카오 장소검색) + hub_locations 대응표 + 10분 cron
     ├── pushService.ts                  # Live Activity update/end + push-to-start
     ├── apnsClient.ts                   # APNs HTTP/2 + ES256 JWT (Node 내장 crypto/http2)
     ├── statusMapper.ts, credentialMonitor.ts
@@ -325,6 +331,24 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
   - ⚠️ 해외는 통관에서 며칠 머무는 게 흔한데 지금은 '간선'으로 뭉뚱그려진다. 단계 추가는 앱·위젯 3면을 모두 고쳐야 해서 보류 — 실제 해외 배송 데이터를 본 뒤 판단.
 - **webhook 미사용**: 17TRACK 콜백은 TLSv1.2 이상 필수인데 현재 서버는 도메인 없는 HTTP(`158.247.223.154:3001`) → **폴링으로만 갱신**. 조회가 무과금이라 실질 문제 없음. webhook 갱신 cron 도 `provider === 'tracker'` 인 것만 처리한다.
 - **키 미설정 시**: 해외 택배만 graceful skip(국내는 정상 동작). 키는 서버 `.env` 에만 두고 커밋 금지.
+- **이벤트 좌표**(`parseEventCoords`): 응답의 `address.coordinates` 를 읽어 `location.lat/lon` 으로 넘긴다. 공식 문서 예시에도 위도·경도가 뒤바뀐 값이 있어 범위(|lat|≤90, |lon|≤180) 검사 후 뒤바뀐 경우 교환, 둘 다 이상하면 버림. 비어 있는 이벤트가 흔하므로 앱 쪽 지오코딩 폴백이 항상 필요.
+
+### 배송 경로 지도 (구독 전용) — 좌표 확보 구조
+
+목적: 유료 사용자가 택배의 출발~현재 위치들을 지도로 본다. **실시간 GPS 는 어떤 API 도 안 줌** — 지도의 실체는 "이력 이벤트 지점 핀 + 점선 연결, 마지막 핀 = 현재 추정 위치".
+
+| 출처 | 좌표 | 처리 |
+|---|---|---|
+| 국내(tracker.delivery) | 없음, 위치 이름만(`옥천HUB`, `서울 강남`) | 서버 `hubGeocoder` 가 카카오 장소검색으로 변환 → `hub_locations(name, lat, lon, status, source)` 대응표. 목록/상세 API 가 `LEFT JOIN` 으로 이벤트에 `lat/lon` 채워 내려줌 |
+| 해외(17TRACK) | 이벤트별 좌표 칸 있음, 자주 비어 있음 | 파서가 캡처 → `tracking_events.lat/lon` 저장. `INSERT OR IGNORE` 는 기존 행을 안 건드리므로 좌표 없이 저장된 과거 이벤트는 `UPDATE ... WHERE lat IS NULL` 로 보강 |
+| 둘 다 없을 때 | — | 앱 `DeliveryMapService` 가 `CLGeocoder` 로 위치 이름 변환(결과·실패 모두 UserDefaults 캐시, 화면당 최대 12회). 그래도 없으면 핀 생략 + "위치 확인 안 됨 N곳" |
+
+- **카카오 변환(`hubGeocoder.ts`)**: 10분 cron 이 "대응표에 없는 국내 위치 이름"을 최대 30개씩 처리(과거 이력·신규 이력 같은 경로 → 별도 백필 불필요). 원문 검색 실패 시 `HUB/터미널/물류센터` 접미사 떼고 재시도. 결과가 한반도 범위(위도 33~39, 경도 124~132) 밖이면 폐기. 검색 0건은 `status='failed'` 로 기록해 재호출 차단(통신·한도 오류는 기록 안 하고 다음 주기 재시도). **키(`KAKAO_REST_API_KEY`) 없으면 통째로 skip**(실패로 안 남김 → 나중에 키 넣으면 그대로 처리). 무료 한도: 카카오 전체 월 300만·장소검색 일 10만 — 이름당 1회라 여유.
+  - ⚠️ 처음 보는 허브명은 최대 10분 지연. 대응표가 채워질수록 지연 0.
+- **관리자 `/admin/hubs?secret=`**: 실패 목록을 등장 횟수순으로 위에, 좌표 직접 입력(`source='manual'`) / 재검색(행 삭제 → 다음 주기 재시도). 관리자 홈에 링크.
+- **앱**: 행 펼침 액션 `MAP` 버튼(`row_map_button`) → 구독자는 `DeliveryMapView` 풀스크린, 비구독자는 자물쇠 아이콘 + 탭 시 `PlusPaywallView`. 지도는 MapKit `Map` + `Annotation` + `MapPolyline`(빨강 점선), POI 숨김. 현재 지점 = `CatalogTruckView`(사용자 트럭, 4pt 바운스, reduceMotion 존중), 지나온 지점 = 픽셀 사각 도트. 하단: 물품명·현재 위치명·원본 메시지·미확인 개수.
+- 더미 데이터: 해외 2건(알리·DHL)은 실좌표, 국내는 좌표 없음 → 지오코딩 폴백 경로 확인용.
+- ⚠️ 미확인: Cainiao·DHL·Japan Post 가 실제로 좌표를 채워 보내는지(운영 키로 실데이터 1건 조회 필요). 지도 화면 실기기/시뮬 실물 확인 아직 안 됨(빌드만 통과).
 
 ---
 
@@ -348,8 +372,18 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 | 티어 | 내용 | 가격 |
 |---|---|---|
-| 무료 | 기본 트럭 + Live Activity 1개 + 배송완료 포인트로 트럭 계열 부품 해제(3P/개) | 무료 |
-| Waito Plus | 프리미엄 스킨(탱크·기차·물탱크·건설·컨테이너) 즉시 전부 + Live Activity 2개 + 데코(항상 노출) | ₩3,000/월 |
+| 무료 | 기본 트럭 + Live Activity 1개 + 배송완료 포인트로 트럭 계열 부품 해제(3P/개) + **목록 사이 네이티브 광고** | 무료 |
+| Waito Plus | 프리미엄 스킨(탱크·기차·물탱크·건설·컨테이너) 즉시 전부 + Live Activity 2개 + 데코(항상 노출) + **배송 경로 지도** + **광고 제거** | ₩3,000/월 |
+
+### AdMob 네이티브 광고 (무료 사용자)
+- **SDK**: SPM `swift-package-manager-google-mobile-ads` 13.9+ (`project.pbxproj` 에 직접 추가, `Package.resolved` 커밋). 앱 시작 시 `NativeAdLoader.startSDK()`(AppDelegate). `Info.plist` 에 `GADApplicationIdentifier` + `SKAdNetworkItems`.
+- ⚠️ **현재 ID 전부 구글 테스트 값**(앱 ID `ca-app-pub-3940256099942544~1458002511`, 네이티브 단위 `.../3986624511`). 실계정 ID 로 교체 전까지 수익 0. 개발 중 실광고 호출은 계정 정지 사유.
+- **삽입 규칙**(`DeliveryListView.showsAd`): 택배 1개면 그 아래 1개, 2개 이상이면 3개마다 1개. 진행중·완료 목록 각각 동일 적용. **구독자(`isSubscribed`)는 0개.**
+- **행 UI**(`NativeAdRowView`): 목록 행과 같은 픽셀 상자 + 주황 "광고" 배지 + AdChoices(우상단) + 빨강 CTA. 정책상 택배 항목과 100% 동일하게 만들면 안 됨. 에셋을 `NativeAdView` 에 등록 후 마지막에 `nativeAd` 대입, CTA 는 `isUserInteractionEnabled=false`(SDK 가 클릭 처리). 구글 native ad validator "No implementation issues found" 통과.
+- ⚠️ **LazyVStack 함정**: 광고가 없을 때 뷰를 완전히 비우면(EmptyView) LazyVStack 이 그 칸을 만들지 않아 `.task` 로드 트리거가 실행되지 않음 → 광고가 영원히 안 뜸. 높이 1pt 투명 placeholder 유지로 해결.
+- **슬롯당 로더 1개**(`@State NativeAdLoader`) — 같은 광고 객체를 여러 자리에 붙이면 노출 집계 중복.
+- **app-ads.txt**: `GET /app-ads.txt` → `google.com, pub-3545555975398754, DIRECT, f08c47fec0942fa0`. ⚠️ 애드몹 크롤러는 **앱스토어 "개발자 웹사이트" 도메인 루트**에서 읽음 → IP:포트 서버로는 인증 불가. 도메인 연결 또는 기존 웹사이트 루트에 같은 줄 게시 필요.
+- 미완: 실계정 ID, 유럽 사용자 동의(UMP SDK, 해외 거주자 타깃이라 출시 전 필수), ATT 문구, ASC 개인정보 라벨 갱신, SKAdNetwork 최신 목록.
 
 ### StoreKit 구독 (실제 결제)
 - **상품**: 월간 자동갱신 `com.sangjin.Waito.plus.monthly`(₩3,000) — 가격은 App Store Connect 에서 설정. 로컬 테스트는 `ios/Waito/Waito.storekit`(Xcode 수동 추가 + Scheme 지정).
@@ -357,7 +391,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **`SubscriptionManager`**: `isSubscribed = isStoreSubscribed(entitlement) || isDebugUnlocked`. 앱시작 `start()` 로 상품로드+권한확인+트랜잭션 관찰. `purchaseMonthly()`/`restore()`/`refreshEntitlement()`. 디버그 언락은 `debug_unlocked` 키로 **실구독과 완전 분리**(디버그 끄기가 실구독 안 끔). 결합값을 `waito_is_subscribed` 키에 미러(TrackingService/위젯 재확인용).
 - **페이월 구매 동선**: `PlusPaywallView` "구독 시작하기" → `purchaseMonthly()`(Apple 결제 시트 즉시) + 복원 버튼. `PaywallView`(StoreKit `SubscriptionStoreView`)는 `PlusMarketingHero` 공유 + `containerBackground`로 다크. 두 페이월 모두 `@Environment(SubscriptionManager.self)` → 시트/커버에 **명시 재주입 필수**(자동 전파 보장 안 됨).
 - ⚠️ ASC 상품 미등록/유료앱계약 미체결이면 `monthlyProduct=nil` → 구매 버튼 무동작.
-- **구독 필수 링크(App Store 3.1.2(c))**: 두 페이월 모두 **개인정보처리방침·이용약관(EULA) 링크 + 상품명·기간·가격** 노출. URL 상수 `WaitoLegal`(PaywallView.swift). 페이지는 **서버가 제공**(`server/src/routes/legal.ts` → `GET /privacy`·`/terms`). `PlusPaywallView` footer에 `Link` 2개, `PaywallView`는 `.subscriptionStorePolicyDestination(for: .privacyPolicy/.termsOfService)`. ⚠️ ASC 메타데이터(Privacy Policy URL 필드 + 앱 설명/EULA)에도 같은 URL 필요. ⚠️ "Subscription Unavailable in the current storefront"(2.1(b)) — 이 프로젝트는 유료 앱 계약·세금·은행 **활성 확인됨**(원인 아님). 유력 원인: **첫 구독이 제출하는 앱 버전에 첨부되지 않음**(버전 페이지 "앱 내 구입 및 구독" 섹션에서 선택 후 그 버전과 함께 제출해야 심사 샌드박스에서 로드됨) 또는 리뷰 당시 상품 가격/판매국가 미완료.
+- **구독 필수 링크(App Store 3.1.2(c))**: 두 페이월 모두 **개인정보처리방침·이용약관(EULA) 링크 + 상품명·기간·가격** 노출. URL 상수 `WaitoLegal`(PaywallView.swift). 페이지는 **서버가 제공**(`server/src/routes/legal.ts` → `GET /privacy`·`/terms`). `PlusPaywallView` footer에 `Link` 2개, `PaywallView`는 `.subscriptionStorePolicyDestination(for: .privacyPolicy/.termsOfService)`. ⚠️ ASC 메타데이터(Privacy Policy URL 필드 + 앱 설명/EULA)에도 같은 URL 필요.
 - **페이월 UX 보강**: 구매 결과 `PurchaseOutcome`(success/cancelled/failed/unavailable) — 진짜 실패만 오류 알림(취소는 조용히). 이미 구독 중이면 CTA 대신 "이미 이용 중" 표시. 상품 로딩 전이면 CTA 비활성("상품 불러오는 중…").
 - **오퍼 코드(특가 코드, 예 `monthly_free` 첫해 무료)**: 페이월 하단 "프로모션 코드" → `.offerCodeRedemption`(Apple 공식 입력 시트, 인앱 직접 입력칸은 불가). 성공 시 `refreshEntitlement`. `import StoreKit` 필요. ⚠️ ASC "구독 프로모션"이 진행 중이어야 코드 적용됨. TestFlight/실기기에서만 테스트.
 
@@ -380,6 +414,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **행 슬라이드 → 삭제/수정**: 왼쪽 슬라이드 → "> DEL_"(빨강)·"> EDIT_"(오렌지) **2버튼 세로 분할**(각 절반 높이, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), 바깥 탭/ADD 누르면 닫힘.
   - **펼친 상태에선 슬라이드 비활성**(`.gesture(dragGesture, isEnabled: !isExpanded)`) — 대신 상세 아래에 구분선 + 같은 DEL/EDIT 버튼을 **가로 2분할**로 배치(`row_expanded_actions`, 높이 34). 버튼 뷰는 슬라이드 쪽과 동일 인스턴스 재사용.
   - EDIT 탭 시 펼친 상세는 접힘(편집 폼이 상단에 열리므로).
+  - 펼침 액션은 **MAP / DEL / EDIT 가로 3분할**(MAP 은 슬라이드 쪽엔 없음). MAP 동작은 "배송 경로 지도" 섹션 참조.
 - **LA 대표(DI) 선택**: LA 를 켠 택배가 **2개 이상일 때만** 각 행 스위치 아래에 `PixelRadio`(`DI ON`, 식별자 `row_la_primary_radio`)가 나타난다. 선택 = `promoteToLiveActivityPrimary`(순서 배열 맨 앞으로) → 단일 선택이 구조적으로 보장. 1개로 줄면 라디오 숨김. 2개째를 켤 때마다 `PixelAlert`("다이나믹 아일랜드 설정") 노출. (구) `① DI·잠금 / ② 잠금` 뱃지는 폐기.
   - **삭제**: 탭 시 즉시 삭제 X → 상위(`DeliveryListView`)에서 `PixelConfirm`("삭제하면 되돌릴 수 없어요") 한 번 더 확인 후 `service.deleteTracking`. (확인 팝업은 전체화면 오버레이라 행이 아닌 상위에 부착)
   - **수정(EDIT)**: 탭 시 상단 입력 폼이 **편집 모드**로 열리며 기존 값 prefill. 운송장번호/택배사는 '신원'이라 **읽기전용**(회색), **품명·메모만 수정**. 제출 버튼 라벨이 ADD→**EDIT**. `service.updateTracking`(PUT /api/trackings/:id) 호출. (`editingTrackingId`로 add/edit 분기)

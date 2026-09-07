@@ -4,6 +4,10 @@ import { getCredentialHealth, resetCredentialExpired } from '../services/credent
 import { resetClient } from '../services/trackerApi.js';
 import { forcePush } from '../services/pushService.js';
 import { getDb } from '../db/database.js';
+import {
+  listHubs, countUnmappedHubs, saveManualHub, retryHub, isKakaoConfigured,
+  type HubRow,
+} from '../services/hubGeocoder.js';
 
 const router = Router();
 
@@ -69,6 +73,40 @@ router.post('/credential', requireAuth, (req: Request, res: Response) => {
     success: true,
     credential: getCredentialHealth(),
   });
+});
+
+// GET /admin/hubs — 허브 좌표 관리 페이지
+router.get('/hubs', requireAuth, (req: Request, res: Response) => {
+  res.send(renderHubPage(listHubs(), countUnmappedHubs(), String(req.query.secret ?? '')));
+});
+
+// POST /admin/hubs — 좌표 직접 입력(검색이 못 찾은 허브를 살린다)
+router.post('/hubs', requireAuth, (req: Request, res: Response) => {
+  const { name } = req.body;
+  const lat = Number(req.body.lat);
+  const lon = Number(req.body.lon);
+
+  if (!name || !Number.isFinite(lat) || !Number.isFinite(lon)) {
+    res.status(400).json({ error: 'name, lat, lon 이 모두 필요합니다.' });
+    return;
+  }
+  if (Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+    res.status(400).json({ error: '좌표 범위를 벗어났습니다. (위도 ±90, 경도 ±180)' });
+    return;
+  }
+
+  saveManualHub(String(name), lat, lon);
+  res.json({ success: true });
+});
+
+// POST /admin/hubs/retry — 실패 표시를 지워 다음 주기에 다시 검색되게 한다
+router.post('/hubs/retry', requireAuth, (req: Request, res: Response) => {
+  if (!req.body?.name) {
+    res.status(400).json({ error: 'name 이 필요합니다.' });
+    return;
+  }
+  retryHub(String(req.body.name));
+  res.json({ success: true });
 });
 
 function renderAdminPage(health: ReturnType<typeof getCredentialHealth>): string {
@@ -371,10 +409,15 @@ function renderAdminPage(health: ReturnType<typeof getCredentialHealth>): string
 
       <div class="result" id="result"></div>
     </div>
+
+    <p style="text-align:center;margin-top:16px">
+      <a id="hubsLink" href="/admin/hubs" style="color:#4A7DFF;font-size:13px;text-decoration:none">허브 좌표 관리 →</a>
+    </p>
   </div>
 
   <script>
     const secret = new URLSearchParams(window.location.search).get('secret') || '';
+    document.getElementById('hubsLink').href = '/admin/hubs?secret=' + encodeURIComponent(secret);
 
     document.getElementById('renewForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -452,6 +495,138 @@ function renderAdminPage(health: ReturnType<typeof getCredentialHealth>): string
   </script>
 </body>
 </html>`;
+}
+
+/**
+ * 허브 좌표 관리 페이지.
+ * 지도에 찍으려면 위치 이름마다 좌표가 필요한데, 검색으로 못 찾는 이름이 남는다.
+ * 실패한 것을 위로 올려 여기서 직접 채운다.
+ */
+function renderHubPage(hubs: HubRow[], pending: number, secret: string): string {
+  const failed = hubs.filter(h => h.status !== 'ok');
+  const ok = hubs.filter(h => h.status === 'ok');
+
+  const row = (h: HubRow) => `
+    <tr data-name="${escapeHtml(h.name)}">
+      <td class="name">${escapeHtml(h.name)}<span class="uses">${h.uses}회</span></td>
+      <td><input class="lat" type="text" inputmode="decimal" value="${h.lat ?? ''}" placeholder="위도"></td>
+      <td><input class="lon" type="text" inputmode="decimal" value="${h.lon ?? ''}" placeholder="경도"></td>
+      <td class="src">${h.source === 'manual' ? '직접' : '검색'}</td>
+      <td class="actions">
+        <button class="save">저장</button>
+        <button class="retry" title="검색을 다시 시도">재검색</button>
+      </td>
+    </tr>`;
+
+  return `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Waito 허브 좌표</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+           background: #0A0A0A; color: #E0E0E0; padding: 24px; }
+    .container { max-width: 760px; margin: 0 auto; }
+    h1 { font-size: 22px; color: #FFF; }
+    .sub { font-size: 13px; color: #888; margin: 6px 0 20px; }
+    .card { background: #1A1A1A; border: 1px solid #2A2A2A; border-radius: 16px;
+            padding: 20px; margin-bottom: 16px; }
+    .card h2 { font-size: 15px; margin-bottom: 4px; color: #FFF; }
+    .card .hint { font-size: 12px; color: #888; margin-bottom: 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    td { padding: 7px 6px; border-bottom: 1px solid #222; vertical-align: middle; font-size: 13px; }
+    td.name { min-width: 150px; }
+    .uses { color: #666; font-size: 11px; margin-left: 6px; }
+    .src { color: #777; font-size: 12px; width: 44px; }
+    input { width: 104px; background: #101010; border: 1px solid #2E2E2E; border-radius: 8px;
+            color: #E0E0E0; padding: 7px 8px; font-size: 13px; }
+    input:focus { outline: none; border-color: #4A7DFF; }
+    .actions { text-align: right; white-space: nowrap; }
+    button { background: #4A7DFF; border: 0; border-radius: 8px; color: #FFF;
+             padding: 7px 12px; font-size: 12px; cursor: pointer; }
+    button.retry { background: #2A2A2A; margin-left: 6px; }
+    button:disabled { opacity: .5; cursor: default; }
+    .empty { color: #666; font-size: 13px; }
+    .warn { background: #2A1A00; border: 1px solid #553300; border-radius: 8px;
+            padding: 12px; font-size: 13px; color: #FFAA00; margin-bottom: 16px; }
+    .back { display: inline-block; margin-top: 8px; color: #4A7DFF; font-size: 13px; text-decoration: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>허브 좌표</h1>
+    <p class="sub">위치 이름을 지도 좌표로 이어 둔 표. 대기 ${pending}곳 · 실패 ${failed.length}곳 · 완료 ${ok.length}곳</p>
+
+    ${isKakaoConfigured() ? '' : '<div class="warn">카카오 검색 키가 없어 자동 변환이 멈춰 있음. 서버 환경변수에 키를 넣으면 10분 주기로 채워짐.</div>'}
+
+    <div class="card">
+      <h2>좌표를 못 찾은 곳</h2>
+      <p class="hint">지도에서 빠지는 지점. 좌표를 직접 넣으면 살아남. 지도에서 위치를 우클릭하면 좌표를 얻을 수 있음.</p>
+      ${failed.length ? `<table>${failed.map(row).join('')}</table>` : '<p class="empty">없음</p>'}
+    </div>
+
+    <div class="card">
+      <h2>좌표가 있는 곳</h2>
+      <p class="hint">값이 이상하면 여기서 고칠 수 있음.</p>
+      ${ok.length ? `<table>${ok.map(row).join('')}</table>` : '<p class="empty">아직 없음</p>'}
+    </div>
+
+    <a class="back" href="/admin?secret=${encodeURIComponent(secret)}">← 관리자 홈</a>
+  </div>
+
+  <script>
+    const secret = ${JSON.stringify(secret)};
+
+    async function post(path, body, button, doneLabel) {
+      const original = button.textContent;
+      button.disabled = true;
+      button.textContent = '...';
+      try {
+        const res = await fetch(path + '?secret=' + encodeURIComponent(secret), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || '실패');
+        button.textContent = doneLabel;
+        setTimeout(() => location.reload(), 500);
+      } catch (e) {
+        alert(e.message);
+        button.disabled = false;
+        button.textContent = original;
+      }
+    }
+
+    document.addEventListener('click', (event) => {
+      const button = event.target;
+      const tr = button.closest('tr');
+      if (!tr) return;
+      const name = tr.dataset.name;
+
+      if (button.classList.contains('save')) {
+        post('/admin/hubs', {
+          name,
+          lat: tr.querySelector('.lat').value.trim(),
+          lon: tr.querySelector('.lon').value.trim(),
+        }, button, '저장됨');
+      } else if (button.classList.contains('retry')) {
+        post('/admin/hubs/retry', { name }, button, '대기');
+      }
+    });
+  </script>
+</body>
+</html>`;
+}
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
 }
 
 export default router;

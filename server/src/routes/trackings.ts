@@ -85,7 +85,10 @@ router.post('/', async (req: Request, res: Response) => {
   // 등록 시점에 조회된 이벤트를 그대로 저장(폴링과 동일) — 저장하지 않으면 목록이 events:[] 로 와서
   // 앱 펼침 타임라인이 폴백(고정 5단계)으로 보이다가, 첫 폴링에 이벤트가 저장되는 순간 원본 메시지로
   // 확 바뀌는 flip 이 생긴다. (mapped_status 는 폴링과 같이 누적 계산)
-  const initialEvents: Array<{ code: string; mapped: DeliveryStatus; description: string; time: string; location: string | null }> = [];
+  const initialEvents: Array<{
+    code: string; mapped: DeliveryStatus; description: string; time: string;
+    location: string | null; lat: number | null; lon: number | null;
+  }> = [];
   try {
     // 해외(17TRACK)는 등록이 있어야 조회가 된다. 여기서 quota 1건이 차감되고,
     // 이후 폴링·재조회는 무과금이라 등록 지점을 이 한 곳으로 모은다.
@@ -104,6 +107,8 @@ router.post('/', async (req: Request, res: Response) => {
           description: edge.node.description,
           time: edge.node.time,
           location: edge.node.location?.name || null,
+          lat: edge.node.location?.lat ?? null,
+          lon: edge.node.location?.lon ?? null,
         });
       }
     }
@@ -140,11 +145,11 @@ router.post('/', async (req: Request, res: Response) => {
   // 전까지 폴백(고정 5단계 라벨)으로 보이다가, 폴링 순간 과거분까지 원본 메시지로 flip 된다.
   if (initialEvents.length > 0) {
     const insertEvent = db.prepare(`
-      INSERT OR IGNORE INTO tracking_events (tracking_id, tracker_status, mapped_status, description, event_time, location)
-      VALUES (?, ?, ?, ?, ?, ?)
+      INSERT OR IGNORE INTO tracking_events (tracking_id, tracker_status, mapped_status, description, event_time, location, lat, lon)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `);
     for (const ev of initialEvents) {
-      insertEvent.run(trackingId, ev.code, ev.mapped, ev.description, ev.time, ev.location);
+      insertEvent.run(trackingId, ev.code, ev.mapped, ev.description, ev.time, ev.location, ev.lat, ev.lon);
     }
   }
 
@@ -204,8 +209,14 @@ router.get('/', (req: Request, res: Response) => {
   if (trackings.length > 0) {
     const ids = trackings.map((t) => t.id);
     const placeholders = ids.map(() => '?').join(',');
+    // 좌표는 두 출처를 합친다 — 이벤트에 직접 저장된 값(해외 17TRACK)이 우선,
+    // 없으면 허브 대응표(국내 허브명을 카카오로 변환해 둔 것)에서 채운다.
     const allEvents = db.prepare(
-      `SELECT * FROM tracking_events WHERE tracking_id IN (${placeholders}) ORDER BY event_time ASC`
+      `SELECT e.*, COALESCE(e.lat, h.lat) AS lat, COALESCE(e.lon, h.lon) AS lon
+         FROM tracking_events e
+         LEFT JOIN hub_locations h ON h.name = e.location AND h.status = 'ok'
+        WHERE e.tracking_id IN (${placeholders})
+        ORDER BY e.event_time ASC`
     ).all(...ids) as Array<{ tracking_id: number }>;
     eventsByTracking = allEvents.reduce((acc, ev) => {
       (acc[ev.tracking_id] ??= []).push(ev);
@@ -232,7 +243,10 @@ router.get('/:id', (req: Request, res: Response) => {
   }
 
   const events = db.prepare(
-    'SELECT * FROM tracking_events WHERE tracking_id = ? ORDER BY event_time ASC'
+    `SELECT e.*, COALESCE(e.lat, h.lat) AS lat, COALESCE(e.lon, h.lon) AS lon
+       FROM tracking_events e
+       LEFT JOIN hub_locations h ON h.name = e.location AND h.status = 'ok'
+      WHERE e.tracking_id = ? ORDER BY e.event_time ASC`
   ).all(req.params.id);
 
   res.json({ ...tracking, events });

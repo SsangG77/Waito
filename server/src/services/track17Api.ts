@@ -147,6 +147,32 @@ interface Track17Event {
   location?: string;
   stage?: string;
   sub_status?: string;
+  /** 구조화 주소. 좌표는 비어 있는 이벤트가 흔하고, 값이 뒤바뀌어 오는 사례도 있다. */
+  address?: {
+    coordinates?: { latitude?: string | null; longitude?: string | null } | null;
+  } | null;
+}
+
+/**
+ * 17TRACK 이벤트 좌표를 안전하게 읽는다.
+ *
+ * 공식 문서 예시에도 위도·경도가 뒤바뀐 응답이 있다(위도 104 는 존재할 수 없음).
+ * 범위를 벗어나면 한 번 바꿔서 다시 검사하고, 그래도 이상하면 버린다.
+ */
+export function parseEventCoords(
+  event: { address?: { coordinates?: { latitude?: string | null; longitude?: string | null } | null } | null },
+): { lat: number; lon: number } | null {
+  const raw = event.address?.coordinates;
+  if (!raw?.latitude || !raw?.longitude) return null;
+
+  const lat = Number(raw.latitude);
+  const lon = Number(raw.longitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+
+  const valid = (a: number, o: number) => Math.abs(a) <= 90 && Math.abs(o) <= 180;
+  if (valid(lat, lon)) return { lat, lon };
+  if (valid(lon, lat)) return { lat: lon, lon: lat };   // 뒤바뀐 응답 복구
+  return null;
 }
 
 interface Track17Accepted {
@@ -200,12 +226,15 @@ function toTrackerShape(accepted: Track17Accepted): TrackerDeliveryResponse {
   const events: TrackerDeliveryEvent[] = rawEvents
     .map(e => {
       const time = e.time_iso || e.time_utc || '';
+      const coords = parseEventCoords(e);
       return {
         time,
         // 개별 이벤트의 stage 가 있으면 그걸 쓰고, 없으면 최종 상태로 대체.
         status: { code: e.stage || latestStatus },
         description: e.description || '',
-        location: e.location ? { name: e.location } : null,
+        location: e.location || coords
+          ? { name: e.location, lat: coords?.lat, lon: coords?.lon }
+          : null,
       };
     })
     .filter(e => e.time)

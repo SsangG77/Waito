@@ -35,6 +35,8 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
+        // 광고 SDK 초기화 — 광고를 부르기 전에 한 번만.
+        NativeAdLoader.startSDK()
         // 알림 권한 요청 → 허용 시 원격알림 등록 (토큰은 didRegister 콜백으로 옴)
         Task { @MainActor in
             let granted = (try? await UNUserNotificationCenter.current()

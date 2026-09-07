@@ -35,6 +35,8 @@ struct DeliveryListView: View {
     @State private var notFoundMessage = ""
     /// 두 번째 택배 추가 시 띄우는 업셀 페이월
     @State private var showFirstAddPaywall = false
+    /// 지도를 열 택배 (구독자 전용). nil 이면 닫힘.
+    @State private var mapTracking: TrackingListItem?
     /// 업셀 페이월을 이미 보여줬는지 (평생 1회)
     @AppStorage("has_shown_first_add_paywall") private var hasShownFirstAddPaywall = false
     /// 지금까지 성공한 택배 추가 횟수(누적) — 두 번째 추가 시 페이월 트리거용(삭제/재등록에 무관)
@@ -118,6 +120,9 @@ struct DeliveryListView: View {
             .fullScreenCover(isPresented: $showFirstAddPaywall) {
                 PlusPaywallView()
                     .environment(subscription)
+            }
+            .fullScreenCover(item: $mapTracking) { tracking in
+                DeliveryMapView(tracking: tracking) { mapTracking = nil }
             }
             .pixelConfirm(
                 title: "운송장 확인",
@@ -310,6 +315,14 @@ struct DeliveryListView: View {
         displayedTrackings.filter { $0.currentStatus.isCompleted }
     }
 
+    /// 광고 자리 규칙 — 택배가 하나뿐이면 그 아래 1개, 둘 이상이면 3개마다 1개.
+    /// 진행 중·완료 목록에 똑같이 적용한다. 구독자에게는 광고를 넣지 않는다.
+    private func showsAd(after index: Int, of count: Int) -> Bool {
+        guard !subscription.isSubscribed else { return false }
+        if count == 1 { return index == 0 }
+        return (index + 1) % 3 == 0
+    }
+
     private func sortTrackings(_ items: [TrackingListItem]) -> [TrackingListItem] {
         switch sortOrder {
         case .arrival:
@@ -358,8 +371,11 @@ struct DeliveryListView: View {
                             emptyState
                                 .frame(minHeight: 360)
                         } else {
-                            ForEach(activeTrackings) { tracking in
+                            ForEach(Array(activeTrackings.enumerated()), id: \.element.id) { index, tracking in
                                 rowView(tracking)
+                                if showsAd(after: index, of: activeTrackings.count) {
+                                    NativeAdRowView()
+                                }
                             }
                         }
 
@@ -367,9 +383,12 @@ struct DeliveryListView: View {
                         if !completedTrackings.isEmpty {
                             completedHeader
                             if !completedCollapsed {
-                                ForEach(completedTrackings) { tracking in
+                                ForEach(Array(completedTrackings.enumerated()), id: \.element.id) { index, tracking in
                                     rowView(tracking)
                                         .transition(.move(edge: .top).combined(with: .opacity))
+                                    if showsAd(after: index, of: completedTrackings.count) {
+                                        NativeAdRowView()
+                                    }
                                 }
                             }
                         }
@@ -394,6 +413,8 @@ struct DeliveryListView: View {
             onToggleLiveActivity: { toggleLiveActivity(for: tracking) },
             onDelete: { requestDelete(tracking) },
             onEdit: { startEditing(tracking) },
+            onMap: { openMap(for: tracking) },
+            isMapUnlocked: subscription.isSubscribed,
             openRowId: $openRowId,
             justAddedId: justAddedId,
             liveActivityRank: service.liveActivityRank(trackingNumber: tracking.trackingNumber),
@@ -804,6 +825,15 @@ struct DeliveryListView: View {
         Task {
             try? await Task.sleep(nanoseconds: 1_200_000_000)
             if justAddedId == id { justAddedId = nil }
+        }
+    }
+
+    /// 행의 MAP 탭 → 구독자는 지도, 비구독자는 페이월
+    private func openMap(for tracking: TrackingListItem) {
+        if subscription.isSubscribed {
+            mapTracking = tracking
+        } else {
+            showPaywall = true
         }
     }
 

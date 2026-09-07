@@ -41,6 +41,21 @@ ${body}
 </html>`;
 }
 
+/**
+ * 광고 판매자 인증 파일(app-ads.txt).
+ * 애드몹이 앱스토어에 적힌 개발자 웹사이트 도메인의 루트에서 이 파일을 읽어
+ * "이 앱의 광고를 팔 권한이 있는 곳"을 확인한다.
+ *
+ * ⚠️ 크롤러는 도메인 기준이라 IP 주소 주소로는 인증되지 않는다.
+ *    앱스토어의 개발자 웹사이트를 이 서버의 도메인으로 맞춰야 효력이 생긴다.
+ */
+const APP_ADS_TXT = 'google.com, pub-3545555975398754, DIRECT, f08c47fec0942fa0\n';
+
+// GET /app-ads.txt — 광고 판매자 인증 (루트 경로여야 함)
+router.get('/app-ads.txt', (_req: Request, res: Response) => {
+  res.type('text/plain; charset=utf-8').send(APP_ADS_TXT);
+});
+
 // GET /privacy — 개인정보처리방침
 router.get('/privacy', (_req: Request, res: Response) => {
   const body = `

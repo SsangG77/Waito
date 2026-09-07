@@ -74,6 +74,9 @@ function runColumnMigrations(database: Database.Database): void {
   addColumnIfMissing(database, 'devices', 'la_started_at', 'TEXT');
   // 해외 배송 세부 구간('customs' = 통관). 국내는 NULL. 한 번 설정되면 서버가 지우지 않는다.
   addColumnIfMissing(database, 'trackings', 'sub_stage', 'TEXT');
+  // 이벤트 좌표 — 17TRACK(해외)이 준 값만 저장. 국내는 NULL 이고 허브 대응표에서 채워 내려준다.
+  addColumnIfMissing(database, 'tracking_events', 'lat', 'REAL');
+  addColumnIfMissing(database, 'tracking_events', 'lon', 'REAL');
 }
 
 function addColumnIfMissing(

@@ -4,6 +4,7 @@ import { initDb, closeDb, getDb } from './db/database.js';
 import { startPollingScheduler } from './services/pollingService.js';
 import { TEST_TRACKING_NUMBER } from './services/trackerApi.js';
 import { startCredentialMonitor, getCredentialHealth } from './services/credentialMonitor.js';
+import { startHubGeocodeScheduler } from './services/hubGeocoder.js';
 import devicesRouter from './routes/devices.js';
 import trackingsRouter from './routes/trackings.js';
 import carriersRouter from './routes/carriers.js';
@@ -48,6 +49,7 @@ getDb()
 
 startCredentialMonitor();
 startPollingScheduler();
+startHubGeocodeScheduler();
 
 const server = app.listen(config.port, () => {
   console.log(`Waito server running on port ${config.port}`);
