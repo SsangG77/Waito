@@ -377,13 +377,14 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 ### AdMob 네이티브 광고 (무료 사용자)
 - **SDK**: SPM `swift-package-manager-google-mobile-ads` 13.9+ (`project.pbxproj` 에 직접 추가, `Package.resolved` 커밋). 앱 시작 시 `NativeAdLoader.startSDK()`(AppDelegate). `Info.plist` 에 `GADApplicationIdentifier` + `SKAdNetworkItems`.
-- ⚠️ **현재 ID 전부 구글 테스트 값**(앱 ID `ca-app-pub-3940256099942544~1458002511`, 네이티브 단위 `.../3986624511`). 실계정 ID 로 교체 전까지 수익 0. 개발 중 실광고 호출은 계정 정지 사유.
+- **ID**: 앱 ID(Info.plist) = 실계정 `ca-app-pub-3545555975398754~3446922381`. 광고 단위는 `NativeAdLoader.unitID` 가 **DEBUG=구글 테스트 단위 / RELEASE=실계정 `…/8244575612`** 로 분기 — 개발 중 실광고 호출은 무효 트래픽으로 계정 정지 사유라 시뮬·디버그에선 절대 실단위 안 씀. 실기기 릴리즈 확인 시엔 애드몹 콘솔에 테스트 기기 등록 필수.
+- **app-ads.txt 인증**: `https://ssangg77.github.io/app-ads.txt` 에 같은 줄이 이미 있음(같은 게시자 계정) → 앱스토어 "개발자 웹사이트"가 이 주소면 별도 작업 없음.
 - **삽입 규칙**(`DeliveryListView.showsAd`): 택배 1개면 그 아래 1개, 2개 이상이면 3개마다 1개. 진행중·완료 목록 각각 동일 적용. **구독자(`isSubscribed`)는 0개.**
 - **행 UI**(`NativeAdRowView`): 목록 행과 같은 픽셀 상자 + 주황 "광고" 배지 + AdChoices(우상단) + 빨강 CTA. 정책상 택배 항목과 100% 동일하게 만들면 안 됨. 에셋을 `NativeAdView` 에 등록 후 마지막에 `nativeAd` 대입, CTA 는 `isUserInteractionEnabled=false`(SDK 가 클릭 처리). 구글 native ad validator "No implementation issues found" 통과.
 - ⚠️ **LazyVStack 함정**: 광고가 없을 때 뷰를 완전히 비우면(EmptyView) LazyVStack 이 그 칸을 만들지 않아 `.task` 로드 트리거가 실행되지 않음 → 광고가 영원히 안 뜸. 높이 1pt 투명 placeholder 유지로 해결.
 - **슬롯당 로더 1개**(`@State NativeAdLoader`) — 같은 광고 객체를 여러 자리에 붙이면 노출 집계 중복.
 - **app-ads.txt**: `GET /app-ads.txt` → `google.com, pub-3545555975398754, DIRECT, f08c47fec0942fa0`. ⚠️ 애드몹 크롤러는 **앱스토어 "개발자 웹사이트" 도메인 루트**에서 읽음 → IP:포트 서버로는 인증 불가. 도메인 연결 또는 기존 웹사이트 루트에 같은 줄 게시 필요.
-- 미완: 실계정 ID, 유럽 사용자 동의(UMP SDK, 해외 거주자 타깃이라 출시 전 필수), ATT 문구, ASC 개인정보 라벨 갱신, SKAdNetwork 최신 목록.
+- 미완: 유럽 사용자 동의(UMP SDK, 해외 거주자 타깃이라 출시 전 필수), ATT 문구, ASC 개인정보 라벨 갱신, SKAdNetwork 최신 목록.
 
 ### StoreKit 구독 (실제 결제)
 - **상품**: 월간 자동갱신 `com.sangjin.Waito.plus.monthly`(₩3,000) — 가격은 App Store Connect 에서 설정. 로컬 테스트는 `ios/Waito/Waito.storekit`(Xcode 수동 추가 + Scheme 지정).

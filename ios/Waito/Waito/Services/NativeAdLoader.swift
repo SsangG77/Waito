@@ -8,9 +8,13 @@ import GoogleMobileAds
 @MainActor
 @Observable
 final class NativeAdLoader: NSObject {
-    /// 구글이 공개한 테스트 광고 단위. 실제 계정 발급 ID 로 바꾸기 전까지 이 값만 쓴다.
-    /// (개발 중 실제 광고를 부르면 계정이 정지될 수 있다 — 구글 정책)
-    static let testUnitID = "ca-app-pub-3940256099942544/3986624511"
+    /// 광고 단위 ID. DEBUG 는 구글 공개 테스트 단위, RELEASE 는 실계정 단위.
+    /// (개발 중 실제 광고를 부르면 무효 트래픽으로 계정이 정지될 수 있다 — 구글 정책)
+    #if DEBUG
+    static let unitID = "ca-app-pub-3940256099942544/3986624511"
+    #else
+    static let unitID = "ca-app-pub-3545555975398754/8244575612"   // Waito 목록 네이티브
+    #endif
 
     private(set) var ad: NativeAd?
 
@@ -28,7 +32,7 @@ final class NativeAdLoader: NSObject {
         options.preferredAdChoicesPosition = .topRightCorner
 
         let loader = AdLoader(
-            adUnitID: Self.testUnitID,
+            adUnitID: Self.unitID,
             rootViewController: Self.rootViewController,
             adTypes: [.native],
             options: [options],
