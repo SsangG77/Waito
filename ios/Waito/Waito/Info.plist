@@ -22,9 +22,9 @@
 	<!-- 송장 바코드 스캔(택배 추가 폼) — 카메라는 스캔 순간에만 사용 -->
 	<key>NSCameraUsageDescription</key>
 	<string>송장 바코드를 스캔해 운송장 번호를 자동 입력할 때 카메라를 사용합니다.</string>
-	<!-- 애드몹 앱 ID. 현재는 구글이 공개한 테스트 값 — 실제 계정 발급 ID 로 교체해야 광고 수익이 잡힌다. -->
+	<!-- 애드몹 앱 ID (실계정). 광고 단위 ID 는 NativeAdLoader 에서 DEBUG=테스트값 / RELEASE=실값으로 분기. -->
 	<key>GADApplicationIdentifier</key>
-	<string>ca-app-pub-3940256099942544~1458002511</string>
+	<string>ca-app-pub-3545555975398754~3446922381</string>
 	<!-- 광고 성과 측정(SKAdNetwork). 구글 + 주요 구매 네트워크. 출시 전 구글 최신 목록으로 갱신 -->
 	<key>SKAdNetworkItems</key>
 	<array>
