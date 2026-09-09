@@ -45,6 +45,14 @@ struct SettingsView: View {
 
                     alwaysShowRow
 
+                    // 유럽 사용자에게만 표시 — 광고 동의를 나중에 바꾸는 입구(구글 필수 요건)
+                    if AdConsentService.shared.isPrivacyOptionsRequired {
+                        settingsRow(icon: "hand.raised.fill", title: "광고 개인정보 설정", subtitle: "맞춤 광고 동의 변경")
+                            .contentShape(Rectangle())
+                            .onTapGesture { Task { await AdConsentService.shared.presentPrivacyOptions() } }
+                            .accessibilityIdentifier("settings_ad_privacy_row")
+                    }
+
                     settingsRow(icon: "info.circle", title: "버전", subtitle: "1.0.0", showChevron: false)
                         .contentShape(Rectangle())
                         .onTapGesture { handleVersionTap() }

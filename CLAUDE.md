@@ -384,7 +384,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - ⚠️ **LazyVStack 함정**: 광고가 없을 때 뷰를 완전히 비우면(EmptyView) LazyVStack 이 그 칸을 만들지 않아 `.task` 로드 트리거가 실행되지 않음 → 광고가 영원히 안 뜸. 높이 1pt 투명 placeholder 유지로 해결.
 - **슬롯당 로더 1개**(`@State NativeAdLoader`) — 같은 광고 객체를 여러 자리에 붙이면 노출 집계 중복.
 - **app-ads.txt**: `GET /app-ads.txt` → `google.com, pub-3545555975398754, DIRECT, f08c47fec0942fa0`. ⚠️ 애드몹 크롤러는 **앱스토어 "개발자 웹사이트" 도메인 루트**에서 읽음 → IP:포트 서버로는 인증 불가. 도메인 연결 또는 기존 웹사이트 루트에 같은 줄 게시 필요.
-- 미완: 유럽 사용자 동의(UMP SDK, 해외 거주자 타깃이라 출시 전 필수), ATT 문구, ASC 개인정보 라벨 갱신, SKAdNetwork 최신 목록.
+- **동의 절차(`AdConsentService`, UMP SDK `GoogleUserMessagingPlatform` 3.1+)**: 앱 시작 `.task` 에서 **동의 상태 조회(매 실행) → 필요 시 동의 창(유럽 사용자만) → ATT 추적 권한 → `MobileAds.start`** 순서. `canRequestAds` 가 true 되기 전엔 `NativeAdLoader.load` 가 아무것도 안 부르고, `NativeAdRowView` 는 `.task(id: canRequestAds)` 로 허용 시점에 재시도. SDK start 는 AppDelegate 에서 제거됨. DEBUG 는 `DebugSettings.geography = .EEA` 로 시뮬에서도 동의 창이 뜸(1회 동의 후 안 뜸). 설정 화면 "광고 개인정보 설정" 행은 `privacyOptionsRequirementStatus == .required` 일 때만(유럽) 노출. 애드몹 콘솔 EU 메시지 게시 완료(2026-09-09). `Info.plist` `NSUserTrackingUsageDescription` 추가. ASC 개인정보 항목: 기기 ID(추적 예)·대략 위치·제품 상호작용·광고 데이터·충돌·성능·기타(운송장) 등록 완료. 페이월 혜택에 "광고 없이 깔끔하게" 행(`noAdIcon`).
+- 미완: SKAdNetwork 최신 목록. 운영 서버 카카오 키는 투입 완료(2026-09-09).
 
 ### StoreKit 구독 (실제 결제)
 - **상품**: 월간 자동갱신 `com.sangjin.Waito.plus.monthly`(₩3,000) — 가격은 App Store Connect 에서 설정. 로컬 테스트는 `ios/Waito/Waito.storekit`(Xcode 수동 추가 + Scheme 지정).

@@ -22,6 +22,7 @@ struct WaitoApp: App {
                 .environment(subscriptionManager)
                 .preferredColorScheme(.dark)
                 .task { await subscriptionManager.start() }   // 상품 로드 + 구독 권한 확인 + 트랜잭션 관찰
+                .task { await AdConsentService.shared.start() } // 광고 동의(유럽) → 추적 권한 → 광고 SDK 시작
         }
     }
 }
@@ -35,8 +36,7 @@ final class AppDelegate: NSObject, UIApplicationDelegate, UNUserNotificationCent
         didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
     ) -> Bool {
         UNUserNotificationCenter.current().delegate = self
-        // 광고 SDK 초기화 — 광고를 부르기 전에 한 번만.
-        NativeAdLoader.startSDK()
+        // 광고 SDK 는 여기서 켜지 않는다 — 동의 절차 뒤에 AdConsentService 가 켠다.
         // 알림 권한 요청 → 허용 시 원격알림 등록 (토큰은 didRegister 콜백으로 옴)
         Task { @MainActor in
             let granted = (try? await UNUserNotificationCenter.current()
