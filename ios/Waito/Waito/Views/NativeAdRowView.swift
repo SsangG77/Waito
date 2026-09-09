@@ -20,7 +20,8 @@ struct NativeAdRowView: View {
                 Color.clear.frame(height: 1)
             }
         }
-        .task { loader.load() }
+        // 동의 절차가 끝나 광고 요청이 허용되는 순간 다시 시도한다.
+        .task(id: AdConsentService.shared.canRequestAds) { loader.load() }
     }
 }
 

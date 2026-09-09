@@ -22,6 +22,9 @@
 	<!-- 송장 바코드 스캔(택배 추가 폼) — 카메라는 스캔 순간에만 사용 -->
 	<key>NSCameraUsageDescription</key>
 	<string>송장 바코드를 스캔해 운송장 번호를 자동 입력할 때 카메라를 사용합니다.</string>
+	<!-- 추적 권한(ATT) 문구 — 앱스토어 개인정보 항목에 "추적" 을 선언했으므로 필수 -->
+	<key>NSUserTrackingUsageDescription</key>
+	<string>허용하면 관심사에 맞는 광고가 표시됩니다. 거부해도 앱 기능은 동일하며, 관련성이 낮은 광고가 나올 수 있습니다.</string>
 	<!-- 애드몹 앱 ID (실계정). 광고 단위 ID 는 NativeAdLoader 에서 DEBUG=테스트값 / RELEASE=실값으로 분기. -->
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3545555975398754~3446922381</string>

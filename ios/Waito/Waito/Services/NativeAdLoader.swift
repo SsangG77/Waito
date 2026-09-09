@@ -20,35 +20,22 @@ final class NativeAdLoader: NSObject {
 
     private var loader: AdLoader?
 
-    /// 앱 시작 시 1회. 광고를 부르기 전에 반드시 먼저 호출돼야 한다.
-    static func startSDK() {
-        MobileAds.shared.start()
-    }
-
+    /// 동의 절차(AdConsentService)가 끝나 광고 요청이 허용된 뒤에만 실제로 부른다.
     func load() {
-        guard ad == nil, loader == nil else { return }
+        guard ad == nil, loader == nil, AdConsentService.shared.canRequestAds else { return }
 
         let options = NativeAdViewAdOptions()
         options.preferredAdChoicesPosition = .topRightCorner
 
         let loader = AdLoader(
             adUnitID: Self.unitID,
-            rootViewController: Self.rootViewController,
+            rootViewController: AdConsentService.rootViewController,
             adTypes: [.native],
             options: [options],
         )
         loader.delegate = self
         self.loader = loader
         loader.load(Request())
-    }
-
-    /// 광고 SDK 가 화면 전환(클릭 후 이동)에 쓰는 기준 화면.
-    private static var rootViewController: UIViewController? {
-        UIApplication.shared.connectedScenes
-            .compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows)
-            .first(where: \.isKeyWindow)?
-            .rootViewController
     }
 }
 
