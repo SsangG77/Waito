@@ -56,11 +56,14 @@ struct TrackingRowView: View {
     private let slideSpring = Animation.spring(response: 0.4, dampingFraction: 0.6)
     
     
-    private enum DataState { case ok, checking, notFound }
+    private enum DataState { case ok, checking, notFound, stalled(days: Int) }
 
     /// 조회 데이터 상태. 등록 후 12시간 지나도 데이터가 없으면 notFound(번호 확인 유도)
     private var dataState: DataState {
-        if tracking.hasTrackingData { return .ok }
+        if tracking.hasTrackingData {
+            if let days = tracking.stalledDays, !tracking.currentStatus.isCompleted { return .stalled(days: days) }
+            return .ok
+        }
         if let created = parseServerDate(tracking.createdAt),
            Date().timeIntervalSince(created) > 12 * 3600 {
             return .notFound
@@ -68,16 +71,28 @@ struct TrackingRowView: View {
         return .checking
     }
 
-    /// 프로그레스 색 — 데이터 없으면 회색
+    private var hasData: Bool {
+        switch dataState {
+        case .ok, .stalled: return true
+        case .checking, .notFound: return false
+        }
+    }
+
+    private var isStalled: Bool {
+        if case .stalled = dataState { return true }
+        return false
+    }
+
+    /// 프로그레스 색 — 데이터 없으면 회색 (멈춤이어도 지나온 구간은 정상 색 유지)
     private var progressColor: Color {
-        dataState == .ok ? pixelStatusColor(tracking.currentStatus) : Color.pixelBorder
+        hasData ? pixelStatusColor(tracking.currentStatus) : Color.pixelBorder
     }
 
     var mainInfo: some View {
         VStack(alignment: .leading, spacing: 5) {
             Text(tracking.itemName.uppercased())
                 .font(pixelFont(17))
-                .foregroundStyle(dataState == .ok ? Color.pixelText : Color.pixelMuted)
+                .foregroundStyle(hasData ? Color.pixelText : Color.pixelMuted)
                 .lineLimit(1)
 
             HStack(spacing: 6) {
@@ -92,6 +107,10 @@ struct TrackingRowView: View {
                         .foregroundStyle(Color.pixelMuted)
                 case .notFound:
                     Text("· 번호 확인 필요")
+                        .font(pixelFont(13))
+                        .foregroundStyle(Color.pixelOrange)
+                case .stalled(let days):
+                    Text("· \(days)일째 갱신 없음")
                         .font(pixelFont(13))
                         .foregroundStyle(Color.pixelOrange)
                 case .ok:
@@ -193,14 +212,23 @@ struct TrackingRowView: View {
                     let defaultEnd = defaultStart + lineWidth
                     let start = i == curIndex ? max(defaultStart, truckX + truckSize / 2 + truckGapH) : defaultStart
                     let end = (i + 1) == curIndex ? min(defaultEnd, truckX - truckSize / 2 - truckGapH) : defaultEnd
-                    Rectangle()
-                        .fill(i < curIndex ? activeColor : Color.pixelBorder)
-                        .frame(width: max(0, end - start), height: 1)
-                        .offset(x: start, y: lineY - 0.5)
+                    if i < curIndex || !isStalled {
+                        Rectangle()
+                            .fill(i < curIndex ? activeColor : Color.pixelBorder)
+                            .frame(width: max(0, end - start), height: 1)
+                            .offset(x: start, y: lineY - 0.5)
+                    }
                 }
-                // 점 — 현재 단계는 트럭이 대신하므로 생략
+                // 갱신 멈춤: 트럭 앞 남은 길 전체를 끊긴 ╳ 무늬로
+                if isStalled {
+                    let brokenStart = truckX + truckSize / 2 + truckGapH
+                    StalledRoadMarks()
+                        .frame(width: max(0, geo.size.width - brokenStart), height: 7)
+                        .offset(x: brokenStart, y: lineY - 3.5)
+                }
+                // 점 — 현재 단계는 트럭이 대신하므로 생략, 멈춤이면 앞쪽 점도 생략(╳ 가 대신)
                 ForEach(0..<steps, id: \.self) { i in
-                    if i != curIndex {
+                    if i != curIndex, i < curIndex || !isStalled {
                         let x = stepW * CGFloat(i)
                         Rectangle()
                             .fill(i < curIndex ? activeColor : Color.pixelBorder)
@@ -211,11 +239,30 @@ struct TrackingRowView: View {
                 // 현재 단계 노드 = 커스텀 트럭
                 CatalogTruckView(cab: cfg.cab, truckBody: cfg.body, wheels: cfg.wheelType, size: truckSize)
                     .position(x: truckX, y: lineY - 3)   // 라인 위에 살짝 떠 있게
+                if isStalled {
+                    StalledBadge()
+                        .position(x: truckX + truckSize / 2 - 2, y: lineY - truckSize / 2 - 2)
+                        .accessibilityIdentifier("row_stalled_badge")
+                }
             }
         }
         .frame(height: truckSize)
     }
     
+    /// 펼침 상단 안내 — 갱신 멈춤일 때만
+    private var stalledNotice: some View {
+        HStack(alignment: .top, spacing: 8) {
+            StalledBadge()
+            Text("택배사 정보가 늦게 들어오고 있어요. 택배사 앱에서 직접 확인해 보세요.")
+                .font(pixelFont(12))
+                .foregroundStyle(Color.pixelOrange)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.horizontal, 14)
+        .padding(.bottom, 12)
+        .accessibilityIdentifier("row_stalled_notice")
+    }
+
     var verticalProgress: some View {
         Group {
             if let events = tracking.events, !events.isEmpty {
@@ -523,6 +570,8 @@ struct TrackingRowView: View {
                         .padding(.bottom, 8)
                         .padding(.top, 8)
 
+                    if isStalled { stalledNotice }
+
                     verticalProgress
 
                     if let memo = tracking.memo, !memo.isEmpty {
@@ -754,6 +803,52 @@ struct PixelChevron: Shape {
 }
 
 // MARK: - Preview
+
+/// 갱신 멈춤 — 남은 길에 반복되는 픽셀 ╳ 표식
+private struct StalledRoadMarks: View {
+    var body: some View {
+        Canvas { ctx, size in
+            let mark: CGFloat = 5, pitch: CGFloat = 11, px: CGFloat = 1
+            var x: CGFloat = 0
+            let y = (size.height - mark) / 2
+            while x + mark <= size.width {
+                for k in 0..<Int(mark) {
+                    let d = CGFloat(k)
+                    ctx.fill(Path(CGRect(x: x + d, y: y + d, width: px, height: px)), with: .color(Color.pixelOrange))
+                    ctx.fill(Path(CGRect(x: x + mark - 1 - d, y: y + d, width: px, height: px)), with: .color(Color.pixelOrange))
+                }
+                x += pitch
+            }
+        }
+    }
+}
+
+/// 갱신 멈춤 — 주황 픽셀 느낌표 배지
+private struct StalledBadge: View {
+    var body: some View {
+        Text("!")
+            .font(pixelFont(10))
+            .foregroundStyle(Color.bg)
+            .frame(width: 12, height: 12)
+            .background(Color.pixelOrange)
+    }
+}
+
+#Preview("갱신 멈춤") {
+    List {
+        TrackingRowView(
+            tracking: TrackingService.dummyTrackings.first { $0.stalledDays != nil }!,
+            isLiveActive: false, onToggleLiveActivity: {}, openRowId: .constant(nil)
+        )
+        TrackingRowView(
+            tracking: TrackingService.dummyTrackings[1],
+            isLiveActive: false, onToggleLiveActivity: {}, openRowId: .constant(nil)
+        )
+    }
+    .listStyle(.plain)
+    .scrollContentBackground(.hidden)
+    .background(Color.bg)
+}
 
 #Preview("배송중") {
     let item = TrackingListItem(

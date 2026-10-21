@@ -79,7 +79,7 @@ struct TrackingCreateResponse: Decodable {
 // MARK: - Tracking List Item
 
 /// GET /api/trackings 응답 (snake_case — DB 직접 반환)
-struct TrackingListItem: Decodable, Identifiable {
+struct TrackingListItem: Codable, Identifiable {
     let id: Int
     let carrierId: String
     let trackingNumber: String
@@ -100,6 +100,8 @@ struct TrackingListItem: Decodable, Identifiable {
     let subStage: String?
     /// 해외 택배사 여부(6단계 타임라인 판별). 구서버 호환 Optional.
     let isInternational: Bool?
+    /// 갱신이 멈춘 지 며칠째인지(서버 판정). nil = 정상. 구서버 호환 Optional.
+    let stalledDays: Int?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -118,6 +120,7 @@ struct TrackingListItem: Decodable, Identifiable {
         case events
         case subStage = "sub_stage"
         case isInternational = "is_international"
+        case stalledDays = "stalled_days"
     }
 
     /// 한 번이라도 조회에 성공해 이벤트를 받았는지. nil 이면 "아직 데이터 없음"
@@ -145,13 +148,15 @@ struct TrackingListItem: Decodable, Identifiable {
         lastEventTime: String? = nil,
         events: [TrackingEvent]? = nil,
         subStage: String? = nil,
-        isInternational: Bool? = nil
+        isInternational: Bool? = nil,
+        stalledDays: Int? = nil
     ) {
         self.id = id
         self.carrierId = carrierId
         self.trackingNumber = trackingNumber
         self.itemName = itemName
         self.memo = memo
+        self.stalledDays = stalledDays
         self.currentStatus = currentStatus
         self.currentTValue = currentTValue
         self.carrierName = carrierName
@@ -208,7 +213,7 @@ struct TrackingDetail: Decodable, Identifiable {
 
 // MARK: - Tracking Event
 
-struct TrackingEvent: Decodable, Identifiable {
+struct TrackingEvent: Codable, Identifiable {
     let id: Int
     let trackerStatus: String
     let mappedStatus: String
