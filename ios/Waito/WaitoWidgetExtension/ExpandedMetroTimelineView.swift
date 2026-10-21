@@ -57,11 +57,11 @@ struct ExpandedMetroTimelineView: View {
                 .foregroundStyle(.white)
                 .lineLimit(1)
 
-            stageBar(stage: stage)
+            stageBar(stage: stage, isStalled: item.stalledDays != nil)
 
-            // 하단 가로줄 — 배송상태(좌) + 날짜(우)
+            // 하단 가로줄 — 배송상태(좌) + 날짜(우). 갱신 멈춤이면 상태 대신 "N일째 갱신 없음"
             HStack(alignment: .firstTextBaseline) {
-                Text(stage.currentName)   // 해외 통관 구간이면 "통관"
+                Text(item.stalledDays.map { "\($0)일째 갱신 없음" } ?? stage.currentName)   // 해외 통관 구간이면 "통관"
                     .font(.system(size: 14, weight: .bold))
                     .foregroundStyle(Color.wPixelOrange)
                     .lineLimit(1)
@@ -76,7 +76,7 @@ struct ExpandedMetroTimelineView: View {
     }
 
     /// 가로 픽셀 스텝바 — 고정 단계(국내 5/해외 6). 현재 단계 노드는 네모점 대신 유저 커스텀 트럭(크게).
-    private func stageBar(stage: DeliveryStageInfo) -> some View {
+    private func stageBar(stage: DeliveryStageInfo, isStalled: Bool) -> some View {
         let count = stage.count
         let currentOrder = stage.currentIndex
         let dotSize: CGFloat = 5
@@ -103,14 +103,23 @@ struct ExpandedMetroTimelineView: View {
                     let start = i == currentOrder ? max(defaultStart, truckX + truckSize / 2 + truckGapH) : defaultStart
                     let end = (i + 1) == currentOrder ? min(defaultEnd, truckX - truckSize / 2 - truckGapH) : defaultEnd
                     let filled = i < currentOrder
-                    Rectangle()
-                        .fill(filled ? Color.wPixelOrange.opacity(0.7) : Color.white.opacity(0.15))
-                        .frame(width: max(0, end - start), height: 1)
-                        .offset(x: start, y: lineY - 0.5)
+                    if filled || !isStalled {
+                        Rectangle()
+                            .fill(filled ? Color.wPixelOrange.opacity(0.7) : Color.white.opacity(0.15))
+                            .frame(width: max(0, end - start), height: 1)
+                            .offset(x: start, y: lineY - 0.5)
+                    }
                 }
-                // Dots — 현재 단계는 트럭이 대신하므로 생략
+                // 갱신 멈춤: 트럭 앞 남은 길 전체를 끊긴 ╳ 무늬로
+                if isStalled {
+                    let brokenStart = truckX + truckSize / 2 + truckGapH
+                    WStalledRoadMarks()
+                        .frame(width: max(0, total - brokenStart), height: 7)
+                        .offset(x: brokenStart, y: lineY - 3.5)
+                }
+                // Dots — 현재 단계는 트럭이 대신하므로 생략, 멈춤이면 앞쪽 점도 생략
                 ForEach(0..<count, id: \.self) { i in
-                    if i != currentOrder {
+                    if i != currentOrder, i < currentOrder || !isStalled {
                         let x = unit * CGFloat(i)
                         Rectangle()
                             .fill(dotColor(index: i, currentOrder: currentOrder))
@@ -121,6 +130,10 @@ struct ExpandedMetroTimelineView: View {
                 // 현재 단계 노드 = 커스텀 트럭
                 CatalogTruckView(cab: state.truckConfig.cab, truckBody: state.truckConfig.body, wheels: state.truckConfig.wheelType, size: truckSize)
                     .position(x: truckX, y: lineY - 3)   // 라인 위에 살짝 떠 있게
+                if isStalled {
+                    WStalledBadge()
+                        .position(x: truckX + truckSize / 2 - 2, y: lineY - truckSize / 2 - 2)
+                }
             }
         }
         .frame(height: truckSize)
@@ -151,7 +164,8 @@ private extension DeliveryAttributes.ContentState {
         status: DeliveryStatus,
         itemName: String = "맥북 프로 14인치",
         eventCount: Int? = nil,
-        statusLabel: String? = nil
+        statusLabel: String? = nil,
+        stalledDays: Int? = nil
     ) -> Self {
         .init(items: [
             TrackingItemState(
@@ -161,7 +175,8 @@ private extension DeliveryAttributes.ContentState {
                 itemName: itemName,
                 estimatedDelivery: "오늘 도착 예정",
                 eventCount: eventCount,
-                statusLabel: statusLabel
+                statusLabel: statusLabel,
+                stalledDays: stalledDays
             )
         ], truckConfig: .default)
     }
@@ -193,6 +208,12 @@ private extension DeliveryAttributes.ContentState {
 
 #Preview("C2 — 이벤트 가변 12개(긴 라벨)") {
     ExpandedMetroTimelineView(state: .make(status: .delivering, eventCount: 12, statusLabel: "서울 강남 집배점 도착 후 배송기사 인수"))
+        .frame(width: 320)
+        .background(Color.black)
+}
+
+#Preview("C2 — 갱신 멈춤 3일") {
+    ExpandedMetroTimelineView(state: .make(status: .inTransitIn, itemName: "무선 충전기 (쿠팡)", stalledDays: 3))
         .frame(width: 320)
         .background(Color.black)
 }

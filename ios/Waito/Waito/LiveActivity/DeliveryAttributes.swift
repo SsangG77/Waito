@@ -22,6 +22,8 @@ struct TrackingItemState: Codable, Hashable {
     var subStage: String?
     /// 해외 택배사 여부 — 6단계(통관 포함) 타임라인 판별. nil = 국내(5단계).
     var isInternational: Bool?
+    /// 갱신 멈춘 지 며칠째인지(서버 판정). nil = 정상. ⚠️ Optional 필수(하위호환).
+    var stalledDays: Int?
 
     /// 타임라인·게이지가 쓰는 표시 단계 (국내 5 / 해외 6단계, 한 곳에서 계산)
     var stageInfo: DeliveryStageInfo {

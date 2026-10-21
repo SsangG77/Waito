@@ -427,7 +427,8 @@ final class TrackingService {
                 statusLabel: tracking.events?.last?.description,
                 departureDate: tracking.createdAt,       // 목록의 등록(출발) 날짜
                 subStage: tracking.subStage,             // 해외 통관 구간 표시
-                isInternational: tracking.isInternational
+                isInternational: tracking.isInternational,
+                stalledDays: tracking.currentStatus.isCompleted ? nil : tracking.stalledDays
             )
         }
 
