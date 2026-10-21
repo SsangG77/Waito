@@ -174,6 +174,7 @@ Live Activity Expanded View
 │   └── API/APIModels.swift             # Carrier, TrackingListItem, 요청/응답 DTO (TrackingEvent 에 lat/lon Optional)
 ├── Services/
 │   ├── TrackingService.swift           # @Observable 상태관리 + Live Activity + push 토큰 관찰
+│   ├── TrackingListCache.swift         # 마지막 목록 JSON 저장(Application Support) — 앱 시작 시 서버 응답 전 먼저 표시
 │   ├── APIClient.swift                 # actor, 서버 REST 호출
 │   ├── StoreKitService.swift           # StoreKit2 접근(상품 로드/purchase/restore/entitlement) — SwiftUI 비의존
 │   ├── CaptureTrackingParser.swift     # 배송알림 스크린샷 OCR(Vision, 온디바이스) → 운송장/택배사/품명 추출
@@ -423,6 +424,8 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **추가 직후 강조**: 새로 추가된 행이 한 번 통통 바운스(`justAddedId` → `scaleEffect` 스프링). 사용자가 추가됨을 인지.
 - **메모(memo)**: 추가/수정 시 입력, 펼친 상세에 "MEMO" 표시. **풀스택 영속**(DB `trackings.memo` 컬럼 + 서버 create/update/list 반영 + `TrackingListItem.memo`).
 - **조회 안 되는 운송장**: `last_event_time` 없으면 회색 + "확인 중", 등록 12시간 경과 시 "번호 확인 필요"(오렌지)
+- **갱신 멈춤**: 목록 응답의 `stalled_days`(Optional) 가 있으면 "· N일째 갱신 없음"(오렌지) + 트럭 앞 남은 길을 주황 ╳ 무늬로, 트럭에 주황 "!" 배지, 펼침 상단에 택배사 앱 확인 안내. 라이브 액티비티(잠금화면 타임라인, DI 펼침)도 `TrackingItemState.stalledDays` 로 같은 ╳ 무늬 + "!" 배지 + "N일째 갱신 없음" 표시(공용 `WStalledRoadMarks`/`WStalledBadge`). ⚠️ 서버는 아직 멈춤을 판정하지 않음(`stalled_days` 미전송, 푸시 content-state 에도 없음). 앱 표시만 구현, 더미 7번 쿠팡 건으로 확인.
+- **목록 저장본 선표시**: `TrackingListCache` 에 목록이 바뀔 때마다(조회, 수정, 삭제, 새로고침) 저장 → 앱 시작 시 저장본을 먼저 표시해 빈 화면 깜빡임 방지. 서버 목록 교체 시 `listRevision` +1 → 목록 ScrollView 스프링 애니메이션.
 - **트럭 버튼**(우상단): 사용자가 선택한 트럭(`CatalogTruckView`)을 표시 — `TruckConfigStore` 변경 시 자동 갱신
 - **빈 상태(택배 0개)**: 빈 화면 대신 `emptyState` — 사용자가 고른 트럭이 화면 가운데서 `RunningTruckView`로 "달리는" 효과(인앱이라 연속 애니메이션 정상 재생) + 위쪽 `chevron.up`과 "위 ADD 버튼으로 택배를 추가해보세요" 안내(상단 ADD 버튼을 가리킴, 중복 버튼 없음). pull-to-refresh 유지.
 - **첫 추가 업셀 페이월**: 첫 택배 추가 성공 직후 `PlusPaywallView`를 풀스크린 1회 노출. 평생 1회(`@AppStorage("has_shown_first_add_paywall")`) + 비구독자(`subscription.isSubscribed == false`) 한정(`maybeShowFirstAddPaywall()`). 콜드 첫 화면 하드 페이월 대신 "가치 경험(첫 추가) 직후" 노출 정책.

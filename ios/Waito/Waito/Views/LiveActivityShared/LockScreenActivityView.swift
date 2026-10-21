@@ -88,15 +88,24 @@ struct LockScreenTrackingRow: View {
                     .lineLimit(1)
                     .layoutPriority(1)   // 물품명 우선, 긴 상태 라벨이 먼저 truncate
                 Spacer(minLength: 8)
-                Text(item.stageInfo.currentName)   // 원본 메시지 대신 간단한 단계명(예: 간선상차·통관)
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .foregroundStyle(wPixelStatusColor(item.status))
-                    .lineLimit(1)
+                if let days = item.stalledDays {
+                    Text("\(days)일째 갱신 없음")
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(Color.wPixelOrange)
+                        .lineLimit(1)
+                } else {
+                    Text(item.stageInfo.currentName)   // 원본 메시지 대신 간단한 단계명(예: 간선상차·통관)
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(wPixelStatusColor(item.status))
+                        .lineLimit(1)
+                }
             }
 
             // 전체 배송 과정(고정 단계 — 국내 5/해외 6) 타임라인 + 현재 단계 점 위에 작은 트럭
-            LockScreenStatusTimeline(status: item.status, stage: item.stageInfo, truckConfig: truckConfig)
+            LockScreenStatusTimeline(status: item.status, stage: item.stageInfo, truckConfig: truckConfig,
+                                     isStalled: item.stalledDays != nil)
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 14)
@@ -110,6 +119,8 @@ struct LockScreenStatusTimeline: View {
     /// 표시 단계 — 국내 5단계 / 해외 6단계(통관 포함). DeliveryStageInfo 가 한 곳에서 계산.
     let stage: DeliveryStageInfo
     let truckConfig: TruckConfig
+    /// 갱신 멈춤 — 트럭 앞 남은 길을 ╳ 무늬로, 트럭에 "!" 배지
+    var isStalled: Bool = false
 
     private let dotSize: CGFloat = 5
     private let gap: CGFloat = 3
@@ -142,15 +153,23 @@ struct LockScreenStatusTimeline: View {
                         let start = i == currentIndex ? max(defaultStart, truckX + truckSize / 2 + truckGapH) : defaultStart
                         let end = (i + 1) == currentIndex ? min(defaultEnd, truckX - truckSize / 2 - truckGapH) : defaultEnd
                         let filled = i < currentIndex
-                        Rectangle()
-                            .fill(filled ? wPixelStatusColor(status) : Color.white.opacity(0.22))
-                            .frame(width: max(0, end - start), height: 1)
-                            .offset(x: start, y: dotsCenterY - 0.5)
+                        if filled || !isStalled {
+                            Rectangle()
+                                .fill(filled ? wPixelStatusColor(status) : Color.white.opacity(0.22))
+                                .frame(width: max(0, end - start), height: 1)
+                                .offset(x: start, y: dotsCenterY - 0.5)
+                        }
                     }
                 }
-                // 점 — 현재 단계는 트럭이 대신하므로 생략
+                if isStalled {
+                    let brokenStart = truckX + truckSize / 2 + truckGapH
+                    WStalledRoadMarks()
+                        .frame(width: max(0, geo.size.width - brokenStart), height: 7)
+                        .offset(x: brokenStart, y: dotsCenterY - 3.5)
+                }
+                // 점 — 현재 단계는 트럭이 대신하므로 생략, 멈춤이면 앞쪽 점도 생략(╳ 가 대신)
                 ForEach(0..<count, id: \.self) { i in
-                    if i != currentIndex {
+                    if i != currentIndex, i < currentIndex || !isStalled {
                         let x = stepW * CGFloat(i)
                         let filled = i < currentIndex
                         Rectangle()
@@ -163,9 +182,45 @@ struct LockScreenStatusTimeline: View {
                 CatalogTruckView(cab: truckConfig.cab, truckBody: truckConfig.body, wheels: truckConfig.wheelType, size: truckSize)
                     .frame(width: truckSize, height: truckSize)
                     .position(x: truckX, y: dotsCenterY - 3)   // 라인 위에 살짝 떠 있게
+                if isStalled {
+                    WStalledBadge()
+                        .position(x: truckX + truckSize / 2 - 2, y: dotsCenterY - truckSize / 2 - 2)
+                }
             }
         }
         .frame(height: truckSize)
+    }
+}
+
+// MARK: - 갱신 멈춤 표식 (잠금화면 · DI 펼침 공용 — 앱 목록 행과 같은 모양)
+
+/// 남은 길에 반복되는 픽셀 ╳ 표식
+struct WStalledRoadMarks: View {
+    var body: some View {
+        Canvas { ctx, size in
+            let mark: CGFloat = 5, pitch: CGFloat = 11
+            var x: CGFloat = 0
+            let y = (size.height - mark) / 2
+            while x + mark <= size.width {
+                for k in 0..<Int(mark) {
+                    let d = CGFloat(k)
+                    ctx.fill(Path(CGRect(x: x + d, y: y + d, width: 1, height: 1)), with: .color(Color.wPixelOrange))
+                    ctx.fill(Path(CGRect(x: x + mark - 1 - d, y: y + d, width: 1, height: 1)), with: .color(Color.wPixelOrange))
+                }
+                x += pitch
+            }
+        }
+    }
+}
+
+/// 주황 픽셀 느낌표 배지
+struct WStalledBadge: View {
+    var body: some View {
+        Text("!")
+            .font(.system(size: 9, weight: .heavy, design: .monospaced))
+            .foregroundStyle(Color.black)
+            .frame(width: 12, height: 12)
+            .background(Color.wPixelOrange)
     }
 }
 
@@ -218,6 +273,25 @@ struct ProgressBarView: View {
                 estimatedDelivery: "오늘 도착 예정",
                 eventCount: 6,
                 statusLabel: "옥천HUB 간선상차"
+            )
+        ],
+        truckConfig: .default
+    ))
+    .background(Color.black)
+}
+
+#Preview("잠금화면 — 갱신 멈춤 3일") {
+    LockScreenLiveActivityView(state: .init(
+        items: [
+            TrackingItemState(
+                trackingNumber: "520012345678",
+                status: .inTransitIn,
+                carrierName: "쿠팡",
+                itemName: "무선 충전기 (쿠팡)",
+                estimatedDelivery: nil,
+                eventCount: 3,
+                statusLabel: "캠프도착",
+                stalledDays: 3
             )
         ],
         truckConfig: .default

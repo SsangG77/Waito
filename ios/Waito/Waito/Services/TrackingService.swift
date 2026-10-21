@@ -19,6 +19,8 @@ enum AddTrackingResult {
 @Observable
 final class TrackingService {
     private(set) var trackings: [TrackingListItem] = []
+    /// 서버에서 새 목록을 받아 교체할 때마다 +1. 목록 화면이 이 값으로 교체 애니메이션을 건다.
+    private(set) var listRevision = 0
     private(set) var carriers: [Carrier] = []
     private(set) var isLoading = false
     private(set) var error: String?
@@ -59,6 +61,8 @@ final class TrackingService {
 
     init() {
         liveTrackingNumbers = UserDefaults.standard.stringArray(forKey: liveTrackingsKey) ?? []
+        // 저장해 둔 마지막 목록을 먼저 띄운다 — 서버 응답 전 빈 화면(달리는 트럭)이 깜빡이지 않게
+        trackings = TrackingListCache.load()
     }
 
     /// 프리뷰 전용
@@ -110,6 +114,8 @@ final class TrackingService {
 
         do {
             trackings = try await api.listTrackings(deviceToken: token)
+            listRevision += 1
+            TrackingListCache.save(trackings)
             // Live Activity 집합 정리: 현재 목록에 존재하고(=삭제된 택배 유령 제거) 미완료인 번호만 남긴다.
             // (삭제건이 남으면 count 가 부풀려져 무료 1개 한도가 잘못 소진된다)
             // ⚠️ 더미(디버그/테스트) 번호는 토글 ON 일 때만 유효로 포함 — 토글이 꺼지면 정리 대상이 되어
@@ -176,6 +182,7 @@ final class TrackingService {
             let updated = try await api.updateTracking(id: id, itemName: itemName, memo: memo)
             if let index = trackings.firstIndex(where: { $0.id == id }) {
                 trackings[index] = updated
+                TrackingListCache.save(trackings)
             }
             await updateLiveActivity()
             self.error = nil
@@ -219,6 +226,7 @@ final class TrackingService {
         do {
             try await api.deleteTracking(id: id)
             trackings.removeAll { $0.id == id }
+            TrackingListCache.save(trackings)
             self.error = nil
         } catch {
             self.error = error.localizedDescription
@@ -230,6 +238,7 @@ final class TrackingService {
             let updated = try await api.refreshTracking(id: id)
             if let index = trackings.firstIndex(where: { $0.id == id }) {
                 trackings[index] = updated
+                TrackingListCache.save(trackings)
             }
             await updateLiveActivity()
             self.error = nil
@@ -418,7 +427,8 @@ final class TrackingService {
                 statusLabel: tracking.events?.last?.description,
                 departureDate: tracking.createdAt,       // 목록의 등록(출발) 날짜
                 subStage: tracking.subStage,             // 해외 통관 구간 표시
-                isInternational: tracking.isInternational
+                isInternational: tracking.isInternational,
+                stalledDays: tracking.currentStatus.isCompleted ? nil : tracking.stalledDays
             )
         }
 
@@ -664,6 +674,20 @@ final class TrackingService {
             ],
             subStage: "customs",      // 통관 이력 유지(서버 COALESCE 와 동일) — 배송출발이라 5번째 노드
             isInternational: true
+        ),
+        // 갱신 멈춤 더미 — 캠프도착 이후 새 기록이 3일째 없는 쿠팡 건
+        TrackingListItem(
+            id: 7, carrierId: "coupang", trackingNumber: "520012345678",
+            itemName: "무선 충전기 (쿠팡)", currentStatus: .inTransitIn,
+            currentTValue: 0.5, carrierName: "쿠팡",
+            estimatedDelivery: nil, createdAt: "2026-04-08T10:00:00Z", deliveredAt: nil,
+            lastEventTime: "2026-04-09T04:10:00Z",
+            events: [
+                TrackingEvent(id: 701, trackerStatus: "INFORMATION_RECEIVED", mappedStatus: "registered", description: "상품이 접수되었습니다.", eventTime: "2026-04-08T10:00:00Z", location: "쿠팡 천안FC", lat: nil, lon: nil),
+                TrackingEvent(id: 702, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "간선상차", eventTime: "2026-04-08T22:30:00Z", location: "천안센터", lat: nil, lon: nil),
+                TrackingEvent(id: 703, trackerStatus: "IN_TRANSIT", mappedStatus: "inTransitIn", description: "캠프도착", eventTime: "2026-04-09T04:10:00Z", location: "부산1", lat: nil, lon: nil),
+            ],
+            stalledDays: 3
         ),
     ]
 

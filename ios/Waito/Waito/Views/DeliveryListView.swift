@@ -398,6 +398,8 @@ struct DeliveryListView: View {
                     .animation(.spring(response: 0.42, dampingFraction: 0.82), value: sortOrder)
                 }
             }
+            // 저장본을 먼저 보여준 뒤 서버 최신 목록으로 바뀔 때, 추가/삭제/상태 변경이 부드럽게 반영되게
+            .animation(.spring(response: 0.42, dampingFraction: 0.82), value: service.listRevision)
             .refreshable { await service.refreshAll() }
         }
         .padding(.horizontal, 16)
