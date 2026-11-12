@@ -125,8 +125,9 @@ router.post('/', async (req: Request, res: Response) => {
 
   // DB 삽입
   const insertResult = db.prepare(`
-    INSERT INTO trackings (device_id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value, carrier_name, last_event_time)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO trackings (device_id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value, carrier_name, last_event_time,
+                           delivered_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'delivered' THEN datetime('now') END)
   `).run(
     device.id,
     carrier.id,
@@ -137,6 +138,9 @@ router.post('/', async (req: Request, res: Response) => {
     STATUS_T_VALUES[initialStatus],
     carrier.name,
     lastEventTime,
+    // 이미 배송완료인 운송장을 추가하면 여기서 완료 시각을 찍는다. 폴링은 "상태가 바뀔 때만"
+    // delivered_at 을 쓰므로, 처음부터 delivered 인 행은 영영 NULL 로 남아 5분마다 계속 조회됐다.
+    initialStatus,
   );
 
   const trackingId = insertResult.lastInsertRowid as number;
