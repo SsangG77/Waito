@@ -121,6 +121,14 @@ actor APIClient {
         let _: EmptyResponse = try await delete("/api/trackings/\(id)")
     }
 
+    /// 다른 택배사에서 찾은 안내에 답한다 (POST /api/trackings/:id/carrier-suggestion)
+    func answerCarrierSuggestion(id: Int, accept: Bool) async throws {
+        let _: SuccessResponse = try await post(
+            "/api/trackings/\(id)/carrier-suggestion",
+            body: CarrierSuggestionRequest(accept: accept)
+        )
+    }
+
     func refreshTracking(id: Int) async throws -> TrackingListItem {
         try await post("/api/trackings/\(id)/refresh", body: EmptyBody())
     }
