@@ -287,7 +287,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **알림 정책**: 상태 변경당 **배너 정확히 1개**. LA 중간 update = 무음 / 배송완료 end = 배너 + **도착 시 LA/DI 카드 즉시 제거**(`dismissal-date` = 현재시각) / push-to-start 되살림 = 배너(Apple 강제). **그 외(LA가 배너 안 띄운 모든 경우) = 표준 일반 알림(`sendStatusAlert`)** 으로 배너 — LA 미사용 택배 포함 모든 택배가 상태 변경 시 알림 받음. `pushService` 의 `bannerShown` 플래그로 중복 방지.
   - ⚠️ 표준 원격알림은 Xcode **Push Notifications capability(aps-environment entitlement)** 필요.
 - **조회 실패(NOT_FOUND) 처리**: 등록 시 force 미지정이면 422 → 앱이 확인 다이얼로그. 등록 후 데이터 없으면 앱에서 "확인 중"(12h 경과 시 "번호 확인 필요") 회색 표시.
-  - 서버: 자릿수 오류는 즉시, 한 번도 조회 안 된 번호는 등록 후 `NOT_FOUND_STOP_HOURS`(72h, 운영 근거 확인 전 임시값) 지나면 5분 조회 중단(`polling_stopped_at`) + 번호당 1회 `detectCarrier` 재조회(`redetect_done_at`). 다른 택배사에서 찾으면 `suggested_carrier_id` 만 저장(자동 변경 금지) → 앱 행에 "OO에서 찾았어요. 바꿀까요?" → `POST /api/trackings/:id/carrier-suggestion {accept}`. 중단된 번호는 목록 요청 시 번호당 30분 간격으로만 조회, 조회되면 중단 해제.
+  - 서버: 자릿수 오류는 즉시, 한 번도 조회 안 된 번호는 등록 후 `NOT_FOUND_STOP_HOURS`(240h, 운영 DB 최대 216h 기준) 지나면 5분 조회 중단(`polling_stopped_at`) + 번호당 1회 `detectCarrier` 재조회(`redetect_done_at`). 다른 택배사에서 찾으면 `suggested_carrier_id` 만 저장(자동 변경 금지) → 앱 행에 "OO에서 찾았어요. 바꿀까요?" → `POST /api/trackings/:id/carrier-suggestion {accept}`. 중단된 번호는 목록 요청 시 번호당 30분 간격으로만 조회, 조회되면 중단 해제.
 
 ---
 

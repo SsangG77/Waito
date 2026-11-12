@@ -11,9 +11,10 @@ import { config } from '../config.js';
 
 /**
  * 한 번도 조회된 적 없는 번호(NOT_FOUND 계속)를 5분 조회에서 빼는 기준 시간.
- * ponytail: 운영 DB 근거 숫자 확인 전 임시값 — 결국 조회된 번호의 "등록→첫 조회" 최대치보다 넉넉히 다시 정할 것.
+ * 근거(운영 DB 2026-11-12, 결국 조회된 번호의 등록→첫 이벤트 저장): 최대 216시간(롯데 1건), 그다음 72.7시간.
+ * 최대치보다 넉넉히 10일. 멈춘 뒤에도 앱을 열 때 30분 간격 조회는 계속된다.
  */
-export const NOT_FOUND_STOP_HOURS = 72;
+export const NOT_FOUND_STOP_HOURS = 240;
 
 /** 등록 후 기준 시간이 지났는데 한 번도 조회 안 된 번호인지. created_at 은 SQLite UTC 'YYYY-MM-DD HH:MM:SS'. */
 export function isNotFoundTooLong(createdAt: string, lastEventTime: string | null, nowMs = Date.now()): boolean {
