@@ -8,6 +8,9 @@ import { isCredentialExpired } from './credentialMonitor.js';
 import { DeliveryStatus, STATUS_T_VALUES, CARRIERS } from '../types/delivery.js';
 import { config } from '../config.js';
 
+/// webhook 갱신 호출 간격. tracker.delivery 초당 10건 제한 중 5분 조회 몫을 남겨 둔다.
+const WEBHOOK_RENEW_INTERVAL_MS = 1000;
+
 /**
  * 단일 추적 건을 폴링하여 상태를 업데이트한다.
  */
@@ -288,6 +291,9 @@ export function startPollingScheduler(): void {
       } catch (error) {
         console.error(`[Webhook] Renewal failed for tracking ${t.id}:`, error);
       }
+      // 0시 정각은 5분 조회와 겹친다. 시각만 옮기면 조회가 길어질 때 또 겹치므로
+      // 갱신 호출 사이를 띄워 이 루프가 더하는 호출을 초당 1건 이하로 묶는다(하루 1회라 느려도 무방).
+      await new Promise(resolve => setTimeout(resolve, WEBHOOK_RENEW_INTERVAL_MS));
     }
   });
 
