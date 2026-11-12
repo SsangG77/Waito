@@ -233,6 +233,16 @@ final class TrackingService {
         }
     }
 
+    /// 다른 택배사에서 찾은 안내에 답한다. 바꾸면 서버가 택배사를 바꾸고 바로 조회 → 목록을 다시 불러온다.
+    func answerCarrierSuggestion(id: Int, accept: Bool) async {
+        do {
+            try await api.answerCarrierSuggestion(id: id, accept: accept)
+            await loadTrackings()
+        } catch {
+            self.error = error.localizedDescription
+        }
+    }
+
     func refreshTracking(id: Int) async {
         do {
             let updated = try await api.refreshTracking(id: id)

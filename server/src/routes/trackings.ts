@@ -1,39 +1,17 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/database.js';
 import { trackPackage, registerWebhook, isTrackingNotFoundError } from '../services/trackerApi.js';
-import { trackPackage17, detectCarrier17 } from '../services/track17Api.js';
+import { trackPackage17 } from '../services/track17Api.js';
+import { detectCarrier } from '../services/carrierDetect.js';
 import { resolveNewStatus } from '../services/statusMapper.js';
 import { pollTracking } from '../services/pollingService.js';
-import { DeliveryStatus, STATUS_T_VALUES, CARRIERS, type Carrier } from '../types/delivery.js';
+import { DeliveryStatus, STATUS_T_VALUES, CARRIERS } from '../types/delivery.js';
 import { config } from '../config.js';
 
 const router = Router();
 
-/**
- * 운송장 번호만으로 택배사를 감지한다 (carrierId='auto').
- * 1) 국내: tracker.delivery 를 CARRIERS 순서대로 조회 — 이벤트가 나오는 택배사 채택.
- *    (한국 운송장은 자릿수가 12~13자리로 겹쳐 패턴 판별이 불가능 → 실조회가 정답)
- * 2) 전부 실패 시: 17TRACK 자동 감지(등록 시 carrier 생략) → 우리 해외 CARRIERS 와 매핑.
- *    지원 목록 밖 택배사로 감지되면 null (quota 1건 소모는 감수 — 드묾).
- */
-async function detectCarrier(trackingNumber: string): Promise<Carrier | null> {
-  for (const candidate of CARRIERS.filter(c => c.provider === 'tracker')) {
-    try {
-      const result = await trackPackage(candidate.trackerId, trackingNumber);
-      if (result.track?.lastEvent) return candidate;
-    } catch {
-      // NOT_FOUND·오류 → 다음 후보
-    }
-  }
-
-  const key = await detectCarrier17(trackingNumber);
-  if (key) {
-    const matched = CARRIERS.find(c => c.provider === 'track17' && c.trackerId === key);
-    if (matched) return matched;
-    console.warn(`[Detect] 17TRACK 감지 결과가 지원 목록 밖 (carrier key=${key})`);
-  }
-  return null;
-}
+/** 5분 조회를 멈춘 번호를 앱 열 때 다시 조회하는 번호당 최소 간격(분). */
+const OPEN_POLL_MIN_MINUTES = 30;
 
 // POST /api/trackings — 택배 추적 등록
 router.post('/', async (req: Request, res: Response) => {
@@ -125,8 +103,9 @@ router.post('/', async (req: Request, res: Response) => {
 
   // DB 삽입
   const insertResult = db.prepare(`
-    INSERT INTO trackings (device_id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value, carrier_name, last_event_time)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO trackings (device_id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value, carrier_name, last_event_time,
+                           delivered_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'delivered' THEN datetime('now') END)
   `).run(
     device.id,
     carrier.id,
@@ -137,6 +116,9 @@ router.post('/', async (req: Request, res: Response) => {
     STATUS_T_VALUES[initialStatus],
     carrier.name,
     lastEventTime,
+    // 이미 배송완료인 운송장을 추가하면 여기서 완료 시각을 찍는다. 폴링은 "상태가 바뀔 때만"
+    // delivered_at 을 쓰므로, 처음부터 delivered 인 행은 영영 NULL 로 남아 5분마다 계속 조회됐다.
+    initialStatus,
   );
 
   const trackingId = insertResult.lastInsertRowid as number;
@@ -200,9 +182,21 @@ router.get('/', (req: Request, res: Response) => {
   const trackings = db.prepare(`
     SELECT id, carrier_id, tracking_number, item_name, memo, current_status, current_t_value,
            carrier_name, estimated_delivery, created_at, updated_at, last_event_time, delivered_at,
-           sub_stage
+           sub_stage, suggested_carrier_id
     FROM trackings WHERE device_id = ? ORDER BY created_at DESC
-  `).all(device.id) as Array<{ id: number; carrier_id: string }>;
+  `).all(device.id) as Array<{ id: number; carrier_id: string; suggested_carrier_id: string | null }>;
+
+  // 5분 조회를 멈춘 번호는 앱을 열 때(이 목록 요청) 한 번 조회한다. 응답은 기다리지 않음 → 결과는 다음 목록에 반영.
+  // 최소 간격 30분: tracker.delivery 가 같은 번호에 약 30분간 같은 답을 주므로 더 자주 불러도 의미 없음.
+  const due = db.prepare(`
+    UPDATE trackings SET last_polled_at = datetime('now')
+    WHERE device_id = ? AND polling_stopped_at IS NOT NULL AND delivered_at IS NULL
+      AND (last_polled_at IS NULL OR last_polled_at < datetime('now', '-${OPEN_POLL_MIN_MINUTES} minutes'))
+    RETURNING id
+  `).all(device.id) as Array<{ id: number }>;
+  void (async () => {
+    for (const t of due) await pollTracking(t.id);
+  })();
 
   // 각 택배의 원본 이벤트를 한 번에 읽어 id별로 묶어 붙인다(가변 타임라인용).
   let eventsByTracking: Record<number, unknown[]> = {};
@@ -228,6 +222,8 @@ router.get('/', (req: Request, res: Response) => {
   res.json(trackings.map((t) => ({
     ...t,
     is_international: CARRIERS.find(c => c.id === t.carrier_id)?.international === true,
+    // 다시 조회로 찾은 다른 택배사 이름 — 앱이 "OO에서 찾았어요. 바꿀까요?" 안내에 쓴다.
+    suggested_carrier_name: CARRIERS.find(c => c.id === t.suggested_carrier_id)?.name ?? null,
     events: eventsByTracking[t.id] ?? [],
   })));
 });
@@ -304,6 +300,62 @@ router.post('/:id/refresh', async (req: Request, res: Response) => {
   } catch (error) {
     res.status(500).json({ error: 'Refresh failed' });
   }
+});
+
+// POST /api/trackings/:id/carrier-suggestion — 다시 조회로 찾은 택배사로 바꿀지 사용자 선택
+// body: { accept: boolean }. accept=true 면 택배사를 바꾸고 정상 조회 대상으로 돌린다. false 면 안내만 지운다.
+router.post('/:id/carrier-suggestion', async (req: Request, res: Response) => {
+  const trackingId = parseInt(String(req.params.id), 10);
+  const accept = req.body?.accept === true;
+  const db = getDb();
+  const tracking = db.prepare(
+    'SELECT id, device_id, tracking_number, suggested_carrier_id FROM trackings WHERE id = ?',
+  ).get(trackingId) as
+    { id: number; device_id: number; tracking_number: string; suggested_carrier_id: string | null } | undefined;
+
+  if (!tracking) {
+    res.status(404).json({ error: 'Tracking not found' });
+    return;
+  }
+  const carrier = CARRIERS.find(c => c.id === tracking.suggested_carrier_id);
+  if (!carrier) {
+    res.status(409).json({ error: 'No carrier suggestion' });
+    return;
+  }
+
+  if (!accept) {
+    db.prepare('UPDATE trackings SET suggested_carrier_id = NULL WHERE id = ?').run(trackingId);
+    res.json({ success: true });
+    return;
+  }
+
+  // 같은 기기에 이미 그 택배사로 같은 번호가 있으면 바꿀 수 없다(UNIQUE 제약).
+  const duplicate = db.prepare(
+    'SELECT id FROM trackings WHERE device_id = ? AND carrier_id = ? AND tracking_number = ?',
+  ).get(tracking.device_id, carrier.id, tracking.tracking_number);
+  if (duplicate) {
+    res.status(409).json({ error: 'Tracking already exists' });
+    return;
+  }
+
+  db.prepare(`
+    UPDATE trackings SET carrier_id = ?, carrier_name = ?, suggested_carrier_id = NULL,
+                         polling_stopped_at = NULL, webhook_expires_at = NULL, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(carrier.id, carrier.name, trackingId);
+
+  await pollTracking(trackingId);
+
+  if (carrier.provider === 'tracker') {
+    try {
+      const webhook = await registerWebhook(carrier.trackerId, tracking.tracking_number, `${config.webhookBaseUrl}/webhooks/tracker`);
+      db.prepare('UPDATE trackings SET webhook_expires_at = ? WHERE id = ?').run(webhook.expiresAt, trackingId);
+    } catch (error) {
+      console.warn(`[Tracking] Webhook registration failed after carrier change:`, error);
+    }
+  }
+
+  res.json({ success: true });
 });
 
 // PUT /api/trackings/:id/push-token — Live Activity 푸시토큰 업데이트

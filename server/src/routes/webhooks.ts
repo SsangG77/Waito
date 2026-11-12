@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { getDb } from '../db/database.js';
-import { trackPackage } from '../services/trackerApi.js';
+import { trackPackage, errorSummary } from '../services/trackerApi.js';
 import { resolveNewStatus } from '../services/statusMapper.js';
 import { pushTrackingUpdate } from '../services/pushService.js';
 import { pollTracking } from '../services/pollingService.js';
@@ -16,7 +16,7 @@ router.post('/tracker', (req: Request, res: Response) => {
 
   // 비동기 처리 — 실패해도 폴링 경로로 폴백해 갱신 자체는 살린다.
   processWebhook(req.body).catch(async error => {
-    console.error('[Webhook] Processing error:', error);
+    console.error('[Webhook] Processing error:', errorSummary(error));
     await fallbackToPolling(req.body);
   });
 });
@@ -36,7 +36,7 @@ async function processWebhook(payload: any): Promise<void> {
     // payload.carrierId 는 tracker.delivery 식별자(예: kr.coupangls)이므로 그대로 사용
     result = await trackPackage(carrierId, trackingNumber);
   } catch (error) {
-    console.error(`[Webhook] track fetch failed for ${trackingNumber}:`, error);
+    console.error(`[Webhook] track fetch failed for ${trackingNumber}:`, errorSummary(error));
     return;
   }
 
@@ -83,8 +83,9 @@ async function processWebhook(payload: any): Promise<void> {
     }
 
     // 상태가 그대로여도 최신 이벤트 시각은 항상 반영 (폴링 경로와 동일)
+    // 조회가 됐으니 5분 조회를 멈췄던 번호도 다시 정상 조회 대상으로 돌린다.
     db.prepare(`
-      UPDATE trackings SET last_event_time = ?, updated_at = datetime('now') WHERE id = ?
+      UPDATE trackings SET last_event_time = ?, polling_stopped_at = NULL, updated_at = datetime('now') WHERE id = ?
     `).run(result.track.lastEvent.time, tracking.id);
 
     if (newStatus !== tracking.current_status) {
@@ -125,7 +126,7 @@ async function fallbackToPolling(payload: any): Promise<void> {
       await pollTracking(row.id);
     }
   } catch (error) {
-    console.error(`[Webhook] Fallback polling failed for ${trackingNumber}:`, error);
+    console.error(`[Webhook] Fallback polling failed for ${trackingNumber}:`, errorSummary(error));
   }
 }
 

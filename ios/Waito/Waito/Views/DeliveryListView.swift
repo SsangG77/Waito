@@ -44,6 +44,9 @@ struct DeliveryListView: View {
     /// 삭제 확인 대상 / 표시 여부
     @State private var pendingDeleteTracking: TrackingListItem?
     @State private var showDeleteConfirm = false
+    /// "다른 택배사에서 찾았어요" 안내를 누른 택배 — 바꿀지 확인 팝업 대상
+    @State private var pendingSuggestionTracking: TrackingListItem?
+    @State private var showCarrierSuggestionConfirm = false
     /// 삭제 버튼이 열린 행 (한 번에 하나만)
     @State private var openRowId: Int?
     /// 정렬 드롭다운 펼침 여부
@@ -141,6 +144,16 @@ struct DeliveryListView: View {
                 isPresented: $showDeleteConfirm
             ) {
                 performDelete()
+            }
+            .pixelConfirm(
+                title: "택배사 변경",
+                message: carrierSuggestionMessage,
+                confirmTitle: "바꾸기",
+                cancelTitle: "안 바꾸기",
+                isPresented: $showCarrierSuggestionConfirm,
+                onCancel: { answerCarrierSuggestion(accept: false) }
+            ) {
+                answerCarrierSuggestion(accept: true)
             }
             .photosPicker(isPresented: $showCapturePicker, selection: $capturePhotoItem, matching: .images)
             .onChange(of: capturePhotoItem) { _, newItem in
@@ -423,7 +436,8 @@ struct DeliveryListView: View {
             showsPrimaryPicker: service.liveTrackingNumbers.count >= 2,
             onPromoteToPrimary: {
                 Task { await service.promoteToLiveActivityPrimary(trackingNumber: tracking.trackingNumber) }
-            }
+            },
+            onCarrierSuggestion: { requestCarrierSuggestion(tracking) }
         )
     }
 
@@ -880,6 +894,25 @@ struct DeliveryListView: View {
     private func requestDelete(_ tracking: TrackingListItem) {
         pendingDeleteTracking = tracking
         showDeleteConfirm = true
+    }
+
+    /// 택배사 변경 확인 문구 — 국내 운송장은 번호가 겹쳐 남의 택배일 수 있어 사용자가 직접 고르게 한다
+    private var carrierSuggestionMessage: String {
+        let carrier = pendingSuggestionTracking?.suggestedCarrierName ?? ""
+        let current = pendingSuggestionTracking?.carrierName ?? ""
+        return "\(current)에서는 조회가 안 되고 \(carrier)에서 조회돼요.\n다른 사람 택배일 수도 있으니 번호를 확인한 뒤 바꿔주세요."
+    }
+
+    private func requestCarrierSuggestion(_ tracking: TrackingListItem) {
+        pendingSuggestionTracking = tracking
+        showCarrierSuggestionConfirm = true
+    }
+
+    private func answerCarrierSuggestion(accept: Bool) {
+        guard let tracking = pendingSuggestionTracking else { return }
+        pendingSuggestionTracking = nil
+        if showDummyData { return }  // 더미 표시 중에는 서버에 보내지 않음
+        Task { await service.answerCarrierSuggestion(id: tracking.id, accept: accept) }
     }
 
     /// 확인 후 실제 삭제

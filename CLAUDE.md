@@ -192,7 +192,7 @@ Live Activity Expanded View
 ├── db/database.ts, migrations/001_initial.sql  # 멱등 컬럼 + 인덱스 마이그레이션(tracking_events UNIQUE(tracking_id,event_time,description) — INSERT OR IGNORE 중복 차단)
 ├── routes/
 │   ├── carriers.ts                     # GET /api/carriers (CARRIERS 상수)
-│   ├── trackings.ts                    # 택배 CRUD(PUT /:id = 품명·메모 수정) + push-token 등록 + force 추가
+│   ├── trackings.ts                    # 택배 CRUD(PUT /:id = 품명·메모 수정) + push-token 등록 + force 추가 + POST /:id/carrier-suggestion(다른 택배사 제안 수락/거절)
 │   ├── devices.ts                      # 디바이스 등록 + push-to-start-token + PUT /apns-token(일반알림) + GET /me(포인트) + POST /unlock-part
 │   ├── webhooks.ts                     # tracker.delivery 콜백 → track 재조회
 │   ├── legal.ts                        # GET /privacy · /terms (App Store 3.1.2(c)) + GET /app-ads.txt(AdMob 판매자 인증)
@@ -203,6 +203,7 @@ Live Activity Expanded View
     ├── hubGeocoder.ts                  # 국내 허브명 → 좌표(카카오 장소검색) + hub_locations 대응표 + 10분 cron
     ├── pushService.ts                  # Live Activity update/end + push-to-start
     ├── apnsClient.ts                   # APNs HTTP/2 + ES256 JWT (Node 내장 crypto/http2)
+    ├── carrierDetect.ts                # 운송장만으로 택배사 찾기(국내 6곳 순서 조회 → 17TRACK 자동 감지). 'auto' 등록과 조회 중단 시 다시 찾기 공용
     ├── statusMapper.ts, credentialMonitor.ts
     └── emailService.ts                  # Resend HTTP API — credential 만료 알림 메일
 ```
@@ -287,6 +288,9 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **알림 정책**: 상태 변경당 **배너 정확히 1개**. LA 중간 update = 무음 / 배송완료 end = 배너 + **도착 시 LA/DI 카드 즉시 제거**(`dismissal-date` = 현재시각) / push-to-start 되살림 = 배너(Apple 강제). **그 외(LA가 배너 안 띄운 모든 경우) = 표준 일반 알림(`sendStatusAlert`)** 으로 배너 — LA 미사용 택배 포함 모든 택배가 상태 변경 시 알림 받음. `pushService` 의 `bannerShown` 플래그로 중복 방지.
   - ⚠️ 표준 원격알림은 Xcode **Push Notifications capability(aps-environment entitlement)** 필요.
 - **조회 실패(NOT_FOUND) 처리**: 등록 시 force 미지정이면 422 → 앱이 확인 다이얼로그. 등록 후 데이터 없으면 앱에서 "확인 중"(12h 경과 시 "번호 확인 필요") 회색 표시.
+  - **5분 조회 중단**(`polling_stopped_at`): 자릿수 오류("운송장 번호는 …자리")는 즉시, 한 번도 조회 안 된 번호는 등록 후 240시간(운영 최장 216시간 근거) 뒤 중단. 중단 시 번호당 1번(`redetect_done_at`) 다른 택배사로 다시 찾기 → 찾으면 `suggested_carrier_id` 만 저장(택배사 자동 변경 금지, 남의 택배 위험). 중단된 번호는 `GET /api/trackings` 때 번호당 30분 간격으로 조회, 성공하면 중단 해제.
+  - 이미 배송완료인 번호를 추가하면 등록 시점에 `delivered_at` 을 찍음(폴링은 상태가 바뀔 때만 찍으므로).
+  - 서버: 자릿수 오류는 즉시, 한 번도 조회 안 된 번호는 등록 후 `NOT_FOUND_STOP_HOURS`(240h, 운영 DB 최대 216h 기준) 지나면 5분 조회 중단(`polling_stopped_at`) + 번호당 1회 `detectCarrier` 재조회(`redetect_done_at`). 다른 택배사에서 찾으면 `suggested_carrier_id` 만 저장(자동 변경 금지) → 앱 행에 "OO에서 찾았어요. 바꿀까요?" → `POST /api/trackings/:id/carrier-suggestion {accept}`. 중단된 번호는 목록 요청 시 번호당 30분 간격으로만 조회, 조회되면 중단 해제.
 
 ---
 
@@ -423,7 +427,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
   - **수정(EDIT)**: 탭 시 상단 입력 폼이 **편집 모드**로 열리며 기존 값 prefill. 운송장번호/택배사는 '신원'이라 **읽기전용**(회색), **품명·메모만 수정**. 제출 버튼 라벨이 ADD→**EDIT**. `service.updateTracking`(PUT /api/trackings/:id) 호출. (`editingTrackingId`로 add/edit 분기)
 - **추가 직후 강조**: 새로 추가된 행이 한 번 통통 바운스(`justAddedId` → `scaleEffect` 스프링). 사용자가 추가됨을 인지.
 - **메모(memo)**: 추가/수정 시 입력, 펼친 상세에 "MEMO" 표시. **풀스택 영속**(DB `trackings.memo` 컬럼 + 서버 create/update/list 반영 + `TrackingListItem.memo`).
-- **조회 안 되는 운송장**: `last_event_time` 없으면 회색 + "확인 중", 등록 12시간 경과 시 "번호 확인 필요"(오렌지)
+- **조회 안 되는 운송장**: `last_event_time` 없으면 회색 + "확인 중", 등록 12시간 경과 시 "번호 확인 필요"(오렌지). 서버가 다른 택배사에서 찾으면 행 위쪽에 주황 "OO에서 찾았어요. 바꿀까요?"(`row_carrier_suggestion_button`) → `PixelConfirm` 바꾸기/안 바꾸기
 - **갱신 멈춤**: 목록 응답의 `stalled_days`(Optional) 가 있으면 "· N일째 갱신 없음"(오렌지) + 트럭 앞 남은 길을 주황 ╳ 무늬로, 트럭에 주황 "!" 배지, 펼침 상단에 택배사 앱 확인 안내. 라이브 액티비티(잠금화면 타임라인, DI 펼침)도 `TrackingItemState.stalledDays` 로 같은 ╳ 무늬 + "!" 배지 + "N일째 갱신 없음" 표시(공용 `WStalledRoadMarks`/`WStalledBadge`). ⚠️ 서버는 아직 멈춤을 판정하지 않음(`stalled_days` 미전송, 푸시 content-state 에도 없음). 앱 표시만 구현, 더미 7번 쿠팡 건으로 확인.
 - **목록 저장본 선표시**: `TrackingListCache` 에 목록이 바뀔 때마다(조회, 수정, 삭제, 새로고침) 저장 → 앱 시작 시 저장본을 먼저 표시해 빈 화면 깜빡임 방지. 서버 목록 교체 시 `listRevision` +1 → 목록 ScrollView 스프링 애니메이션.
 - **트럭 버튼**(우상단): 사용자가 선택한 트럭(`CatalogTruckView`)을 표시 — `TruckConfigStore` 변경 시 자동 갱신
