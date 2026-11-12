@@ -52,6 +52,15 @@ async function pollTracking(trackingId: number): Promise<void> {
       ? await trackPackage17(carrier.trackerId, tracking.tracking_number)
       : await trackPackage(carrier.trackerId, tracking.tracking_number);
 
+    // 조회 결과를 매번 한 줄로 남긴다 — 성공한 조회의 내용이 없으면
+    // "택배사 앱과 다르다" 신고 때 당시 무엇을 받았는지 거꾸로 볼 수 없다.
+    const edges = result.track?.events?.edges ?? [];
+    const last = edges[edges.length - 1]?.node;
+    console.log(
+      `[Poll] tracking=${trackingId} carrier=${carrier.trackerId} events=${edges.length}` +
+      (last ? ` last="${last.description}" at=${last.time} code=${last.status.code}` : ' last=none'),
+    );
+
     if (!result.track?.lastEvent) return;
 
     // 모든 이벤트를 순서대로 처리
