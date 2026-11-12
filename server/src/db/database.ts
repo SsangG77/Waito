@@ -77,6 +77,12 @@ function runColumnMigrations(database: Database.Database): void {
   // 이벤트 좌표 — 17TRACK(해외)이 준 값만 저장. 국내는 NULL 이고 허브 대응표에서 채워 내려준다.
   addColumnIfMissing(database, 'tracking_events', 'lat', 'REAL');
   addColumnIfMissing(database, 'tracking_events', 'lon', 'REAL');
+  // 조회 안 되는 번호의 5분 조회를 멈춘 시각(NULL = 정상 조회 대상). 다시 조회되면 NULL 로 돌아감.
+  addColumnIfMissing(database, 'trackings', 'polling_stopped_at', 'TEXT');
+  // 모든 택배사에 다시 조회한 시각 — 번호당 1번만(17TRACK 은 새 번호 등록마다 1건 차감).
+  addColumnIfMissing(database, 'trackings', 'redetect_done_at', 'TEXT');
+  // 다시 조회로 찾은 다른 택배사 id. 서버가 바꾸지 않고 앱이 사용자에게 바꿀지 묻는다.
+  addColumnIfMissing(database, 'trackings', 'suggested_carrier_id', 'TEXT');
 }
 
 function addColumnIfMissing(

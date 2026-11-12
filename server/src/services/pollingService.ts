@@ -1,6 +1,7 @@
 import cron from 'node-cron';
 import { getDb } from '../db/database.js';
-import { trackPackage, registerWebhook, TEST_TRACKING_NUMBER, TEST_STEPS, TEST_STEP_INTERVAL_MS, testStepIndex } from './trackerApi.js';
+import { trackPackage, registerWebhook, isTrackingNotFoundError, isInvalidTrackingNumberError, TEST_TRACKING_NUMBER, TEST_STEPS, TEST_STEP_INTERVAL_MS, testStepIndex } from './trackerApi.js';
+import { detectCarrier } from './carrierDetect.js';
 import { trackPackage17, isTrack17Configured } from './track17Api.js';
 import { resolveNewStatus, mapTrackerStatus } from './statusMapper.js';
 import { pushTrackingUpdate, reviveExpiredActivities } from './pushService.js';
@@ -12,18 +13,67 @@ import { config } from '../config.js';
 const WEBHOOK_RENEW_INTERVAL_MS = 1000;
 
 /**
+ * 한 번도 조회된 적 없는 번호(NOT_FOUND 계속)를 5분 조회에서 빼는 기준 시간.
+ * 근거(운영 DB 2026-11-12, 결국 조회된 번호의 등록→첫 이벤트 저장): 최대 216시간(롯데 1건), 그다음 72.7시간.
+ * 최대치보다 넉넉히 10일. 멈춘 뒤에도 앱을 열 때 30분 간격 조회는 계속된다.
+ */
+export const NOT_FOUND_STOP_HOURS = 240;
+
+/** 등록 후 기준 시간이 지났는데 한 번도 조회 안 된 번호인지. created_at 은 SQLite UTC 'YYYY-MM-DD HH:MM:SS'. */
+export function isNotFoundTooLong(createdAt: string, lastEventTime: string | null, nowMs = Date.now()): boolean {
+  if (lastEventTime) return false;
+  const createdMs = new Date(createdAt.replace(' ', 'T') + 'Z').getTime();
+  return nowMs - createdMs >= NOT_FOUND_STOP_HOURS * 60 * 60 * 1000;
+}
+
+/**
+ * 5분 조회를 멈추고, 번호당 1번만 모든 택배사에 다시 조회한다.
+ * 다른 택배사에서 찾아도 택배사를 바꾸지 않는다 — suggested_carrier_id 에만 남기고 앱이 사용자에게 묻는다.
+ * (국내 운송장은 자릿수가 겹쳐 다른 택배사에서 남의 택배가 잡힐 수 있음)
+ */
+async function stopAndRedetect(
+  tracking: { id: number; carrier_id: string; tracking_number: string },
+  reason: string,
+): Promise<void> {
+  const db = getDb();
+  db.prepare("UPDATE trackings SET polling_stopped_at = COALESCE(polling_stopped_at, datetime('now')) WHERE id = ?")
+    .run(tracking.id);
+
+  // 먼저 "했음"을 남겨 동시에 들어온 조회(앱 열기 + 5분 조회)가 두 번 다시 찾지 않게 한다.
+  const claimed = db.prepare(
+    "UPDATE trackings SET redetect_done_at = datetime('now') WHERE id = ? AND redetect_done_at IS NULL",
+  ).run(tracking.id).changes > 0;
+  if (!claimed) return;
+
+  console.log(`[Poll] tracking=${tracking.id} 5분 조회 멈춤 (${reason}) → 모든 택배사 다시 조회`);
+  const found = await detectCarrier(tracking.tracking_number);
+  if (!found) {
+    console.log(`[Poll] tracking=${tracking.id} 다시 조회: 어느 택배사에서도 못 찾음`);
+    return;
+  }
+  if (found.id === tracking.carrier_id) {
+    // 원래 택배사에서 이제 조회됨 → 정상 조회 대상으로 복귀
+    db.prepare('UPDATE trackings SET polling_stopped_at = NULL WHERE id = ?').run(tracking.id);
+    return;
+  }
+  console.log(`[Poll] tracking=${tracking.id} 다시 조회: ${found.id} 에서 찾음 (사용자 선택 대기)`);
+  db.prepare('UPDATE trackings SET suggested_carrier_id = ? WHERE id = ?').run(found.id, tracking.id);
+}
+
+/**
  * 단일 추적 건을 폴링하여 상태를 업데이트한다.
  */
 async function pollTracking(trackingId: number): Promise<void> {
   const db = getDb();
   const tracking = db.prepare(
-    'SELECT id, carrier_id, tracking_number, current_status, created_at FROM trackings WHERE id = ?'
+    'SELECT id, carrier_id, tracking_number, current_status, created_at, last_event_time FROM trackings WHERE id = ?'
   ).get(trackingId) as {
     id: number;
     carrier_id: string;
     tracking_number: string;
     current_status: DeliveryStatus;
     created_at: string;
+    last_event_time: string | null;
   } | undefined;
 
   if (!tracking) return;
@@ -64,7 +114,13 @@ async function pollTracking(trackingId: number): Promise<void> {
       (last ? ` last="${last.description}" at=${last.time} code=${last.status.code}` : ' last=none'),
     );
 
-    if (!result.track?.lastEvent) return;
+    if (!result.track?.lastEvent) {
+      // 17TRACK 은 못 찾으면 오류 대신 빈 결과를 준다 — tracker 의 NOT_FOUND 와 같게 취급
+      if (isNotFoundTooLong(tracking.created_at, tracking.last_event_time)) {
+        await stopAndRedetect(tracking, `${NOT_FOUND_STOP_HOURS}시간째 조회 결과 없음`);
+      }
+      return;
+    }
 
     // 모든 이벤트를 순서대로 처리
     let newStatus = tracking.current_status;
@@ -104,7 +160,7 @@ async function pollTracking(trackingId: number): Promise<void> {
     // sub_stage(통관 등)는 COALESCE — 한 번 설정되면 유지(이벤트 50개 제한으로 잘려도 뒤로 안 감).
     db.prepare(`
       UPDATE trackings SET last_event_time = ?, sub_stage = COALESCE(?, sub_stage),
-                           updated_at = datetime('now') WHERE id = ?
+                           polling_stopped_at = NULL, updated_at = datetime('now') WHERE id = ?
     `).run(result.track.lastEvent.time, result.track.subStage ?? null, trackingId);
 
     // 상태가 변경된 경우에만 단계·푸시 갱신
@@ -138,6 +194,11 @@ async function pollTracking(trackingId: number): Promise<void> {
     db.prepare("UPDATE trackings SET last_polled_at = datetime('now') WHERE id = ?").run(trackingId);
   } catch (error) {
     console.error(`[Polling] Failed for tracking ${trackingId}:`, error);
+    if (isInvalidTrackingNumberError(error)) {
+      await stopAndRedetect(tracking, '자릿수 오류');
+    } else if (isTrackingNotFoundError(error) && isNotFoundTooLong(tracking.created_at, tracking.last_event_time)) {
+      await stopAndRedetect(tracking, `${NOT_FOUND_STOP_HOURS}시간째 조회 결과 없음`);
+    }
   }
 }
 
@@ -234,6 +295,7 @@ export function startPollingScheduler(): void {
     const trackings = db.prepare(`
       SELECT id FROM trackings
       WHERE delivered_at IS NULL
+        AND polling_stopped_at IS NULL  -- 조회 안 되는 번호는 앱을 열 때만 조회(GET /api/trackings)
     `).all() as Array<{ id: number }>;
 
     for (const t of trackings) {

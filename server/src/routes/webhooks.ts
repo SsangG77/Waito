@@ -83,8 +83,9 @@ async function processWebhook(payload: any): Promise<void> {
     }
 
     // 상태가 그대로여도 최신 이벤트 시각은 항상 반영 (폴링 경로와 동일)
+    // 조회가 됐으니 5분 조회를 멈췄던 번호도 다시 정상 조회 대상으로 돌린다.
     db.prepare(`
-      UPDATE trackings SET last_event_time = ?, updated_at = datetime('now') WHERE id = ?
+      UPDATE trackings SET last_event_time = ?, polling_stopped_at = NULL, updated_at = datetime('now') WHERE id = ?
     `).run(result.track.lastEvent.time, tracking.id);
 
     if (newStatus !== tracking.current_status) {

@@ -132,6 +132,18 @@ export function isTrackingNotFoundError(error: unknown): boolean {
   );
 }
 
+/**
+ * "운송장 번호는 10자리 혹은 12자리입니다." 같은 자릿수 오류인지 판별한다.
+ * 같은 택배사로는 몇 번을 다시 물어도 결과가 같으므로 바로 조회를 멈춘다.
+ * (오류 코드는 확인 못 함 — 운영 로그에 찍힌 문구로만 판별)
+ */
+export function isInvalidTrackingNumberError(error: unknown): boolean {
+  return (
+    error instanceof ClientError &&
+    (error.response.errors?.some(e => /운송장 번호는.*자리/.test(e.message)) ?? false)
+  );
+}
+
 // 최신 API: registerTrackWebhook 은 Boolean 을 반환하므로 subfield 를 선택하지 않는다.
 // 등록 해제는 별도 mutation 없이 expirationTime 에 과거 시각을 넣어 호출하면 되며,
 // 일반적으로는 TTL 만료로 자동 해제되도록 두는 것을 권장한다.

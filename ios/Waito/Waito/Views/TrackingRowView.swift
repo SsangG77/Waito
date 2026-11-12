@@ -31,6 +31,8 @@ struct TrackingRowView: View {
     var showsPrimaryPicker: Bool = false
     /// 라디오 선택 → 이 택배를 DI 대표로
     var onPromoteToPrimary: () -> Void = {}
+    /// "다른 택배사에서 찾았어요" 안내 탭 → 상위가 바꿀지 확인 팝업을 띄운다
+    var onCarrierSuggestion: () -> Void = {}
 
     @State private var isExpanded = false
     // 해외 이벤트 번역 (온디바이스 Translation framework)
@@ -249,6 +251,27 @@ struct TrackingRowView: View {
         .frame(height: truckSize)
     }
     
+    /// 조회가 안 돼 다른 택배사에 다시 찾아봤더니 나온 경우 — 접힘/펼침 모두 보임. 탭하면 바꿀지 묻는다.
+    private func carrierSuggestionNotice(_ carrierName: String) -> some View {
+        Button(action: onCarrierSuggestion) {
+            HStack(spacing: 6) {
+                Text("\(carrierName)에서 찾았어요. 바꿀까요?")
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 0)
+                Text(">")
+            }
+            .font(pixelFont(12))
+            .foregroundStyle(Color.pixelOrange)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .pixelBox(border: Color.pixelOrange.opacity(0.7), bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, 14)
+        .padding(.bottom, 8)
+        .accessibilityIdentifier("row_carrier_suggestion_button")
+    }
+
     /// 펼침 상단 안내 — 갱신 멈춤일 때만
     private var stalledNotice: some View {
         HStack(alignment: .top, spacing: 8) {
@@ -553,6 +576,10 @@ struct TrackingRowView: View {
             .padding(.horizontal, 14)
             .padding(.top, 12)
             .padding(.bottom, 8)
+
+            if let carrierName = tracking.suggestedCarrierName {
+                carrierSuggestionNotice(carrierName)
+            }
 
             // 접힌 상태: 가로 픽셀 프로그레스 바
             if !isExpanded {

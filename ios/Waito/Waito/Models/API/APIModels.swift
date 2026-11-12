@@ -45,6 +45,11 @@ struct TrackingUpdateRequest: Encodable {
     let memo: String?
 }
 
+/// 다른 택배사에서 찾은 안내에 대한 사용자 선택 (true = 그 택배사로 바꿈, false = 안내 닫기)
+struct CarrierSuggestionRequest: Encodable {
+    let accept: Bool
+}
+
 // MARK: - Device Progress (배송완료 포인트 + 해제 부품)
 
 /// GET /api/devices/me, POST /api/devices/unlock-part 공통 응답
@@ -102,6 +107,8 @@ struct TrackingListItem: Codable, Identifiable {
     let isInternational: Bool?
     /// 갱신이 멈춘 지 며칠째인지(서버 판정). nil = 정상. 구서버 호환 Optional.
     let stalledDays: Int?
+    /// 조회가 안 돼 다른 택배사에 다시 찾아본 결과 — 찾은 택배사 이름. nil = 안내 없음. 구서버 호환 Optional.
+    let suggestedCarrierName: String?
 
     enum CodingKeys: String, CodingKey {
         case id
@@ -121,6 +128,7 @@ struct TrackingListItem: Codable, Identifiable {
         case subStage = "sub_stage"
         case isInternational = "is_international"
         case stalledDays = "stalled_days"
+        case suggestedCarrierName = "suggested_carrier_name"
     }
 
     /// 한 번이라도 조회에 성공해 이벤트를 받았는지. nil 이면 "아직 데이터 없음"
@@ -149,7 +157,8 @@ struct TrackingListItem: Codable, Identifiable {
         events: [TrackingEvent]? = nil,
         subStage: String? = nil,
         isInternational: Bool? = nil,
-        stalledDays: Int? = nil
+        stalledDays: Int? = nil,
+        suggestedCarrierName: String? = nil
     ) {
         self.id = id
         self.carrierId = carrierId
@@ -157,6 +166,7 @@ struct TrackingListItem: Codable, Identifiable {
         self.itemName = itemName
         self.memo = memo
         self.stalledDays = stalledDays
+        self.suggestedCarrierName = suggestedCarrierName
         self.currentStatus = currentStatus
         self.currentTValue = currentTValue
         self.carrierName = carrierName
