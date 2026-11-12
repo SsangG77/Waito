@@ -144,6 +144,21 @@ export function isInvalidTrackingNumberError(error: unknown): boolean {
   );
 }
 
+/**
+ * 기록용 한 줄 요약. ClientError 를 통째로 찍으면 message 안에 요청·응답 JSON 이 전부 들어가
+ * 5분 주기 반복 오류마다 수 KB 씩 기록이 쌓인다 → 상태 코드와 GraphQL 오류 메시지만 남긴다.
+ */
+export function errorSummary(error: unknown): string {
+  if (error instanceof ClientError) {
+    const errs = error.response.errors
+      ?.map(e => (e.extensions?.code ? `${e.extensions.code} ${e.message}` : e.message))
+      .join('; ');
+    return `GraphQL HTTP ${error.response.status}${errs ? ` ${errs}` : ''}`.slice(0, 300);
+  }
+  const text = error instanceof Error ? error.message : String(error);
+  return text.split('\n')[0].slice(0, 300);
+}
+
 // 최신 API: registerTrackWebhook 은 Boolean 을 반환하므로 subfield 를 선택하지 않는다.
 // 등록 해제는 별도 mutation 없이 expirationTime 에 과거 시각을 넣어 호출하면 되며,
 // 일반적으로는 TTL 만료로 자동 해제되도록 두는 것을 권장한다.

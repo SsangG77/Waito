@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { getDb } from '../db/database.js';
-import { trackPackage, registerWebhook, isTrackingNotFoundError, isInvalidTrackingNumberError, TEST_TRACKING_NUMBER, TEST_STEPS, TEST_STEP_INTERVAL_MS, testStepIndex } from './trackerApi.js';
+import { trackPackage, registerWebhook, isTrackingNotFoundError, isInvalidTrackingNumberError, TEST_TRACKING_NUMBER, TEST_STEPS, TEST_STEP_INTERVAL_MS, testStepIndex, errorSummary } from './trackerApi.js';
 import { detectCarrier } from './carrierDetect.js';
 import { trackPackage17, isTrack17Configured } from './track17Api.js';
 import { resolveNewStatus, mapTrackerStatus } from './statusMapper.js';
@@ -193,7 +193,7 @@ async function pollTracking(trackingId: number): Promise<void> {
     // 폴링 시간 업데이트
     db.prepare("UPDATE trackings SET last_polled_at = datetime('now') WHERE id = ?").run(trackingId);
   } catch (error) {
-    console.error(`[Polling] Failed for tracking ${trackingId}:`, error);
+    console.error(`[Polling] Failed for tracking ${trackingId}:`, errorSummary(error));
     if (isInvalidTrackingNumberError(error)) {
       await stopAndRedetect(tracking, '자릿수 오류');
     } else if (isTrackingNotFoundError(error) && isNotFoundTooLong(tracking.created_at, tracking.last_event_time)) {
@@ -310,7 +310,7 @@ export function startPollingScheduler(): void {
     try {
       await reviveExpiredActivities();
     } catch (error) {
-      console.error('[Keep-Alive] 실행 실패:', error);
+      console.error('[Keep-Alive] 실행 실패:', errorSummary(error));
     }
   });
 
@@ -351,7 +351,7 @@ export function startPollingScheduler(): void {
           WHERE id = ?
         `).run(result.expiresAt, t.id);
       } catch (error) {
-        console.error(`[Webhook] Renewal failed for tracking ${t.id}:`, error);
+        console.error(`[Webhook] Renewal failed for tracking ${t.id}:`, errorSummary(error));
       }
       // 0시 정각은 5분 조회와 겹친다. 시각만 옮기면 조회가 길어질 때 또 겹치므로
       // 갱신 호출 사이를 띄워 이 루프가 더하는 호출을 초당 1건 이하로 묶는다(하루 1회라 느려도 무방).
