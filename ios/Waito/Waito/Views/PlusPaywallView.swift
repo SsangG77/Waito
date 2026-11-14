@@ -29,6 +29,8 @@ struct PlusPaywallView: View {
             Color.bg.ignoresSafeArea()
 
             VStack(spacing: 0) {
+                // 닫기 버튼을 위에 떠 있게 두면 잠금화면 카드 오른쪽 위와 겹쳐서, 카드 위 한 줄로 뺌
+                closeButton
                 PlusMarketingHero()   // 공유 마케팅 히어로(트럭 그리드 + 타이틀 + 혜택)
 
                 Spacer(minLength: 16)
@@ -46,8 +48,6 @@ struct PlusPaywallView: View {
                     .padding(.top, 12)
                 footer
             }
-
-            closeButton
         }
         .alert("구매를 완료하지 못했어요", isPresented: $showPurchaseError) {
             Button("확인", role: .cancel) {}
@@ -224,7 +224,8 @@ struct PlusPaywallView: View {
             .buttonStyle(.plain)
         }
         .padding(.horizontal, 16)
-        .padding(.top, 12)
+        .padding(.top, 4)
+        .accessibilityIdentifier("paywall_close_button")
     }
 }
 
