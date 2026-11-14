@@ -32,8 +32,14 @@ final class TrackingService {
     private(set) var deliveredCount = 0
     /// 포인트로 해제한 부품 rawValue 집합
     private(set) var unlockedParts: Set<String> = []
-    /// 사용 가능한 잔여 포인트 = 획득 - 해제수 * 비용
-    var pointBalance: Int { max(0, deliveredCount - unlockedParts.count * pointUnlockCost) }
+    /// 광고 보고 받은 포인트 누적 (서버 보관)
+    private(set) var bonusPoints = 0
+    /// 오늘 광고 보상 받은 횟수 / 하루 상한
+    private(set) var adRewardsToday = 0
+    private(set) var adRewardDailyLimit = 3
+    var canClaimAdReward: Bool { adRewardsToday < adRewardDailyLimit }
+    /// 사용 가능한 잔여 포인트 = 배송완료 + 광고 보상 - 해제수 * 비용
+    var pointBalance: Int { max(0, deliveredCount + bonusPoints - unlockedParts.count * pointUnlockCost) }
 
     func isUnlocked(_ partRawValue: String) -> Bool { unlockedParts.contains(partRawValue) }
 
@@ -199,8 +205,25 @@ final class TrackingService {
     func loadDeviceProgress() async {
         guard let token = deviceToken else { return }
         if let progress = try? await api.getDeviceProgress(deviceToken: token) {
-            deliveredCount = progress.deliveredCount
-            unlockedParts = Set(progress.unlockedParts)
+            apply(progress)
+        }
+    }
+
+    private func apply(_ progress: DeviceProgress) {
+        deliveredCount = progress.deliveredCount
+        unlockedParts = Set(progress.unlockedParts)
+        bonusPoints = progress.bonusPoints ?? 0
+        adRewardsToday = progress.adRewardsToday ?? 0
+        adRewardDailyLimit = progress.adRewardDailyLimit ?? adRewardDailyLimit
+    }
+
+    /// 광고를 끝까지 본 뒤 1포인트 받기. 하루 상한을 넘었으면 서버가 거절 → 진행도만 다시 읽음.
+    func claimAdReward() async {
+        guard let token = deviceToken else { return }
+        if let progress = try? await api.claimAdReward(deviceToken: token) {
+            apply(progress)
+        } else {
+            await loadDeviceProgress()
         }
     }
 
@@ -209,8 +232,7 @@ final class TrackingService {
         guard let token = deviceToken else { return false }
         do {
             let progress = try await api.unlockPart(deviceToken: token, part: partRawValue)
-            deliveredCount = progress.deliveredCount
-            unlockedParts = Set(progress.unlockedParts)
+            apply(progress)
             self.error = nil
             return true
         } catch {

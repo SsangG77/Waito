@@ -101,6 +101,11 @@ actor APIClient {
         try await post("/api/devices/unlock-part", body: UnlockPartRequest(deviceToken: deviceToken, part: part))
     }
 
+    /// 광고 1편 끝까지 본 보상 1포인트 — 갱신된 진행도 반환(하루 상한 넘으면 오류)
+    func claimAdReward(deviceToken: String) async throws -> DeviceProgress {
+        try await post("/api/devices/ad-reward", body: AdRewardRequest(deviceToken: deviceToken))
+    }
+
     /// 표준 원격알림(일반 배너)용 APNs device token 등록
     func registerAPNsToken(deviceToken: String, apnsToken: String) async throws {
         let _: SuccessResponse = try await put(

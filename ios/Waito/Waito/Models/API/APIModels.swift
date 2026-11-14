@@ -56,6 +56,15 @@ struct CarrierSuggestionRequest: Encodable {
 struct DeviceProgress: Decodable {
     let deliveredCount: Int     // 배송완료 누적 = 획득 포인트
     let unlockedParts: [String] // 포인트로 해제한 부품 rawValue 목록
+    // 광고 보상 — 옛 서버는 안 보내므로 전부 Optional
+    let bonusPoints: Int?         // 광고 보고 받은 포인트 누적
+    let adRewardsToday: Int?      // 오늘 광고 보상 받은 횟수
+    let adRewardDailyLimit: Int?  // 하루 상한
+}
+
+/// POST /api/devices/ad-reward
+struct AdRewardRequest: Encodable {
+    let deviceToken: String
 }
 
 struct UnlockPartRequest: Encodable {

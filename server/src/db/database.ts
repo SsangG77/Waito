@@ -61,8 +61,12 @@ function runColumnMigrations(database: Database.Database): void {
   addColumnIfMissing(database, 'trackings', 'memo', 'TEXT');
   // 디바이스별 배송완료 누적 카운트 (트럭 부품 해제 보상용). 토큰은 클라 Keychain 에 영속.
   addColumnIfMissing(database, 'devices', 'delivered_count', 'INTEGER DEFAULT 0');
-  // 포인트로 해제한 부품 목록(JSON 배열). 잔여 포인트 = delivered_count - 해제수 * 비용
+  // 포인트로 해제한 부품 목록(JSON 배열). 잔여 포인트 = delivered_count + ad_reward_points - 해제수 * 비용
   addColumnIfMissing(database, 'devices', 'unlocked_parts', 'TEXT');
+  // 광고 보고 받은 포인트 누적 + 하루 상한 계산용(한국 날짜, 그날 받은 횟수)
+  addColumnIfMissing(database, 'devices', 'ad_reward_points', 'INTEGER DEFAULT 0');
+  addColumnIfMissing(database, 'devices', 'ad_reward_date', 'TEXT');
+  addColumnIfMissing(database, 'devices', 'ad_reward_today', 'INTEGER DEFAULT 0');
   // 표준 원격알림(일반 배너)용 APNs device token. Live Activity 토큰과 별개.
   addColumnIfMissing(database, 'devices', 'apns_token', 'TEXT');
   // 디바이스당 단일 Live Activity 의 갱신(update) 토큰 — 어느 택배가 바뀌든 이 토큰으로 전체 items 갱신.

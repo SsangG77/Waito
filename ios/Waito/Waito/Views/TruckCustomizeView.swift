@@ -8,6 +8,7 @@ struct TruckCustomizeView: View {
 
     @State private var showSubscriptionAlert = false
     @State private var showPointInfo = false          // 포인트 규칙 안내 펼침 여부
+    @State private var rewardedAd = RewardedAdLoader() // "광고 보고 +1P" 광고
 
     /// 미리보기용 임시 조합. 잠금 요소도 자유롭게 골라 미리 볼 수 있고,
     /// "저장하기"를 눌러야 store.config 에 커밋된다(= Live Activity/서버 갱신).
@@ -30,6 +31,9 @@ struct TruckCustomizeView: View {
                 VStack(spacing: 20) {
                     previewSection
                     pointBar
+                    if !subscription.isSubscribed && RewardedAdLoader.isAvailable {
+                        adRewardButton
+                    }
 
                     catalogSection(title: "CAB", items: TruckCab.allCases, selected: draft.cab) { cab in
                         CatalogTruckView(cab: cab, truckBody: draft.body, wheels: draft.wheelType, size: 56)
@@ -58,6 +62,10 @@ struct TruckCustomizeView: View {
         .toolbar(.hidden, for: .navigationBar)
         .safeAreaInset(edge: .bottom) { saveBar }
         .task { await service.loadDeviceProgress() }
+        // 동의 절차가 끝나 광고 요청이 허용되는 순간 미리 불러둔다
+        .task(id: AdConsentService.shared.canRequestAds) {
+            if !subscription.isSubscribed { rewardedAd.load() }
+        }
         .onChange(of: store.config) {
             Task {
                 await service.pushTruckConfig()            // 실행 중인 Activity 즉시 반영
@@ -112,6 +120,9 @@ struct TruckCustomizeView: View {
                 VStack(alignment: .leading, spacing: 7) {
                     Text("배송완료 1건에 1P가 적립됩니다.")
                     Text("아이템 해제 \(pointUnlockCost)P를 사용합니다.")
+                    if !subscription.isSubscribed && RewardedAdLoader.isAvailable {
+                        Text("광고를 끝까지 보면 1P, 하루 \(service.adRewardDailyLimit)번까지.")
+                    }
                 }
                 .font(pixelFont(15))
                 .foregroundStyle(Color.pixelMuted)
@@ -122,6 +133,42 @@ struct TruckCustomizeView: View {
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
         .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
+    }
+
+    // MARK: - 광고 보고 포인트 받기 (무료 사용자)
+
+    /// 하루 상한을 다 쓰면 "내일 다시" 회색, 광고가 아직 안 불러졌으면 "광고 준비 중" 회색
+    private var adRewardButton: some View {
+        let used = service.adRewardsToday
+        let limit = service.adRewardDailyLimit
+        let canClaim = service.canClaimAdReward
+        let enabled = canClaim && rewardedAd.isReady
+        return Button {
+            rewardedAd.show {
+                Task { await service.claimAdReward() }
+            }
+        } label: {
+            HStack(spacing: 6) {
+                Text(canClaim ? (rewardedAd.isReady ? "▶ 광고 보고 +1P" : "광고 준비 중…") : "오늘은 다 받았어요")
+                    .font(pixelFont(13))
+                Text("(오늘 \(used)/\(limit))")
+                    .font(pixelFont(11))
+                    .foregroundStyle(Color.pixelMuted)
+            }
+            .foregroundStyle(enabled ? Color.pixelOrange : Color.pixelMuted)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 10)
+            .pixelBox(
+                border: enabled ? Color.pixelOrange : Color.pixelBorder,
+                bg: Color.pixelSurface,
+                lineWidth: 1.5,
+                notch: 4
+            )
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
+        .padding(.top, -12)   // 포인트 바에 붙여 한 묶음으로 보이게
+        .accessibilityIdentifier("truck_ad_reward_button")
     }
 
     // MARK: - 잠금 판정
