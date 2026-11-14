@@ -18,6 +18,21 @@ enum DeliverySortOrder: String, CaseIterable {
     }
 }
 
+/// 목록 위 칩으로 거르는 범위
+enum DeliveryListFilter: String, CaseIterable {
+    case all      // 전체
+    case active   // 진행 중
+    case done     // 완료
+
+    var label: String {
+        switch self {
+        case .all:    return "전체"
+        case .active: return "진행"
+        case .done:   return "완료"
+        }
+    }
+}
+
 // MARK: - 택배 목록
 
 struct DeliveryListView: View {
@@ -37,6 +52,11 @@ struct DeliveryListView: View {
     @State private var showFirstAddPaywall = false
     /// 지도를 열 택배 (구독자 전용). nil 이면 닫힘.
     @State private var mapTracking: TrackingListItem?
+    /// 무료 사용자가 잠긴 MAP 을 눌렀을 때 "광고 보고 1번 보기 / Plus 구독" 선택 창
+    @State private var mapAdChoiceTracking: TrackingListItem?
+    @State private var showMapAdChoice = false
+    /// 지도 1번 보기에 쓰는 보상 광고 (미리 불러둠)
+    @State private var rewardedAd = RewardedAdLoader()
     /// 업셀 페이월을 이미 보여줬는지 (평생 1회)
     @AppStorage("has_shown_first_add_paywall") private var hasShownFirstAddPaywall = false
     /// 지금까지 성공한 택배 추가 횟수(누적) — 두 번째 추가 시 페이월 트리거용(삭제/재등록에 무관)
@@ -56,8 +76,9 @@ struct DeliveryListView: View {
     /// 정렬 기준 (기본: 도착 임박순, 사용자 선택 영구 저장)
     @AppStorage("delivery_sort_order") private var sortOrderRaw = DeliverySortOrder.arrival.rawValue
     private var sortOrder: DeliverySortOrder { DeliverySortOrder(rawValue: sortOrderRaw) ?? .arrival }
-    /// 완료 섹션 접힘 상태 (기본 접힘, 영구 저장)
-    @AppStorage("completed_section_collapsed") private var completedCollapsed = true
+    /// 목록 거르기 칩 선택 (기본: 진행 중, 영구 저장)
+    @AppStorage("delivery_list_filter") private var listFilterRaw = DeliveryListFilter.active.rawValue
+    private var listFilter: DeliveryListFilter { DeliveryListFilter(rawValue: listFilterRaw) ?? .active }
 
     // 디버그 토글(#if DEBUG UI) 또는 설정 비밀번호 언락으로 켜짐 — 릴리즈에서도 동작하도록 키를 항상 읽는다
     @AppStorage("debug_show_dummy_data") private var showDummyData = false
@@ -128,6 +149,16 @@ struct DeliveryListView: View {
                 DeliveryMapView(tracking: tracking) { mapTracking = nil }
             }
             .pixelConfirm(
+                title: "배송 경로 지도",
+                message: "Plus 전용 기능이에요.\n광고를 끝까지 보면 이 택배 지도를 1번 볼 수 있어요.",
+                confirmTitle: "광고 보고 보기",
+                cancelTitle: "Plus 구독",
+                isPresented: $showMapAdChoice,
+                onCancel: { showPaywall = true }
+            ) {
+                watchAdForMap()
+            }
+            .pixelConfirm(
                 title: "운송장 확인",
                 message: notFoundMessage,
                 confirmTitle: "그래도 추가",
@@ -181,6 +212,10 @@ struct DeliveryListView: View {
                         .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 8)
                     }
                 }
+            }
+            // 동의 절차가 끝나 광고 요청이 허용되는 순간 지도용 보상 광고를 미리 불러둔다
+            .task(id: AdConsentService.shared.canRequestAds) {
+                if !subscription.isSubscribed { rewardedAd.load() }
             }
             .task {
                 if service.carriers.isEmpty {
@@ -318,18 +353,20 @@ struct DeliveryListView: View {
         return sortTrackings(service.trackings)
     }
 
-    /// 진행 중(미완료) 항목 — 현재 정렬 적용된 displayedTrackings 에서 필터(그룹 내 순서 유지)
-    private var activeTrackings: [TrackingListItem] {
-        displayedTrackings.filter { !$0.currentStatus.isCompleted }
+    /// 칩 하나에 해당하는 항목 — 정렬된 displayedTrackings 에서 거름(순서 유지)
+    private func trackings(for filter: DeliveryListFilter) -> [TrackingListItem] {
+        switch filter {
+        case .all:    return displayedTrackings
+        case .active: return displayedTrackings.filter { !$0.currentStatus.isCompleted }
+        case .done:   return displayedTrackings.filter { $0.currentStatus.isCompleted }
+        }
     }
 
-    /// 완료(배송완료) 항목 — 리스트 아래 별도 섹션으로 구분
-    private var completedTrackings: [TrackingListItem] {
-        displayedTrackings.filter { $0.currentStatus.isCompleted }
-    }
+    /// 지금 선택된 칩으로 거른 목록
+    private var filteredTrackings: [TrackingListItem] { trackings(for: listFilter) }
 
     /// 광고 자리 규칙 — 택배가 하나뿐이면 그 아래 1개, 둘 이상이면 3개마다 1개.
-    /// 진행 중·완료 목록에 똑같이 적용한다. 구독자에게는 광고를 넣지 않는다.
+    /// 어느 칩을 골라도 똑같이 적용한다. 구독자에게는 광고를 넣지 않는다.
     private func showsAd(after index: Int, of count: Int) -> Bool {
         guard !subscription.isSubscribed else { return false }
         if count == 1 { return index == 0 }
@@ -361,8 +398,9 @@ struct DeliveryListView: View {
         VStack(spacing: 8) {
             actionButtons
 
-            HStack {
-                Spacer()
+            HStack(spacing: 5) {
+                filterChips
+                Spacer(minLength: 6)
                 sortBar
             }
             .zIndex(1)  // 펼친 정렬 메뉴가 아래 리스트 위에 떠 보이도록
@@ -373,36 +411,16 @@ struct DeliveryListView: View {
             }
 
             ScrollView {
-                if activeTrackings.isEmpty && completedTrackings.isEmpty {
-                    // 아무 항목도 없음 → 화면 가운데 달리는 트럭
+                if filteredTrackings.isEmpty {
+                    // 고른 칩에 해당하는 택배가 없음 → 화면 가운데 달리는 트럭
                     emptyState
                         .frame(minHeight: 660)
                 } else {
                     LazyVStack(spacing: 8) {
-                        // 진행 중 — 없으면(완료만 있을 때) 트럭을 보여주고 완료 섹션은 아래에
-                        if activeTrackings.isEmpty {
-                            emptyState
-                                .frame(minHeight: 360)
-                        } else {
-                            ForEach(Array(activeTrackings.enumerated()), id: \.element.id) { index, tracking in
-                                rowView(tracking)
-                                if showsAd(after: index, of: activeTrackings.count) {
-                                    NativeAdRowView()
-                                }
-                            }
-                        }
-
-                        // 완료 — 리스트 아래 별도 섹션(헤더 탭으로 접기/펼치기)
-                        if !completedTrackings.isEmpty {
-                            completedHeader
-                            if !completedCollapsed {
-                                ForEach(Array(completedTrackings.enumerated()), id: \.element.id) { index, tracking in
-                                    rowView(tracking)
-                                        .transition(.move(edge: .top).combined(with: .opacity))
-                                    if showsAd(after: index, of: completedTrackings.count) {
-                                        NativeAdRowView()
-                                    }
-                                }
+                        ForEach(Array(filteredTrackings.enumerated()), id: \.element.id) { index, tracking in
+                            rowView(tracking)
+                            if showsAd(after: index, of: filteredTrackings.count) {
+                                NativeAdRowView()
                             }
                         }
                     }
@@ -418,6 +436,12 @@ struct DeliveryListView: View {
         .padding(.horizontal, 16)
         .padding(.top, 4)
         .background(Color.bg)
+        // 목록이 비어 달리는 트럭이 보일 때만, 무료 사용자에게 화면 맨 아래 배너 광고
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            if filteredTrackings.isEmpty && !subscription.isSubscribed {
+                BannerAdSlot()
+            }
+        }
     }
 
     /// 택배 행 1개 (진행 중/완료 섹션 공용)
@@ -430,6 +454,7 @@ struct DeliveryListView: View {
             onEdit: { startEditing(tracking) },
             onMap: { openMap(for: tracking) },
             isMapUnlocked: subscription.isSubscribed,
+            showsExpandedAd: !subscription.isSubscribed,
             openRowId: $openRowId,
             justAddedId: justAddedId,
             liveActivityRank: service.liveActivityRank(trackingNumber: tracking.trackingNumber),
@@ -441,29 +466,36 @@ struct DeliveryListView: View {
         )
     }
 
-    /// "완료 N" 섹션 헤더 — 탭하면 접기/펼치기
-    private var completedHeader: some View {
-        Button {
-            openRowId = nil
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
-                completedCollapsed.toggle()
+    /// 정렬 버튼 왼쪽 칩 — 전체 / 진행 / 완료 (각 개수 표시)
+    private var filterChips: some View {
+        HStack(spacing: 5) {
+            ForEach(DeliveryListFilter.allCases, id: \.self) { filter in
+                let selected = filter == listFilter
+                Button {
+                    openRowId = nil
+                    sortMenuOpen = false
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.82)) {
+                        listFilterRaw = filter.rawValue
+                    }
+                } label: {
+                    Text("\(filter.label) \(trackings(for: filter).count)")
+                        .font(pixelFont(11))
+                        .lineLimit(1)
+                        .fixedSize()
+                        .foregroundStyle(selected ? Color.bg : Color.pixelMuted)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 7)
+                        .pixelBox(
+                            border: selected ? Color.pixelOrange : Color.pixelBorder,
+                            bg: selected ? Color.pixelOrange : Color.pixelSurface,
+                            lineWidth: 1.5,
+                            notch: 3
+                        )
+                }
+                .buttonStyle(.plain)
+                .accessibilityIdentifier("list_filter_\(filter.rawValue)_chip")
             }
-        } label: {
-            HStack(spacing: 8) {
-                Text("완료 \(completedTrackings.count)")
-                    .font(pixelFont(10))
-                    .foregroundStyle(Color.pixelMuted)
-                Spacer()
-                PixelChevron(isExpanded: !completedCollapsed)
-                    .frame(width: 10, height: 7)
-                    .foregroundStyle(Color.pixelMuted)
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
-            .pixelBox(border: Color.pixelBorder, bg: Color.pixelSurface, lineWidth: 1.5, notch: 4)
         }
-        .buttonStyle(.plain)
-        .padding(.top, 4)
     }
 
     // MARK: - 빈 상태 (택배 없음 → 달리는 트럭)
@@ -523,6 +555,9 @@ struct DeliveryListView: View {
 
     /// 3버튼 칩 대신 콤팩트 드롭다운. 선택은 @AppStorage("delivery_sort_order") 에 유지된다.
     /// 펼침 목록은 overlay 로 띄워 아래 요소(리스트)를 밀지 않고 위에 덮는다.
+    /// 왼쪽 칩과 한 줄에 들어가도록 줄인 폭 (헤더, 펼침 목록 공용)
+    private let sortBarWidth: CGFloat = 118
+
     private var sortBar: some View {
         sortHeader
             .background(
@@ -556,7 +591,7 @@ struct DeliveryListView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .frame(width: 156)
+        .frame(width: sortBarWidth)
         .pixelBox(
             border: sortMenuOpen ? Color.pixelOrange.opacity(0.6) : Color.pixelBorder,
             bg: Color.pixelSurface,
@@ -598,7 +633,7 @@ struct DeliveryListView: View {
                 .buttonStyle(.plain)
             }
         }
-        .frame(width: 156)
+        .frame(width: sortBarWidth)
         .pixelBox(
             border: Color.pixelOrange.opacity(0.6),
             bg: Color.pixelSurface,
@@ -848,9 +883,22 @@ struct DeliveryListView: View {
     private func openMap(for tracking: TrackingListItem) {
         if subscription.isSubscribed {
             mapTracking = tracking
+        } else if rewardedAd.isReady {
+            // 광고가 준비돼 있으면 "광고 보고 1번 보기" 선택지를 먼저 보여줌
+            mapAdChoiceTracking = tracking
+            showMapAdChoice = true
         } else {
+            // 출시판 광고 단위가 없거나 광고를 못 불렀으면 예전처럼 바로 페이월
             showPaywall = true
         }
+    }
+
+    /// 보상 광고를 끝까지 보면 고른 택배 지도를 1번 연다
+    private func watchAdForMap() {
+        guard let tracking = mapAdChoiceTracking else { return }
+        mapAdChoiceTracking = nil
+        let shown = rewardedAd.show { mapTracking = tracking }
+        if !shown { showPaywall = true }
     }
 
     /// 행의 EDIT 탭 → 폼을 편집 모드로 열고 기존 값으로 채운다
@@ -1015,9 +1063,8 @@ struct DeliveryListView: View {
 }
 
 #Preview("완료만 있을 때") {
-    // 배송중(진행 중) 항목 없이 배송완료만 → 위에 달리는 트럭 + 아래 "완료 N" 섹션
-    // 완료 섹션은 기본 접힘이라, 프리뷰에선 펼친 상태로 보이도록 키를 미리 세팅
-    UserDefaults.standard.set(false, forKey: "completed_section_collapsed")
+    // 배송중(진행 중) 항목 없이 배송완료만 → 완료 칩을 골라 둔 상태로 표시
+    UserDefaults.standard.set(DeliveryListFilter.done.rawValue, forKey: "delivery_list_filter")
     // DEBUG 더미 데이터 토글이 켜져 있으면 주입한 완료-전용 데이터 대신 더미(배송중 포함)가 떠서 꺼둔다
     UserDefaults.standard.set(false, forKey: "debug_show_dummy_data")
     let service = TrackingService(preview: [

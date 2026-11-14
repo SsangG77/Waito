@@ -162,6 +162,7 @@ Live Activity Expanded View
 │   ├── TruckCustomizeView.swift        # 트럭 꾸미기(잠금 탭 → PlusPaywallView)
 │   ├── DeliveryMapView.swift           # 배송 경로 지도(구독 전용): 지나온 지점 도트 + 현재 위치 커스텀 트럭 + 점선 경로
 │   ├── NativeAdRowView.swift           # AdMob 네이티브 광고 행(픽셀 상자 + "광고" 배지, NativeAdView UIKit 래핑)
+│   ├── BannerAdView.swift              # 빈 화면 하단 적응형 배너(BannerAdSlot)
 │   └── TruckDrawing/                    # CatalogTruckView(이미지 기반) 등 트럭 렌더링
 │       └── RunningTruckScene.swift      # RunningTruckView: 트럭 바운스+속도선 "달리는" 효과 래퍼(@ViewBuilder), 위젯 타깃 공유 / Color(hex:UInt32)
 ├── Models/
@@ -179,7 +180,8 @@ Live Activity Expanded View
 │   ├── StoreKitService.swift           # StoreKit2 접근(상품 로드/purchase/restore/entitlement) — SwiftUI 비의존
 │   ├── CaptureTrackingParser.swift     # 배송알림 스크린샷 OCR(Vision, 온디바이스) → 운송장/택배사/품명 추출
 │   ├── DeliveryMapService.swift        # @Observable, 이벤트 → 지도 지점(서버 좌표 우선, 없으면 CLGeocoder 폴백 + UserDefaults 캐시, 화면당 12회 상한)
-│   └── NativeAdLoader.swift            # @Observable, AdMob 네이티브 광고 1개 로드/보관(슬롯당 1인스턴스) + SDK start
+│   ├── NativeAdLoader.swift            # @Observable, AdMob 네이티브 광고 1개 로드/보관(슬롯당 1인스턴스) + SDK start
+│   └── RewardedAdLoader.swift          # @Observable, 보상형 광고 1편 로드/표시(닫힌 뒤 보상 콜백) — 포인트 받기, 지도 1번 보기
 └── (WaitoWidgetExtension/)             # Live Activity 위젯 UI
 
 # AddTrackingView 는 제거됨 — 추가는 DeliveryListView 의 인라인 폼에서 처리
@@ -193,7 +195,7 @@ Live Activity Expanded View
 ├── routes/
 │   ├── carriers.ts                     # GET /api/carriers (CARRIERS 상수)
 │   ├── trackings.ts                    # 택배 CRUD(PUT /:id = 품명·메모 수정) + push-token 등록 + force 추가 + POST /:id/carrier-suggestion(다른 택배사 제안 수락/거절)
-│   ├── devices.ts                      # 디바이스 등록 + push-to-start-token + PUT /apns-token(일반알림) + GET /me(포인트) + POST /unlock-part
+│   ├── devices.ts                      # 디바이스 등록 + push-to-start-token + PUT /apns-token(일반알림) + GET /me(포인트) + POST /unlock-part + POST /ad-reward(광고 보상 1P, 하루 3번)
 │   ├── webhooks.ts                     # tracker.delivery 콜백 → track 재조회
 │   ├── legal.ts                        # GET /privacy · /terms (App Store 3.1.2(c)) + GET /app-ads.txt(AdMob 판매자 인증)
 │   └── admin.ts                        # credential 관리 HTML + GET /admin/force-push(디버그) + GET/POST /admin/hubs(허브 좌표 수동 입력·재검색)
@@ -377,14 +379,17 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 
 | 티어 | 내용 | 가격 |
 |---|---|---|
-| 무료 | 기본 트럭 + Live Activity 1개 + 배송완료 포인트로 트럭 계열 부품 해제(3P/개) + **목록 사이 네이티브 광고** | 무료 |
+| 무료 | 기본 트럭 + Live Activity 1개 + 배송완료, 광고 보상 포인트로 트럭 계열 부품 해제(3P/개) + **광고(목록 사이, 펼친 상세, 빈 화면 배너, 보상형)** | 무료 |
 | Waito Plus | 프리미엄 스킨(탱크·기차·물탱크·건설·컨테이너) 즉시 전부 + Live Activity 2개 + 데코(항상 노출) + **배송 경로 지도** + **광고 제거** | ₩3,000/월 |
 
 ### AdMob 네이티브 광고 (무료 사용자)
 - **SDK**: SPM `swift-package-manager-google-mobile-ads` 13.9+ (`project.pbxproj` 에 직접 추가, `Package.resolved` 커밋). 앱 시작 시 `NativeAdLoader.startSDK()`(AppDelegate). `Info.plist` 에 `GADApplicationIdentifier` + `SKAdNetworkItems`.
 - **ID**: 앱 ID(Info.plist) = 실계정 `ca-app-pub-3545555975398754~3446922381`. 광고 단위는 `NativeAdLoader.unitID` 가 **DEBUG=구글 테스트 단위 / RELEASE=실계정 `…/8244575612`** 로 분기 — 개발 중 실광고 호출은 무효 트래픽으로 계정 정지 사유라 시뮬·디버그에선 절대 실단위 안 씀. 실기기 릴리즈 확인 시엔 애드몹 콘솔에 테스트 기기 등록 필수.
 - **app-ads.txt 인증**: `https://ssangg77.github.io/app-ads.txt` 에 같은 줄이 이미 있음(같은 게시자 계정) → 앱스토어 "개발자 웹사이트"가 이 주소면 별도 작업 없음.
-- **삽입 규칙**(`DeliveryListView.showsAd`): 택배 1개면 그 아래 1개, 2개 이상이면 3개마다 1개. 진행중·완료 목록 각각 동일 적용. **구독자(`isSubscribed`)는 0개.**
+- **삽입 규칙**(`DeliveryListView.showsAd`): 택배 1개면 그 아래 1개, 2개 이상이면 3개마다 1개. 고른 칩 목록 기준. **구독자(`isSubscribed`)는 0개.**
+- **그 외 광고 자리(무료만)**: 펼친 상세 MAP/DEL/EDIT 아래 네이티브 1칸(`TrackingRowView.showsExpandedAd`, 버튼과 간격) / 고른 칩이 비어 달리는 트럭이 보일 때 화면 하단 배너(`BannerAdSlot`, safeAreaInset) / 보상형(`RewardedAdLoader`): 트럭 꾸미기 "광고 보고 +1P"(하루 3번, 서버 `POST /api/devices/ad-reward`), 잠긴 MAP 탭 시 "광고 보고 보기 / Plus 구독" 선택 → 끝까지 보면 지도 1번. 광고 미준비면 바로 페이월.
+- **광고 단위**: 전부 `#if DEBUG` = 구글 테스트 단위 / RELEASE = 실계정 — 목록 네이티브 `…/8244575612`, 빈 화면 배너 `…/2973981728`, 보상형 `…/9284239206`.
+- ⚠️ 광고 보상은 앱 신고만 믿음(애드몹 서버 확인 SSV 미사용) — 하루 3P 상한으로 피해 제한.
 - **행 UI**(`NativeAdRowView`): 목록 행과 같은 픽셀 상자 + 주황 "광고" 배지 + AdChoices(우상단) + 빨강 CTA. 정책상 택배 항목과 100% 동일하게 만들면 안 됨. 에셋을 `NativeAdView` 에 등록 후 마지막에 `nativeAd` 대입, CTA 는 `isUserInteractionEnabled=false`(SDK 가 클릭 처리). 구글 native ad validator "No implementation issues found" 통과.
 - ⚠️ **LazyVStack 함정**: 광고가 없을 때 뷰를 완전히 비우면(EmptyView) LazyVStack 이 그 칸을 만들지 않아 `.task` 로드 트리거가 실행되지 않음 → 광고가 영원히 안 뜸. 높이 1pt 투명 placeholder 유지로 해결.
 - **슬롯당 로더 1개**(`@State NativeAdLoader`) — 같은 광고 객체를 여러 자리에 붙이면 노출 집계 중복.
@@ -402,7 +407,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **페이월 UX 보강**: 구매 결과 `PurchaseOutcome`(success/cancelled/failed/unavailable) — 진짜 실패만 오류 알림(취소는 조용히). 이미 구독 중이면 CTA 대신 "이미 이용 중" 표시. 상품 로딩 전이면 CTA 비활성("상품 불러오는 중…").
 - **오퍼 코드(특가 코드, 예 `monthly_free` 첫해 무료)**: 페이월 하단 "프로모션 코드" → `.offerCodeRedemption`(Apple 공식 입력 시트, 인앱 직접 입력칸은 불가). 성공 시 `refreshEntitlement`. `import StoreKit` 필요. ⚠️ ASC "구독 프로모션"이 진행 중이어야 코드 적용됨. TestFlight/실기기에서만 테스트.
 
-- **포인트 경제**: 배송완료 1건 = 1P, 부품 1개 해제 = 3P(차감형). 탱크·기차·물탱크·건설·컨테이너는 **Plus 전용**(포인트 불가, 트럭 계열만 포인트 해제)
+- **포인트 경제**: 배송완료 1건 = 1P, 광고 1편 = 1P(하루 3번), 부품 1개 해제 = 3P(차감형). 탱크·기차·물탱크·건설·컨테이너는 **Plus 전용**(포인트 불가, 트럭 계열만 포인트 해제)
 - 장기 리텐션: "택배 없을 때도 켜두고 싶은 기능"(데코/시즌 스킨) + 포인트 보상
 
 ---
@@ -417,7 +422,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
 - **공유시트로 추가(WaitoShareExtension)**: 이미지(스크린샷)·텍스트(문자·카톡) 공유 → 익스텐션이 App Group(`group.com.sangjin.Waito`)에 저장(이미지=`shared_capture.dat` 파일, 텍스트=`shared_text` UserDefaults) 후 `waito://capture` 로 앱 오픈 → 앱이 소비해 OCR/라인 파싱 후 ADD 폼 prefill. OCR/파싱은 전부 앱 쪽(익스텐션은 저장만, 파서 타깃 공유 불필요).
 - **클립보드 자동인식**: 문자·카톡 내용 복사 후 앱 진입 시 `CaptureTrackingParser.parse(text:)`로 운송장·택배사·품명 추출 → 운송장이 있으면 ADD 폼 자동 오픈+prefill. `changeCount` 로 1회만. **프리필 공통 가드 `canAutofill`** = 편집 중 금지, ADD 폼 열려 있어도 비어 있으면 허용. 포그라운드 복귀 시 0.4s 지연 실행(클립보드 권한 프롬프트/익스텐션 파일쓰기 타이밍) + `onOpenURL(waito://)` 직접 신호.
 - **정렬**: 도착임박순(기본) / 최근 업데이트순 / 등록순 — 칩으로 선택, `@AppStorage` 영구 저장
-- **완료 섹션 구분**: 배송완료(`currentStatus.isCompleted`) 항목은 리스트 아래 **"완료 N" 섹션**으로 분리(`activeTrackings`/`completedTrackings`, 각 그룹 안에서 현재 정렬 적용). 헤더 탭으로 접기/펼치기(`@AppStorage("completed_section_collapsed")`, 기본 접힘). 완료 없으면 섹션 숨김.
+- **진행/완료 칩**: 정렬 드롭다운(폭 118) 같은 줄 왼쪽에 `전체 N / 진행 N / 완료 N` 칩(`DeliveryListFilter`, `@AppStorage("delivery_list_filter")`, 기본 진행). 정렬은 칩 목록 안에서 그대로 적용. 고른 칩에 항목이 없으면 달리는 트럭 빈 화면.
 - **행 슬라이드 → 삭제/수정**: 왼쪽 슬라이드 → "> DEL_"(빨강)·"> EDIT_"(오렌지) **2버튼 세로 분할**(각 절반 높이, 스프링/고무줄). 한 번에 하나만 열림(`openRowId` 공유), 바깥 탭/ADD 누르면 닫힘.
   - **펼친 상태에선 슬라이드 비활성**(`.gesture(dragGesture, isEnabled: !isExpanded)`) — 대신 상세 아래에 구분선 + 같은 DEL/EDIT 버튼을 **가로 2분할**로 배치(`row_expanded_actions`, 높이 34). 버튼 뷰는 슬라이드 쪽과 동일 인스턴스 재사용.
   - EDIT 탭 시 펼친 상세는 접힘(편집 폼이 상단에 열리므로).
@@ -444,7 +449,7 @@ iOS: 위젯이 content-state(items+truckConfig) 렌더 → 트럭 표시
   - **무료**: 각 enum `freeCases`(헤드2/바디3/바퀴2)
   - **포인트 해제(`pointUnlockable`, 비용 `pointUnlockCost`=3)**: 트럭 계열 추가 부품만(에셋명 2번째 토큰 `TruckHead`/`Truck`/`Wheels`). 배송완료 포인트로 해제.
   - **Plus 전용(`plusOnly`, 포인트로도 불가)**: 탱크·기차·물탱크(탱크로리)·건설·컨테이너·공룡·해골(`TankGun/Tank/TankTrack/Train/LiquidTank/Construction/ConstructionTrack/Container/Dino/Skeleton`) — 판정은 화이트리스트가 아니라 "`pointUnlockableFamilies`(TruckHead/Truck/Wheels) 외 전부"라 새 계열은 자동 Plus 전용(서버 `devices.ts` 동일 로직)
-- **포인트 경제**: 배송완료 1건=1포인트(디바이스별, 서버 `devices.delivered_count`). 부품 1개 해제=3포인트(서버 `devices.unlocked_parts` JSON). 잔액 = 누적−해제수×3. `TrackingService.pointBalance/isUnlocked/loadDeviceProgress/unlockPart`. delivered 전환 +1은 `pollingService`, 해제 검증(Plus계열 403/잔액 400)은 `devices.ts` POST `/unlock-part`. ⚠️ 디바이스 단위(키체인 토큰) — 기기 간 동기화는 2차 로그인.
+- **포인트 경제**: 배송완료 1건=1포인트(디바이스별, 서버 `devices.delivered_count`). 부품 1개 해제=3포인트(서버 `devices.unlocked_parts` JSON). 잔액 = 배송완료 + 광고 보상(`devices.ad_reward_points`, 하루 횟수 `ad_reward_date/ad_reward_today` 한국 날짜) − 해제수×3. `TrackingService.pointBalance/isUnlocked/loadDeviceProgress/unlockPart`. delivered 전환 +1은 `pollingService`, 해제 검증(Plus계열 403/잔액 400)은 `devices.ts` POST `/unlock-part`. ⚠️ 디바이스 단위(키체인 토큰) — 기기 간 동기화는 2차 로그인.
 - **My Truck 게이팅**: 셀 잠금 = 무료/구독이면 없음, `pointUnlockable` 미해제면 "3P"(코인), `plusOnly`면 크라운. 저장 시 `handleSave` — Plus전용 끼면 페이월, 포인트대상이면 `PixelConfirm`로 N×3P 차감 후 커밋. **포인트 부족 시 중간 안내 없이 바로 `PlusPaywallView` 직행** — 페이월 가격 위에 보유/부족 포인트 표시(`PlusPaywallView.pointStatus`, 옵셔널이라 잠금탭·첫추가 업셀 등 다른 진입점은 미표시).
 - cab/body/wheel 조합 → `TruckConfigStore`(UserDefaults). 변경 시 실행 중 Activity 갱신(`pushTruckConfig`) + 서버 push-to-start 설정 갱신(`refreshPushToStartConfig`)
 - **포인트 안내 = i 버튼 토글**: 포인트 바 오른쪽 `info.circle` 탭 시 적립·차감 규칙 문구가 펼쳐짐(`showPointInfo`). 평소엔 숨겨 잔액만 노출.

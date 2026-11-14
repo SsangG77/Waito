@@ -7,6 +7,39 @@ const router = Router();
 // 포인트로 해제 가능한 계열(에셋명 2번째 토큰). 그 외(탱크·기차·물탱크·건설·컨테이너)는 Plus 전용.
 const POINT_UNLOCK_COST = 3;
 const POINT_UNLOCKABLE_FAMILIES = new Set(['TruckHead', 'Truck', 'Wheels']);
+// 광고 보고 받는 포인트 — 1편 = 1포인트, 하루(한국 날짜 기준) 최대 3번.
+// ponytail: 광고를 정말 봤는지 서버가 확인하지 않음(앱 신고만 믿음). 하루 3P 상한으로 피해를 막고, 남용이 보이면 애드몹 서버 확인(SSV)으로 교체.
+const AD_REWARD_DAILY_LIMIT = 3;
+
+type ProgressRow = {
+  id: number;
+  delivered_count: number | null;
+  unlocked_parts: string | null;
+  ad_reward_points: number | null;
+  ad_reward_date: string | null;
+  ad_reward_today: number | null;
+};
+const PROGRESS_COLUMNS = 'id, delivered_count, unlocked_parts, ad_reward_points, ad_reward_date, ad_reward_today';
+
+function todayKst(): string {
+  return new Date().toLocaleDateString('sv-SE', { timeZone: 'Asia/Seoul' });
+}
+
+/** 오늘 광고 보상을 몇 번 받았는지 (날짜가 바뀌었으면 0) */
+function adRewardsToday(d: ProgressRow): number {
+  return d.ad_reward_date === todayKst() ? (d.ad_reward_today ?? 0) : 0;
+}
+
+/** 앱에 돌려주는 포인트 현황. 잔액 = 배송완료 + 광고 보상 - 해제수 × 비용 */
+function progressJson(d: ProgressRow, unlocked = parseUnlocked(d.unlocked_parts)) {
+  return {
+    deliveredCount: d.delivered_count ?? 0,
+    unlockedParts: unlocked,
+    bonusPoints: d.ad_reward_points ?? 0,
+    adRewardsToday: adRewardsToday(d),
+    adRewardDailyLimit: AD_REWARD_DAILY_LIMIT,
+  };
+}
 
 function familyToken(part: string): string {
   const parts = part.split('_');
@@ -58,8 +91,8 @@ router.get('/me', (req: Request, res: Response) => {
   }
 
   const db = getDb();
-  const device = db.prepare('SELECT id, delivered_count, unlocked_parts FROM devices WHERE device_token = ?').get(deviceToken) as
-    | { id: number; delivered_count: number | null; unlocked_parts: string | null }
+  const device = db.prepare(`SELECT ${PROGRESS_COLUMNS} FROM devices WHERE device_token = ?`).get(deviceToken) as
+    | ProgressRow
     | undefined;
 
   if (!device) {
@@ -67,11 +100,7 @@ router.get('/me', (req: Request, res: Response) => {
     return;
   }
 
-  res.json({
-    deviceId: device.id,
-    deliveredCount: device.delivered_count ?? 0,
-    unlockedParts: parseUnlocked(device.unlocked_parts),
-  });
+  res.json({ deviceId: device.id, ...progressJson(device) });
 });
 
 // POST /api/devices/unlock-part — 포인트로 부품 1개 해제 (탱크·기차·물탱크·건설·컨테이너는 거부)
@@ -88,24 +117,24 @@ router.post('/unlock-part', (req: Request, res: Response) => {
   }
 
   const db = getDb();
-  const device = db.prepare('SELECT id, delivered_count, unlocked_parts FROM devices WHERE device_token = ?').get(deviceToken) as
-    | { id: number; delivered_count: number | null; unlocked_parts: string | null }
+  const device = db.prepare(`SELECT ${PROGRESS_COLUMNS} FROM devices WHERE device_token = ?`).get(deviceToken) as
+    | ProgressRow
     | undefined;
   if (!device) {
     res.status(404).json({ error: 'Device not registered' });
     return;
   }
 
-  const delivered = device.delivered_count ?? 0;
+  const earned = (device.delivered_count ?? 0) + (device.ad_reward_points ?? 0);
   const unlocked = parseUnlocked(device.unlocked_parts);
 
   // 이미 해제됐으면 멱등 처리
   if (unlocked.includes(part)) {
-    res.json({ deliveredCount: delivered, unlockedParts: unlocked });
+    res.json(progressJson(device, unlocked));
     return;
   }
 
-  const balance = delivered - unlocked.length * POINT_UNLOCK_COST;
+  const balance = earned - unlocked.length * POINT_UNLOCK_COST;
   if (balance < POINT_UNLOCK_COST) {
     res.status(400).json({ error: 'INSUFFICIENT_POINTS', balance });
     return;
@@ -115,7 +144,40 @@ router.post('/unlock-part', (req: Request, res: Response) => {
   db.prepare("UPDATE devices SET unlocked_parts = ?, updated_at = datetime('now') WHERE id = ?")
     .run(JSON.stringify(unlocked), device.id);
 
-  res.json({ deliveredCount: delivered, unlockedParts: unlocked });
+  res.json(progressJson(device, unlocked));
+});
+
+// POST /api/devices/ad-reward — 광고 1편 끝까지 본 보상 1포인트 (하루 최대 AD_REWARD_DAILY_LIMIT)
+router.post('/ad-reward', (req: Request, res: Response) => {
+  const { deviceToken } = req.body;
+
+  if (!deviceToken || typeof deviceToken !== 'string') {
+    res.status(400).json({ error: 'deviceToken is required' });
+    return;
+  }
+
+  const db = getDb();
+  const device = db.prepare(`SELECT ${PROGRESS_COLUMNS} FROM devices WHERE device_token = ?`).get(deviceToken) as
+    | ProgressRow
+    | undefined;
+  if (!device) {
+    res.status(404).json({ error: 'Device not registered' });
+    return;
+  }
+
+  const today = adRewardsToday(device);
+  if (today >= AD_REWARD_DAILY_LIMIT) {
+    res.status(429).json({ error: 'DAILY_LIMIT', ...progressJson(device) });
+    return;
+  }
+
+  db.prepare(
+    `UPDATE devices SET ad_reward_points = COALESCE(ad_reward_points, 0) + 1,
+       ad_reward_date = ?, ad_reward_today = ?, updated_at = datetime('now') WHERE id = ?`,
+  ).run(todayKst(), today + 1, device.id);
+
+  const updated = db.prepare(`SELECT ${PROGRESS_COLUMNS} FROM devices WHERE id = ?`).get(device.id) as ProgressRow;
+  res.json(progressJson(updated));
 });
 
 // PUT /api/devices/apns-token — 표준 원격알림(일반 배너)용 APNs device token 등록

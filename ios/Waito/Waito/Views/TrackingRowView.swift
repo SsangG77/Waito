@@ -21,6 +21,8 @@ struct TrackingRowView: View {
     var onMap: () -> Void = {}
     /// 지도 사용 가능 여부(구독). false 면 버튼에 자물쇠 표시.
     var isMapUnlocked: Bool = false
+    /// 펼친 상세 맨 아래에 광고 1칸 (무료 사용자만 true)
+    var showsExpandedAd: Bool = false
     /// 현재 액션 버튼이 열린 행의 id (한 번에 하나만 열리도록 공유)
     @Binding var openRowId: Int?
     /// 방금 추가돼 한 번 바운스로 강조할 행 id (이 행과 같으면 바운스)
@@ -634,6 +636,14 @@ struct TrackingRowView: View {
                     .padding(.horizontal, 14)
                     .padding(.bottom, 10)
                     .accessibilityIdentifier("row_expanded_actions")
+
+                    // 무료 사용자만 상세 맨 아래 광고. 버튼에 붙어 잘못 눌리지 않게 간격을 띄움(구글 정책)
+                    if showsExpandedAd {
+                        NativeAdRowView()
+                            .padding(.horizontal, 14)
+                            .padding(.top, 10)
+                            .padding(.bottom, 12)
+                    }
                 }
                 .transition(.opacity)
             }
